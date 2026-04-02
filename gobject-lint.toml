@@ -1,0 +1,49 @@
+# GObject Lint Configuration
+
+# Editor URL format for clickable links
+# Available placeholders: {path}, {line}, {column}
+# Examples:
+#   VSCode:       "vscode://file{path}:{line}:{column}"
+#   IntelliJ:     "idea://open?file={path}&line={line}"
+#   Sublime:      "subl://open?url=file://{path}&line={line}&column={column}"
+#   Default:      "file://{path}" (no line/column support)
+# Comment out to disable clickable links, or check your editor's URL scheme with:
+#   ls /usr/share/applications/*.desktop | xargs grep -h "x-scheme-handler"
+editor_url = "vscode://file{path}:{line}:{column}"
+
+# Ignore patterns (glob syntax)
+# Examples:
+#   "vendor/**"           - ignore entire vendor directory
+#   "**/test/**"          - ignore all test directories
+#   "generated/*.c"       - ignore generated C files
+#   "**/*-autogen.c"      - ignore all auto-generated files
+ignore = [
+    "target/**",
+    "**/build/**",
+    "vendor/**",
+]
+
+[rules]
+# Ensure g_param_spec_* functions have NULL for nick and blurb parameters
+g_param_spec_null_nick_blurb = true
+
+# Ensure dispose/finalize methods chain up to parent class
+dispose_finalize_chains_up = true
+
+# Suggest g_clear_object/g_clear_pointer instead of manual unref and NULL assignment
+use_clear_functions = true
+
+# Use g_strcmp0 instead of strcmp (NULL-safe)
+use_g_strcmp0 = true
+
+# Ensure property enums start with PROP_0, not PROP_NAME = 0
+property_enum_zero = true
+
+# Detect deprecated g_type_class_add_private (use G_DEFINE_TYPE_WITH_PRIVATE instead)
+deprecated_add_private = true
+
+# Ensure GError* variables are initialized to NULL
+gerror_init = true
+
+# Ensure g_task_set_source_tag is called after g_task_new
+gtask_source_tag = true
