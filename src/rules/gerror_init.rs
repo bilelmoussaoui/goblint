@@ -11,6 +11,15 @@ impl GErrorInit {
             return None;
         }
 
+        // Skip function declarations (e.g., const GError * func(...);)
+        // Check if this declaration contains a function_declarator
+        let mut check_cursor = node.walk();
+        for child in node.children(&mut check_cursor) {
+            if self.contains_function_declarator(child) {
+                return None;
+            }
+        }
+
         // Get the type
         let type_node = node.child_by_field_name("type")?;
 
@@ -56,6 +65,22 @@ impl GErrorInit {
         }
 
         None
+    }
+
+    fn contains_function_declarator(&self, node: Node) -> bool {
+        if node.kind() == "function_declarator" {
+            return true;
+        }
+
+        // Recursively check children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if self.contains_function_declarator(child) {
+                return true;
+            }
+        }
+
+        false
     }
 
     fn extract_variable_name(&self, declarator: Node, source: &[u8]) -> Option<String> {
