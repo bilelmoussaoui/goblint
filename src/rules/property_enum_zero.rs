@@ -48,8 +48,9 @@ impl PropertyEnumZero {
                         let value_text = self.get_node_text(value, source).trim().to_string();
 
                         // Check if the first PROP_ entry is set to 0
+                        // Accept PROP_0, PROP_SEQ_0, etc. (anything ending with _0)
                         if name_text.starts_with("PROP_")
-                            && name_text != "PROP_0"
+                            && !name_text.ends_with("_0")
                             && value_text == "0"
                         {
                             let position = child.start_position();
@@ -57,7 +58,8 @@ impl PropertyEnumZero {
                         }
                     } else {
                         // First enumerator without explicit value defaults to 0
-                        if name_text.starts_with("PROP_") && name_text != "PROP_0" {
+                        // Accept PROP_0, PROP_SEQ_0, etc. (anything ending with _0)
+                        if name_text.starts_with("PROP_") && !name_text.ends_with("_0") {
                             let position = child.start_position();
                             return Some((name_text, position.row + 1));
                         }
