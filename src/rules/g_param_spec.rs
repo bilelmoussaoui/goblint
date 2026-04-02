@@ -18,7 +18,9 @@ impl GParamSpecNullNickBlurb {
         let function_name = &source[function_node.byte_range()];
         let function_str = std::str::from_utf8(function_name).unwrap_or("");
 
-        function_str.starts_with("g_param_spec_")
+        // Check for g_param_spec_* but exclude g_param_spec_internal
+        // (used for implementing custom param spec types)
+        function_str.starts_with("g_param_spec_") && function_str != "g_param_spec_internal"
     }
 
     fn check_argument_is_null(&self, arg_node: Node, source: &[u8]) -> bool {
