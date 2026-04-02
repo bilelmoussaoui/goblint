@@ -4,6 +4,7 @@ mod g_param_spec;
 mod gerror_init;
 mod gtask_source_tag;
 mod property_enum_zero;
+mod unnecessary_null_check;
 mod use_clear_functions;
 mod use_g_strcmp0;
 
@@ -37,5 +38,6 @@ pub fn get_all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(deprecated_add_private::DeprecatedAddPrivate),
         Box::new(gerror_init::GErrorInit),
         Box::new(gtask_source_tag::GTaskSourceTag),
+        Box::new(unnecessary_null_check::UnnecessaryNullCheck),
     ]
 }

@@ -46,6 +46,9 @@ pub struct RulesConfig {
 
     #[serde(default = "default_true")]
     pub gtask_source_tag: bool,
+
+    #[serde(default = "default_true")]
+    pub unnecessary_null_check: bool,
 }
 
 fn default_true() -> bool {

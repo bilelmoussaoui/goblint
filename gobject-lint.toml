@@ -47,3 +47,6 @@ gerror_init = true
 
 # Ensure g_task_set_source_tag is called after g_task_new
 gtask_source_tag = true
+
+# Detect unnecessary NULL checks before g_free/g_clear_pointer
+unnecessary_null_check = true
