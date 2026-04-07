@@ -1,7 +1,6 @@
 use super::Violation;
 use crate::ast_context::AstContext;
 use crate::config::Config;
-use std::fs;
 
 /// Rule that enforces semicolons after G_DECLARE_* macros
 ///
@@ -16,17 +15,9 @@ impl GDeclareSemicolon {
         _config: &Config,
         violations: &mut Vec<Violation>,
     ) {
-        // Check each file for G_DECLARE macros
-        for path in ast_context.project.files.keys() {
-            // Only check header files
-            if path.extension().is_none_or(|ext| ext != "h") {
-                continue;
-            }
-
-            // Read the source file
-            let Ok(source) = fs::read_to_string(path) else {
-                continue;
-            };
+        for (path, file) in ast_context.iter_header_files() {
+            // Use the already-loaded source from the file model
+            let source = String::from_utf8_lossy(&file.source);
 
             // Look for G_DECLARE_* macros
             for (line_num, line) in source.lines().enumerate() {

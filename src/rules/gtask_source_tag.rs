@@ -1,7 +1,7 @@
 use super::Violation;
 use crate::ast_context::AstContext;
 use crate::config::Config;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 pub struct GTaskSourceTag;
 
@@ -115,21 +115,14 @@ impl GTaskSourceTag {
         _config: &Config,
         violations: &mut Vec<Violation>,
     ) {
-        let mut parser = Parser::new();
-        parser.set_language(&tree_sitter_c::LANGUAGE.into()).ok();
-
-        for (path, file) in ast_context.project.files.iter() {
-            if path.extension().is_none_or(|ext| ext != "c") {
-                continue;
-            }
-
+        for (path, file) in ast_context.iter_c_files() {
             for func in &file.functions {
                 if !func.is_definition {
                     continue;
                 }
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = parser.parse(func_source, None) {
+                    if let Some(tree) = ast_context.parse_c_source(func_source) {
                         let root = tree.root_node();
 
                         if let Some(body) = self.find_body(root) {

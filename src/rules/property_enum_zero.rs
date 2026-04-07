@@ -1,7 +1,7 @@
 use super::Violation;
 use crate::ast_context::AstContext;
 use crate::config::Config;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 pub struct PropertyEnumZero;
 
@@ -12,16 +12,10 @@ impl PropertyEnumZero {
         _config: &Config,
         violations: &mut Vec<Violation>,
     ) {
-        let mut parser = Parser::new();
-        parser.set_language(&tree_sitter_c::LANGUAGE.into()).ok();
-
-        for (path, file) in ast_context.project.files.iter() {
-            if !path.extension().is_some_and(|ext| ext == "c" || ext == "h") {
-                continue;
-            }
-
+        // Check both C and header files
+        for (path, file) in ast_context.iter_all_files() {
             // Parse the entire file since enums can be at top-level
-            if let Some(tree) = parser.parse(&file.source, None) {
+            if let Some(tree) = ast_context.parse_c_source(&file.source) {
                 self.check_node(tree.root_node(), &file.source, path, 0, violations);
             }
         }

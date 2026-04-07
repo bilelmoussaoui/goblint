@@ -2,12 +2,15 @@ use anyhow::Result;
 use globset::GlobSet;
 use gobject_ast::{FunctionInfo, Parser, Project};
 use indicatif::ProgressBar;
+use std::cell::RefCell;
 use std::path::Path;
 use walkdir::WalkDir;
 
 /// AST-based project context that replaces the old tree-sitter based ProjectContext
 pub struct AstContext {
     pub project: Project,
+    /// Tree-sitter parser for rules that need to parse C code
+    ts_parser: RefCell<tree_sitter::Parser>,
 }
 
 impl AstContext {
@@ -55,7 +58,16 @@ impl AstContext {
             }
         }
 
-        Ok(Self { project })
+        // Create and configure tree-sitter parser for rules
+        let mut ts_parser = tree_sitter::Parser::new();
+        ts_parser
+            .set_language(&tree_sitter_c::LANGUAGE.into())
+            .expect("Failed to load C grammar");
+
+        Ok(Self {
+            project,
+            ts_parser: RefCell::new(ts_parser),
+        })
     }
 
     /// Find functions declared in headers that have no implementation
@@ -97,5 +109,37 @@ impl AstContext {
         } else {
             None
         }
+    }
+
+    /// Iterate over all files in the project
+    pub fn iter_all_files(&self) -> impl Iterator<Item = (&Path, &gobject_ast::FileModel)> {
+        self.project
+            .files
+            .iter()
+            .map(|(path, file)| (path.as_path(), file))
+    }
+
+    /// Iterate over all C files (extension .c) in the project
+    pub fn iter_c_files(&self) -> impl Iterator<Item = (&Path, &gobject_ast::FileModel)> {
+        self.project
+            .files
+            .iter()
+            .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "c"))
+            .map(|(path, file)| (path.as_path(), file))
+    }
+
+    /// Iterate over all header files (extension .h) in the project
+    pub fn iter_header_files(&self) -> impl Iterator<Item = (&Path, &gobject_ast::FileModel)> {
+        self.project
+            .files
+            .iter()
+            .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "h"))
+            .map(|(path, file)| (path.as_path(), file))
+    }
+
+    /// Parse C source code with the internal tree-sitter parser
+    /// This is a convenience method for rules that need to parse function bodies
+    pub fn parse_c_source(&self, source: &[u8]) -> Option<tree_sitter::Tree> {
+        self.ts_parser.borrow_mut().parse(source, None)
     }
 }
