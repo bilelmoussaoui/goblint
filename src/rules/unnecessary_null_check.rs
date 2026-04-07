@@ -141,8 +141,12 @@ impl UnnecessaryNullCheck {
         std::str::from_utf8(text).unwrap_or("").to_string()
     }
 
-    pub fn check_all(&self, ast_context: &AstContext, _config: &Config) -> Vec<Violation> {
-        let mut violations = Vec::new();
+    pub fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
         let mut parser = Parser::new();
         parser.set_language(&tree_sitter_c::LANGUAGE.into()).ok();
 
@@ -158,19 +162,11 @@ impl UnnecessaryNullCheck {
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
                     if let Some(tree) = parser.parse(func_source, None) {
-                        self.check_node(
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            &mut violations,
-                        );
+                        self.check_node(tree.root_node(), func_source, path, func.line, violations);
                     }
                 }
             }
         }
-
-        violations
     }
 
     fn check_node(

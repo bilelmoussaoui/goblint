@@ -6,8 +6,12 @@ use tree_sitter::{Node, Parser};
 pub struct PropertyEnumZero;
 
 impl PropertyEnumZero {
-    pub fn check_all(&self, ast_context: &AstContext, _config: &Config) -> Vec<Violation> {
-        let mut violations = Vec::new();
+    pub fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
         let mut parser = Parser::new();
         parser.set_language(&tree_sitter_c::LANGUAGE.into()).ok();
 
@@ -18,11 +22,9 @@ impl PropertyEnumZero {
 
             // Parse the entire file since enums can be at top-level
             if let Some(tree) = parser.parse(&file.source, None) {
-                self.check_node(tree.root_node(), &file.source, path, 0, &mut violations);
+                self.check_node(tree.root_node(), &file.source, path, 0, violations);
             }
         }
-
-        violations
     }
 
     fn check_node(

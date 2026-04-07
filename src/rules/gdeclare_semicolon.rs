@@ -10,9 +10,12 @@ use std::fs;
 pub struct GDeclareSemicolon;
 
 impl GDeclareSemicolon {
-    pub fn check_all(&self, ast_context: &AstContext, _config: &Config) -> Vec<Violation> {
-        let mut violations = Vec::new();
-
+    pub fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
         // Check each file for G_DECLARE macros
         for path in ast_context.project.files.keys() {
             // Only check header files
@@ -54,7 +57,5 @@ impl GDeclareSemicolon {
                 }
             }
         }
-
-        violations
     }
 }

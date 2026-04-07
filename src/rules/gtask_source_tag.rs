@@ -109,8 +109,12 @@ impl GTaskSourceTag {
         std::str::from_utf8(text).unwrap_or("").to_string()
     }
 
-    pub fn check_all(&self, ast_context: &AstContext, _config: &Config) -> Vec<Violation> {
-        let mut violations = Vec::new();
+    pub fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
         let mut parser = Parser::new();
         parser.set_language(&tree_sitter_c::LANGUAGE.into()).ok();
 
@@ -151,8 +155,6 @@ impl GTaskSourceTag {
                 }
             }
         }
-
-        violations
     }
 
     fn find_body<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {

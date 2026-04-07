@@ -6,9 +6,12 @@ use crate::config::Config;
 pub struct MissingImplementation;
 
 impl MissingImplementation {
-    pub fn check_all(&self, ast_context: &AstContext, _config: &Config) -> Vec<Violation> {
-        let mut violations = Vec::new();
-
+    pub fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
         // Find all declared but not defined functions
         for (path, func) in ast_context.find_declared_but_not_defined() {
             // Skip static function declarations - they're file-local and often forward declarations
@@ -34,7 +37,5 @@ impl MissingImplementation {
                 snippet: None,
             });
         }
-
-        violations
     }
 }
