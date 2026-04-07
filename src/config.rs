@@ -130,6 +130,9 @@ pub struct RulesConfig {
 
     #[serde(default)]
     pub strcmp_for_string_equal: RuleConfig,
+
+    #[serde(default)]
+    pub use_g_set_str: RuleConfig,
 }
 
 impl Config {

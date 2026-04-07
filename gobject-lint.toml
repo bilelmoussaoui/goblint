@@ -52,12 +52,15 @@ gtask_source_tag = false
 unnecessary_null_check = true
 
 # Enforce semicolons after G_DECLARE_* macros
-gdeclare_semicolon = true
+gdeclare_semicolon = false
 
 # Report functions declared in headers but not implemented
 # Can also be configured with per-rule ignore patterns:
 # missing_implementation = { enabled = true, ignore = ["src/backends/**"] }
-missing_implementation = { enabled = true, ignore = ["src/backends/meta-egl-ext.h"] }
+missing_implementation = { enabled = false, ignore = ["src/backends/meta-egl-ext.h"] }
 
 # Suggest g_str_equal() instead of strcmp() == 0 for better readability
-strcmp_for_string_equal = true
+strcmp_for_string_equal = false
+
+# Suggest g_set_str() instead of manual strcmp, g_free, and g_strdup
+use_g_set_str = true
