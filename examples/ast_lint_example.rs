@@ -34,7 +34,7 @@ fn main() -> Result<()> {
     let mut count = 0;
     for (path, file) in &project.files {
         // Only check .c files
-        if path.extension().map_or(false, |ext| ext != "c") {
+        if path.extension().is_some_and(|ext| ext != "c") {
             continue;
         }
 
@@ -53,7 +53,7 @@ fn main() -> Result<()> {
             let is_in_header = project
                 .files
                 .iter()
-                .filter(|(p, _)| p.extension().map_or(false, |ext| ext == "h"))
+                .filter(|(p, _)| p.extension().is_some_and(|ext| ext == "h"))
                 .any(|(_, h)| h.functions.iter().any(|f| f.name == func.name));
 
             if !is_in_header {
@@ -68,7 +68,7 @@ fn main() -> Result<()> {
     println!("\n2. Functions declared in headers but not implemented:");
     count = 0;
     for (header_path, header) in &project.files {
-        if header_path.extension().map_or(false, |ext| ext != "h") {
+        if header_path.extension().is_some_and(|ext| ext != "h") {
             continue;
         }
 
@@ -81,7 +81,7 @@ fn main() -> Result<()> {
             let has_impl = project
                 .files
                 .iter()
-                .filter(|(p, _)| p.extension().map_or(false, |ext| ext == "c"))
+                .filter(|(p, _)| p.extension().is_some_and(|ext| ext == "c"))
                 .any(|(_, file)| {
                     file.functions
                         .iter()
@@ -100,7 +100,7 @@ fn main() -> Result<()> {
     println!("\n3. Public functions missing export macros:");
     count = 0;
     for (header_path, header) in &project.files {
-        if header_path.extension().map_or(false, |ext| ext != "h") {
+        if header_path.extension().is_some_and(|ext| ext != "h") {
             continue;
         }
 
