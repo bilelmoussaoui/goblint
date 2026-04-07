@@ -1,9 +1,35 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct UnnecessaryNullCheck;
+
+impl Rule for UnnecessaryNullCheck {
+    const NAME: &'static str = "unnecessary_null_check";
+
+    fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
+        for (path, file) in ast_context.iter_c_files() {
+            for func in &file.functions {
+                if !func.is_definition {
+                    continue;
+                }
+
+                if let Some(func_source) = ast_context.get_function_source(path, func) {
+                    if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        self.check_node(tree.root_node(), func_source, path, func.line, violations);
+                    }
+                }
+            }
+        }
+    }
+}
 
 impl UnnecessaryNullCheck {
     fn check_if_statement(&self, node: Node, source: &[u8]) -> Option<(String, String)> {
@@ -141,27 +167,6 @@ impl UnnecessaryNullCheck {
         std::str::from_utf8(text).unwrap_or("").to_string()
     }
 
-    pub fn check_all(
-        &self,
-        ast_context: &AstContext,
-        _config: &Config,
-        violations: &mut Vec<Violation>,
-    ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_node(tree.root_node(), func_source, path, func.line, violations);
-                    }
-                }
-            }
-        }
-    }
-
     fn check_node(
         &self,
         node: Node,
@@ -180,14 +185,12 @@ impl UnnecessaryNullCheck {
                 )
             };
 
-            violations.push(Violation {
-                file: file_path.to_owned(),
-                line: base_line + node.start_position().row,
-                column: node.start_position().column + 1,
-                message: suggestion,
-                rule: "unnecessary_null_check",
-                snippet: None,
-            });
+            violations.push(self.violation(
+                file_path,
+                base_line + node.start_position().row,
+                node.start_position().column + 1,
+                suggestion,
+            ));
         }
 
         let mut cursor = node.walk();

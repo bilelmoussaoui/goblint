@@ -1,9 +1,53 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct GTaskSourceTag;
+
+impl Rule for GTaskSourceTag {
+    const NAME: &'static str = "gtask_source_tag";
+
+    fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
+        for (path, file) in ast_context.iter_c_files() {
+            for func in &file.functions {
+                if !func.is_definition {
+                    continue;
+                }
+
+                if let Some(func_source) = ast_context.get_function_source(path, func) {
+                    if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        let root = tree.root_node();
+
+                        if let Some(body) = self.find_body(root) {
+                            let task_vars = self.find_gtask_new_calls(body, func_source);
+
+                            for (var_name, line_offset, col) in task_vars {
+                                if !self.has_set_source_tag_call(body, &var_name, func_source) {
+                                    violations.push(self.violation(
+                                        path,
+                                        func.line + line_offset - 1,
+                                        col,
+                                        format!(
+                                            "GTask {} created without g_task_set_source_tag. Add: g_task_set_source_tag ({}, <function_name>);",
+                                            var_name, var_name
+                                        ),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 impl GTaskSourceTag {
     fn find_gtask_new_calls(&self, node: Node, source: &[u8]) -> Vec<(String, usize, usize)> {
@@ -108,48 +152,6 @@ impl GTaskSourceTag {
         let text = &source[node.byte_range()];
         std::str::from_utf8(text).unwrap_or("").to_string()
     }
-
-    pub fn check_all(
-        &self,
-        ast_context: &AstContext,
-        _config: &Config,
-        violations: &mut Vec<Violation>,
-    ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let root = tree.root_node();
-
-                        if let Some(body) = self.find_body(root) {
-                            let task_vars = self.find_gtask_new_calls(body, func_source);
-
-                            for (var_name, line_offset, col) in task_vars {
-                                if !self.has_set_source_tag_call(body, &var_name, func_source) {
-                                    violations.push(Violation {
-                                        file: path.to_owned(),
-                                        line: func.line + line_offset - 1,
-                                        column: col,
-                                        message: format!(
-                                            "GTask {} created without g_task_set_source_tag. Add: g_task_set_source_tag ({}, <function_name>);",
-                                            var_name, var_name
-                                        ),
-                                        rule: "gtask_source_tag",
-                                        snippet: None,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     fn find_body<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
         if node.kind() == "compound_statement" {
             return Some(node);

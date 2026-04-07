@@ -1,12 +1,14 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct UseGStrcmp0;
 
-impl UseGStrcmp0 {
-    pub fn check_all(
+impl Rule for UseGStrcmp0 {
+    const NAME: &'static str = "use_g_strcmp0";
+    fn check_all(
         &self,
         ast_context: &AstContext,
         _config: &Config,
@@ -26,7 +28,9 @@ impl UseGStrcmp0 {
             }
         }
     }
+}
 
+impl UseGStrcmp0 {
     fn check_node(
         &self,
         node: Node,
@@ -46,17 +50,12 @@ impl UseGStrcmp0 {
                             "g_strcmp0 or check for NULL first"
                         };
 
-                        violations.push(Violation {
-                            file: file_path.to_owned(),
-                            line: base_line + node.start_position().row,
-                            column: node.start_position().column + 1,
-                            message: format!(
-                                "Use {} instead of {} (NULL-safe)",
-                                suggestion, func_name
-                            ),
-                            rule: "use_g_strcmp0",
-                            snippet: None,
-                        });
+                        violations.push(self.violation(
+                            file_path,
+                            base_line + node.start_position().row,
+                            node.start_position().column + 1,
+                            format!("Use {} instead of {} (NULL-safe)", suggestion, func_name),
+                        ));
                     }
                 }
             }

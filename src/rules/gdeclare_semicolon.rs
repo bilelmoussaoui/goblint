@@ -1,6 +1,7 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 
 /// Rule that enforces semicolons after G_DECLARE_* macros
 ///
@@ -8,8 +9,9 @@ use crate::config::Config;
 /// causing them to be missed by the AST parser.
 pub struct GDeclareSemicolon;
 
-impl GDeclareSemicolon {
-    pub fn check_all(
+impl Rule for GDeclareSemicolon {
+    const NAME: &'static str = "gdeclare_semicolon";
+    fn check_all(
         &self,
         ast_context: &AstContext,
         _config: &Config,
@@ -34,14 +36,14 @@ impl GDeclareSemicolon {
                         if let Some(paren_pos) = trimmed.rfind(')') {
                             let after_paren = &trimmed[paren_pos + 1..].trim();
                             if after_paren.is_empty() {
-                                violations.push(Violation {
-                                    file: path.to_owned(),
-                                    line: line_num + 1,
-                                    column: paren_pos + 1,
-                                    message: "G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.".to_string(),
-                                    rule: "gdeclare_semicolon",
-                                    snippet: Some(format!("{}; // Add semicolon here", trimmed)),
-                                });
+                                let mut v = self.violation(
+                                    path,
+                                    line_num + 1,
+                                    paren_pos + 1,
+                                    "G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.".to_string(),
+                                );
+                                v.snippet = Some(format!("{}; // Add semicolon here", trimmed));
+                                violations.push(v);
                             }
                         }
                     }

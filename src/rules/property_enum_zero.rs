@@ -1,12 +1,14 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct PropertyEnumZero;
 
-impl PropertyEnumZero {
-    pub fn check_all(
+impl Rule for PropertyEnumZero {
+    const NAME: &'static str = "property_enum_zero";
+    fn check_all(
         &self,
         ast_context: &AstContext,
         _config: &Config,
@@ -20,7 +22,9 @@ impl PropertyEnumZero {
             }
         }
     }
+}
 
+impl PropertyEnumZero {
     fn check_node(
         &self,
         node: Node,
@@ -31,17 +35,15 @@ impl PropertyEnumZero {
     ) {
         if self.is_property_enum(node, source) {
             if let Some((prop_name, line_offset)) = self.check_first_enumerator(node, source) {
-                violations.push(Violation {
-                    file: file_path.to_owned(),
-                    line: base_line + line_offset,
-                    column: 1,
-                    message: format!(
+                violations.push(self.violation(
+                    file_path,
+                    base_line + line_offset,
+                    1,
+                    format!(
                         "Property enum should start with PROP_0, not {} = 0. First property should be PROP_0, second should be {}",
                         prop_name, prop_name
                     ),
-                    rule: "property_enum_zero",
-                    snippet: None,
-                });
+                ));
             }
         }
 

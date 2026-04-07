@@ -12,7 +12,7 @@ use crate::rules::strcmp_equal::StrcmpForStringEqual;
 use crate::rules::unnecessary_null_check::UnnecessaryNullCheck;
 use crate::rules::use_clear_functions::UseClearFunctions;
 use crate::rules::use_g_strcmp0::UseGStrcmp0;
-use crate::rules::Violation;
+use crate::rules::{Rule, Violation};
 use anyhow::Result;
 use indicatif::ProgressBar;
 use std::fs;

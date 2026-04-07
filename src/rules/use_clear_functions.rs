@@ -1,9 +1,35 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct UseClearFunctions;
+
+impl Rule for UseClearFunctions {
+    const NAME: &'static str = "use_clear_functions";
+
+    fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
+        for (path, file) in ast_context.iter_c_files() {
+            for func in &file.functions {
+                if !func.is_definition {
+                    continue;
+                }
+
+                if let Some(func_source) = ast_context.get_function_source(path, func) {
+                    if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        self.check_node(tree.root_node(), func_source, path, func.line, violations);
+                    }
+                }
+            }
+        }
+    }
+}
 
 impl UseClearFunctions {
     fn is_manual_clear_pattern(&self, node: Node, source: &[u8]) -> Option<Violation> {
@@ -209,27 +235,6 @@ impl UseClearFunctions {
     fn get_node_text(&self, node: Node, source: &[u8]) -> String {
         let text = &source[node.byte_range()];
         std::str::from_utf8(text).unwrap_or("").to_string()
-    }
-
-    pub fn check_all(
-        &self,
-        ast_context: &AstContext,
-        _config: &Config,
-        violations: &mut Vec<Violation>,
-    ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_node(tree.root_node(), func_source, path, func.line, violations);
-                    }
-                }
-            }
-        }
     }
 
     fn check_node(

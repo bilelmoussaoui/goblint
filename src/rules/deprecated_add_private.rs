@@ -1,12 +1,15 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct DeprecatedAddPrivate;
 
-impl DeprecatedAddPrivate {
-    pub fn check_all(
+impl Rule for DeprecatedAddPrivate {
+    const NAME: &'static str = "deprecated_add_private";
+
+    fn check_all(
         &self,
         ast_context: &AstContext,
         _config: &Config,
@@ -26,7 +29,8 @@ impl DeprecatedAddPrivate {
             }
         }
     }
-
+}
+impl DeprecatedAddPrivate {
     fn check_node(
         &self,
         node: Node,
@@ -40,14 +44,7 @@ impl DeprecatedAddPrivate {
                 let func_text = &source[function.byte_range()];
                 if let Ok(text) = std::str::from_utf8(func_text) {
                     if text == "g_type_class_add_private" {
-                        violations.push(Violation {
-                            file: file_path.to_owned(),
-                            line: base_line + node.start_position().row,
-                            column: node.start_position().column + 1,
-                            message: "g_type_class_add_private is deprecated since GLib 2.58. Use G_DEFINE_TYPE_WITH_PRIVATE or G_ADD_PRIVATE instead".to_string(),
-                            rule: "deprecated_add_private",
-                            snippet: None,
-                        });
+                        violations.push(self.violation(file_path, base_line + node.start_position().row, node.start_position().column + 1, "g_type_class_add_private is deprecated since GLib 2.58. Use G_DEFINE_TYPE_WITH_PRIVATE or G_ADD_PRIVATE instead".to_owned()));
                     }
                 }
             }

@@ -1,12 +1,14 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct GParamSpecNullNickBlurb;
 
-impl GParamSpecNullNickBlurb {
-    pub fn check_all(
+impl Rule for GParamSpecNullNickBlurb {
+    const NAME: &'static str = "g_param_spec_null_nick_blurb";
+    fn check_all(
         &self,
         ast_context: &AstContext,
         _config: &Config,
@@ -26,7 +28,9 @@ impl GParamSpecNullNickBlurb {
             }
         }
     }
+}
 
+impl GParamSpecNullNickBlurb {
     fn check_node(
         &self,
         node: Node,
@@ -67,18 +71,16 @@ impl GParamSpecNullNickBlurb {
                             }
 
                             if !issues.is_empty() {
-                                violations.push(Violation {
-                                    file: file_path.to_owned(),
-                                    line: base_line + node.start_position().row,
-                                    column: node.start_position().column + 1,
-                                    message: format!(
+                                violations.push(self.violation(
+                                    file_path,
+                                    base_line + node.start_position().row,
+                                    node.start_position().column + 1,
+                                    format!(
                                         "{} should have NULL for {}",
                                         function_str,
                                         issues.join(" and ")
                                     ),
-                                    rule: "g_param_spec_null_nick_blurb",
-                                    snippet: None,
-                                });
+                                ));
                             }
                         }
                     }

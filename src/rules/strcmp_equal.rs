@@ -1,12 +1,14 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct StrcmpForStringEqual;
 
-impl StrcmpForStringEqual {
-    pub fn check_all(
+impl Rule for StrcmpForStringEqual {
+    const NAME: &'static str = "strcmp_for_string_equal";
+    fn check_all(
         &self,
         ast_context: &AstContext,
         _config: &Config,
@@ -26,7 +28,9 @@ impl StrcmpForStringEqual {
             }
         }
     }
+}
 
+impl StrcmpForStringEqual {
     fn check_node(
         &self,
         node: Node,
@@ -110,17 +114,15 @@ impl StrcmpForStringEqual {
         if let Some(args) = strcmp_side.child_by_field_name("arguments") {
             let args_text = self.get_node_text(args, source);
 
-            violations.push(Violation {
-                file: file_path.to_owned(),
-                line: base_line + parent_node.start_position().row,
-                column: parent_node.start_position().column + 1,
-                message: format!(
+            violations.push(self.violation(
+                file_path,
+                base_line + parent_node.start_position().row,
+                parent_node.start_position().column + 1,
+                format!(
                     "Use {} {} instead of {} {} 0 for string equality",
                     suggestion, args_text, func_name, operator
                 ),
-                rule: "strcmp_for_string_equal",
-                snippet: None,
-            });
+            ));
         }
     }
 

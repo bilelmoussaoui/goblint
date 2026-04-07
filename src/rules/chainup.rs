@@ -1,9 +1,59 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct DisposeFinalizeChainsUp;
+
+impl Rule for DisposeFinalizeChainsUp {
+    const NAME: &'static str = "dispose_finalize_chains_up";
+
+    fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
+        for (path, file) in ast_context.iter_c_files() {
+            for func in &file.functions {
+                if !func.is_definition {
+                    continue;
+                }
+
+                // Check if function name ends with _dispose or _finalize
+                let method_type = if func.name.ends_with("_dispose") {
+                    "dispose"
+                } else if func.name.ends_with("_finalize") {
+                    "finalize"
+                } else {
+                    continue;
+                };
+
+                if let Some(func_source) = ast_context.get_function_source(path, func) {
+                    if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        let root = tree.root_node();
+
+                        // Verify it's a GObject virtual method
+                        if !self.is_gobject_virtual_method_from_source(root, func_source) {
+                            continue;
+                        }
+
+                        // Find the body
+                        if let Some(body) = self.find_body(root) {
+                            if !self.has_chainup_call(body, func_source, method_type) {
+                                violations.push(self.violation(path, func.line, 1, format!(
+                                        "{} must chain up to parent class (e.g., G_OBJECT_CLASS (parent_class)->{} (object))",
+                                        func.name, method_type
+                                    )));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 impl DisposeFinalizeChainsUp {
     fn find_function_declarator<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
@@ -114,58 +164,6 @@ impl DisposeFinalizeChainsUp {
     fn get_node_text(&self, node: Node, source: &[u8]) -> String {
         let text = &source[node.byte_range()];
         std::str::from_utf8(text).unwrap_or("").to_string()
-    }
-
-    pub fn check_all(
-        &self,
-        ast_context: &AstContext,
-        _config: &Config,
-        violations: &mut Vec<Violation>,
-    ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                // Check if function name ends with _dispose or _finalize
-                let method_type = if func.name.ends_with("_dispose") {
-                    "dispose"
-                } else if func.name.ends_with("_finalize") {
-                    "finalize"
-                } else {
-                    continue;
-                };
-
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let root = tree.root_node();
-
-                        // Verify it's a GObject virtual method
-                        if !self.is_gobject_virtual_method_from_source(root, func_source) {
-                            continue;
-                        }
-
-                        // Find the body
-                        if let Some(body) = self.find_body(root) {
-                            if !self.has_chainup_call(body, func_source, method_type) {
-                                violations.push(Violation {
-                                    file: path.to_owned(),
-                                    line: func.line,
-                                    column: 1,
-                                    message: format!(
-                                        "{} must chain up to parent class (e.g., G_OBJECT_CLASS (parent_class)->{} (object))",
-                                        func.name, method_type
-                                    ),
-                                    rule: "dispose_finalize_chains_up",
-                                    snippet: None,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 
     fn find_body<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {

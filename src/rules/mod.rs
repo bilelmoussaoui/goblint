@@ -1,3 +1,5 @@
+use crate::ast_context::AstContext;
+use crate::config::Config;
 use std::path::PathBuf;
 
 pub mod chainup;
@@ -21,4 +23,31 @@ pub struct Violation {
     pub message: String,
     pub rule: &'static str,
     pub snippet: Option<String>,
+}
+
+/// Trait that all linting rules must implement
+pub trait Rule {
+    /// The unique identifier for this rule (e.g., "missing_implementation")
+    const NAME: &'static str;
+
+    /// Check the AST and add violations to the provided vector
+    fn check_all(&self, ast_context: &AstContext, config: &Config, violations: &mut Vec<Violation>);
+
+    /// Helper to create a violation with the rule name automatically filled in
+    fn violation(
+        &self,
+        file: impl AsRef<std::path::Path>,
+        line: usize,
+        column: usize,
+        message: String,
+    ) -> Violation {
+        Violation {
+            file: file.as_ref().to_path_buf(),
+            line,
+            column,
+            message,
+            rule: Self::NAME,
+            snippet: None,
+        }
+    }
 }

@@ -1,12 +1,14 @@
-use super::Violation;
+use super::Rule;
 use crate::ast_context::AstContext;
 use crate::config::Config;
+use crate::rules::Violation;
 use tree_sitter::Node;
 
 pub struct GErrorInit;
 
-impl GErrorInit {
-    pub fn check_all(
+impl Rule for GErrorInit {
+    const NAME: &'static str = "gerror_init";
+    fn check_all(
         &self,
         ast_context: &AstContext,
         _config: &Config,
@@ -26,7 +28,9 @@ impl GErrorInit {
             }
         }
     }
+}
 
+impl GErrorInit {
     fn check_node(
         &self,
         node: Node,
@@ -37,17 +41,15 @@ impl GErrorInit {
     ) {
         if let Some((var_name, is_initialized_to_null)) = self.is_gerror_declaration(node, source) {
             if !is_initialized_to_null {
-                violations.push(Violation {
-                    file: file_path.to_owned(),
-                    line: base_line + node.start_position().row,
-                    column: node.start_position().column + 1,
-                    message: format!(
+                violations.push(self.violation(
+                    file_path,
+                    base_line + node.start_position().row,
+                    node.start_position().column + 1,
+                    format!(
                         "GError *{} must be initialized to NULL (GError *{} = NULL;)",
                         var_name, var_name
                     ),
-                    rule: "gerror_init",
-                    snippet: None,
-                });
+                ));
             }
         }
 
