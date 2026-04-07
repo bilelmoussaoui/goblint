@@ -111,7 +111,7 @@ impl StrcmpForStringEqual {
         parent_node: Node,
         violations: &mut Vec<Violation>,
     ) {
-        // Check if strcmp_side is a call to strcmp or g_strcmp0
+        // Check if strcmp_side is a call to strcmp
         if strcmp_side.kind() != "call_expression" {
             return;
         }
@@ -121,7 +121,7 @@ impl StrcmpForStringEqual {
         };
 
         let func_name = ast_context.get_node_text(function, source);
-        if func_name != "strcmp" && func_name != "g_strcmp0" {
+        if func_name != "strcmp" {
             return;
         }
 
