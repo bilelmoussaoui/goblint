@@ -18,7 +18,14 @@ impl Rule for PropertyEnumZero {
         for (path, file) in ast_context.iter_all_files() {
             // Parse the entire file since enums can be at top-level
             if let Some(tree) = ast_context.parse_c_source(&file.source) {
-                self.check_node(tree.root_node(), &file.source, path, 0, violations);
+                self.check_node(
+                    ast_context,
+                    tree.root_node(),
+                    &file.source,
+                    path,
+                    0,
+                    violations,
+                );
             }
         }
     }
@@ -27,14 +34,17 @@ impl Rule for PropertyEnumZero {
 impl PropertyEnumZero {
     fn check_node(
         &self,
+        ast_context: &AstContext,
         node: Node,
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
         violations: &mut Vec<Violation>,
     ) {
-        if self.is_property_enum(node, source) {
-            if let Some((prop_name, line_offset)) = self.check_first_enumerator(node, source) {
+        if self.is_property_enum(ast_context, node, source) {
+            if let Some((prop_name, line_offset)) =
+                self.check_first_enumerator(ast_context, node, source)
+            {
                 violations.push(self.violation(
                     file_path,
                     base_line + line_offset,
@@ -49,11 +59,11 @@ impl PropertyEnumZero {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(child, source, file_path, base_line, violations);
+            self.check_node(ast_context, child, source, file_path, base_line, violations);
         }
     }
 
-    fn is_property_enum(&self, node: Node, source: &[u8]) -> bool {
+    fn is_property_enum(&self, ast_context: &AstContext, node: Node, source: &[u8]) -> bool {
         if node.kind() != "enum_specifier" {
             return false;
         }
@@ -66,7 +76,7 @@ impl PropertyEnumZero {
         for child in body.children(&mut cursor) {
             if child.kind() == "enumerator" {
                 if let Some(name) = child.child_by_field_name("name") {
-                    let name_text = self.get_node_text(name, source);
+                    let name_text = ast_context.get_node_text(name, source);
                     if name_text.starts_with("PROP_") {
                         return true;
                     }
@@ -77,17 +87,23 @@ impl PropertyEnumZero {
         false
     }
 
-    fn check_first_enumerator(&self, node: Node, source: &[u8]) -> Option<(String, usize)> {
+    fn check_first_enumerator(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        source: &[u8],
+    ) -> Option<(String, usize)> {
         let body = node.child_by_field_name("body")?;
 
         let mut cursor = body.walk();
         for child in body.children(&mut cursor) {
             if child.kind() == "enumerator" {
                 if let Some(name) = child.child_by_field_name("name") {
-                    let name_text = self.get_node_text(name, source);
+                    let name_text = ast_context.get_node_text(name, source);
 
                     if let Some(value) = child.child_by_field_name("value") {
-                        let value_text = self.get_node_text(value, source).trim().to_string();
+                        let value_text =
+                            ast_context.get_node_text(value, source).trim().to_string();
 
                         if name_text.starts_with("PROP_")
                             && !name_text.ends_with("_0")
@@ -111,10 +127,5 @@ impl PropertyEnumZero {
         }
 
         None
-    }
-
-    fn get_node_text(&self, node: Node, source: &[u8]) -> String {
-        let text = &source[node.byte_range()];
-        std::str::from_utf8(text).unwrap_or("").to_string()
     }
 }

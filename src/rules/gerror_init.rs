@@ -22,7 +22,14 @@ impl Rule for GErrorInit {
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
                     if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_node(tree.root_node(), func_source, path, func.line, violations);
+                        self.check_node(
+                            ast_context,
+                            tree.root_node(),
+                            func_source,
+                            path,
+                            func.line,
+                            violations,
+                        );
                     }
                 }
             }
@@ -33,13 +40,16 @@ impl Rule for GErrorInit {
 impl GErrorInit {
     fn check_node(
         &self,
+        ast_context: &AstContext,
         node: Node,
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
         violations: &mut Vec<Violation>,
     ) {
-        if let Some((var_name, is_initialized_to_null)) = self.is_gerror_declaration(node, source) {
+        if let Some((var_name, is_initialized_to_null)) =
+            self.is_gerror_declaration(ast_context, node, source)
+        {
             if !is_initialized_to_null {
                 violations.push(self.violation(
                     file_path,
@@ -55,11 +65,16 @@ impl GErrorInit {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(child, source, file_path, base_line, violations);
+            self.check_node(ast_context, child, source, file_path, base_line, violations);
         }
     }
 
-    fn is_gerror_declaration(&self, node: Node, source: &[u8]) -> Option<(String, bool)> {
+    fn is_gerror_declaration(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        source: &[u8],
+    ) -> Option<(String, bool)> {
         if node.kind() != "declaration" {
             return None;
         }
@@ -72,7 +87,7 @@ impl GErrorInit {
         }
 
         let type_node = node.child_by_field_name("type")?;
-        let type_text = self.get_node_text(type_node, source);
+        let type_text = ast_context.get_node_text(type_node, source);
 
         if !type_text.contains("GError") {
             return None;
@@ -81,7 +96,7 @@ impl GErrorInit {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             if child.kind() == "pointer_declarator" || child.kind() == "init_declarator" {
-                let declarator_text = self.get_node_text(child, source);
+                let declarator_text = ast_context.get_node_text(child, source);
 
                 if !declarator_text.contains('*') {
                     continue;
@@ -89,18 +104,18 @@ impl GErrorInit {
 
                 if child.kind() == "init_declarator" {
                     if let Some(value) = child.child_by_field_name("value") {
-                        let value_full = self.get_node_text(value, source);
+                        let value_full = ast_context.get_node_text(value, source);
                         let value_text = value_full.trim();
                         let is_null =
                             value_text == "NULL" || value_text == "0" || value_text == "((void*)0)";
 
                         if let Some(declarator) = child.child_by_field_name("declarator") {
-                            let var_name = self.extract_variable_name(declarator, source)?;
+                            let var_name = ast_context.extract_variable_name(declarator, source)?;
                             return Some((var_name, is_null));
                         }
                     }
                 } else if child.kind() == "pointer_declarator" {
-                    let var_name = self.extract_variable_name(child, source)?;
+                    let var_name = ast_context.extract_variable_name(child, source)?;
                     return Some((var_name, false));
                 }
             }
@@ -122,25 +137,5 @@ impl GErrorInit {
         }
 
         false
-    }
-
-    fn extract_variable_name(&self, declarator: Node, source: &[u8]) -> Option<String> {
-        if let Some(inner) = declarator.child_by_field_name("declarator") {
-            if inner.kind() == "identifier" {
-                return Some(self.get_node_text(inner, source));
-            }
-            return self.extract_variable_name(inner, source);
-        }
-
-        if declarator.kind() == "identifier" {
-            return Some(self.get_node_text(declarator, source));
-        }
-
-        None
-    }
-
-    fn get_node_text(&self, node: Node, source: &[u8]) -> String {
-        let text = &source[node.byte_range()];
-        std::str::from_utf8(text).unwrap_or("").to_string()
     }
 }

@@ -142,4 +142,74 @@ impl AstContext {
     pub fn parse_c_source(&self, source: &[u8]) -> Option<tree_sitter::Tree> {
         self.ts_parser.borrow_mut().parse(source, None)
     }
+
+    // Common AST helper methods for rules
+
+    /// Extract text from a tree-sitter node
+    pub fn get_node_text(&self, node: tree_sitter::Node, source: &[u8]) -> String {
+        let text = &source[node.byte_range()];
+        std::str::from_utf8(text).unwrap_or("").to_string()
+    }
+
+    /// Find the compound_statement (function body) in an AST
+    pub fn find_body<'a>(&self, node: tree_sitter::Node<'a>) -> Option<tree_sitter::Node<'a>> {
+        if node.kind() == "compound_statement" {
+            return Some(node);
+        }
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(result) = self.find_body(child) {
+                return Some(result);
+            }
+        }
+
+        None
+    }
+
+    /// Extract variable name from a declarator (handles pointer_declarator -> identifier)
+    pub fn extract_variable_name(
+        &self,
+        declarator: tree_sitter::Node,
+        source: &[u8],
+    ) -> Option<String> {
+        // Handle pointer_declarator -> identifier
+        if let Some(inner) = declarator.child_by_field_name("declarator") {
+            if inner.kind() == "identifier" {
+                return Some(self.get_node_text(inner, source));
+            }
+            return self.extract_variable_name(inner, source);
+        }
+
+        if declarator.kind() == "identifier" {
+            return Some(self.get_node_text(declarator, source));
+        }
+
+        None
+    }
+
+    /// Check if text represents a NULL literal
+    pub fn is_null_literal(&self, text: &str) -> bool {
+        let trimmed = text.trim();
+        trimmed == "NULL" || trimmed == "0" || trimmed == "((void*)0)"
+    }
+
+    /// Find a call_expression node in the AST
+    pub fn find_call_expression<'a>(
+        &self,
+        node: tree_sitter::Node<'a>,
+    ) -> Option<tree_sitter::Node<'a>> {
+        if node.kind() == "call_expression" {
+            return Some(node);
+        }
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(result) = self.find_call_expression(child) {
+                return Some(result);
+            }
+        }
+
+        None
+    }
 }

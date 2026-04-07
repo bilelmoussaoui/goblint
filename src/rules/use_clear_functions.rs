@@ -23,7 +23,14 @@ impl Rule for UseClearFunctions {
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
                     if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_node(tree.root_node(), func_source, path, func.line, violations);
+                        self.check_node(
+                            ast_context,
+                            tree.root_node(),
+                            func_source,
+                            path,
+                            func.line,
+                            violations,
+                        );
                     }
                 }
             }
@@ -32,7 +39,12 @@ impl Rule for UseClearFunctions {
 }
 
 impl UseClearFunctions {
-    fn is_manual_clear_pattern(&self, node: Node, source: &[u8]) -> Option<Violation> {
+    fn is_manual_clear_pattern(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        source: &[u8],
+    ) -> Option<Violation> {
         // Look for pattern:
         // if (obj->field) {
         //   g_object_unref (obj->field);
@@ -45,15 +57,16 @@ impl UseClearFunctions {
 
         // Get the condition
         let condition = node.child_by_field_name("condition")?;
-        let checked_var = self.extract_checked_variable(condition, source)?;
+        let checked_var = self.find_variable_in_condition(ast_context, condition, source)?;
 
         // Get the consequence (the if body)
         let consequence = node.child_by_field_name("consequence")?;
 
         // Look for unref/free call and NULL assignment in the body
         let (has_unref_call, unref_function) =
-            self.has_unref_call(consequence, &checked_var, source);
-        let has_null_assignment = self.has_null_assignment(consequence, &checked_var, source);
+            self.has_unref_call(ast_context, consequence, &checked_var, source);
+        let has_null_assignment =
+            self.has_null_assignment(ast_context, consequence, &checked_var, source);
 
         if has_unref_call && has_null_assignment {
             let position = node.start_position();
@@ -75,38 +88,32 @@ impl UseClearFunctions {
         None
     }
 
-    fn extract_checked_variable(&self, condition: Node, source: &[u8]) -> Option<String> {
-        // Handle patterns:
-        // - obj->field
-        // - obj->field != NULL
-        // - NULL != obj->field
-        // - obj->field != 0
-
-        // Look for field_expression or identifier
-        self.find_variable_in_condition(condition, source)
-    }
-
-    fn find_variable_in_condition(&self, node: Node, source: &[u8]) -> Option<String> {
+    fn find_variable_in_condition(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        source: &[u8],
+    ) -> Option<String> {
         // For field_expression (obj->field), return the full expression
         if node.kind() == "field_expression" {
-            return Some(self.get_node_text(node, source));
+            return Some(ast_context.get_node_text(node, source));
         }
 
         // For identifier
         if node.kind() == "identifier" {
-            return Some(self.get_node_text(node, source));
+            return Some(ast_context.get_node_text(node, source));
         }
 
         // For binary expressions (field != NULL), find the field
         if node.kind() == "binary_expression" {
             // Try both left and right sides
             if let Some(left) = node.child_by_field_name("left") {
-                if let Some(var) = self.find_variable_in_condition(left, source) {
+                if let Some(var) = self.find_variable_in_condition(ast_context, left, source) {
                     return Some(var);
                 }
             }
             if let Some(right) = node.child_by_field_name("right") {
-                if let Some(var) = self.find_variable_in_condition(right, source) {
+                if let Some(var) = self.find_variable_in_condition(ast_context, right, source) {
                     return Some(var);
                 }
             }
@@ -116,7 +123,7 @@ impl UseClearFunctions {
         if node.kind() == "parenthesized_expression" {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                if let Some(var) = self.find_variable_in_condition(child, source) {
+                if let Some(var) = self.find_variable_in_condition(ast_context, child, source) {
                     return Some(var);
                 }
             }
@@ -125,7 +132,13 @@ impl UseClearFunctions {
         None
     }
 
-    fn has_unref_call(&self, body: Node, var_name: &str, source: &[u8]) -> (bool, String) {
+    fn has_unref_call(
+        &self,
+        ast_context: &AstContext,
+        body: Node,
+        var_name: &str,
+        source: &[u8],
+    ) -> (bool, String) {
         // Look for g_object_unref, g_free, g_hash_table_unref, etc.
         let unref_functions = [
             "g_object_unref",
@@ -140,7 +153,7 @@ impl UseClearFunctions {
         ];
 
         if let Some((function_name, _)) =
-            self.find_function_call_with_arg(body, &unref_functions, var_name, source)
+            self.find_function_call_with_arg(ast_context, body, &unref_functions, var_name, source)
         {
             return (true, function_name);
         }
@@ -148,13 +161,20 @@ impl UseClearFunctions {
         (false, String::new())
     }
 
-    fn has_null_assignment(&self, body: Node, var_name: &str, source: &[u8]) -> bool {
+    fn has_null_assignment(
+        &self,
+        ast_context: &AstContext,
+        body: Node,
+        var_name: &str,
+        source: &[u8],
+    ) -> bool {
         // Look for: var_name = NULL;
-        self.find_null_assignment(body, var_name, source)
+        self.find_null_assignment(ast_context, body, var_name, source)
     }
 
     fn find_function_call_with_arg<'a>(
         &self,
+        ast_context: &AstContext,
         node: Node<'a>,
         function_names: &[&str],
         arg_name: &str,
@@ -162,13 +182,13 @@ impl UseClearFunctions {
     ) -> Option<(String, Node<'a>)> {
         if node.kind() == "call_expression" {
             if let Some(function) = node.child_by_field_name("function") {
-                let func_name = self.get_node_text(function, source);
+                let func_name = ast_context.get_node_text(function, source);
 
                 for &expected_func in function_names {
                     if func_name == expected_func {
                         // Check if argument matches
                         if let Some(arguments) = node.child_by_field_name("arguments") {
-                            let args_text = self.get_node_text(arguments, source);
+                            let args_text = ast_context.get_node_text(arguments, source);
                             if args_text.contains(arg_name) {
                                 return Some((func_name, node));
                             }
@@ -181,9 +201,13 @@ impl UseClearFunctions {
         // Recursively check children
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if let Some(result) =
-                self.find_function_call_with_arg(child, function_names, arg_name, source)
-            {
+            if let Some(result) = self.find_function_call_with_arg(
+                ast_context,
+                child,
+                function_names,
+                arg_name,
+                source,
+            ) {
                 return Some(result);
             }
         }
@@ -191,14 +215,20 @@ impl UseClearFunctions {
         None
     }
 
-    fn find_null_assignment(&self, node: Node, var_name: &str, source: &[u8]) -> bool {
+    fn find_null_assignment(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        var_name: &str,
+        source: &[u8],
+    ) -> bool {
         // Look for assignment: var_name = NULL;
         if node.kind() == "assignment_expression" {
             if let Some(left) = node.child_by_field_name("left") {
-                let left_text = self.get_node_text(left, source);
+                let left_text = ast_context.get_node_text(left, source);
                 if left_text == var_name {
                     if let Some(right) = node.child_by_field_name("right") {
-                        let right_full = self.get_node_text(right, source);
+                        let right_full = ast_context.get_node_text(right, source);
                         let right_text = right_full.trim();
                         if right_text == "NULL" || right_text == "0" || right_text == "((void*)0)" {
                             return true;
@@ -211,7 +241,7 @@ impl UseClearFunctions {
         // Recursively check children
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if self.find_null_assignment(child, var_name, source) {
+            if self.find_null_assignment(ast_context, child, var_name, source) {
                 return true;
             }
         }
@@ -232,20 +262,16 @@ impl UseClearFunctions {
         }
     }
 
-    fn get_node_text(&self, node: Node, source: &[u8]) -> String {
-        let text = &source[node.byte_range()];
-        std::str::from_utf8(text).unwrap_or("").to_string()
-    }
-
     fn check_node(
         &self,
+        ast_context: &AstContext,
         node: Node,
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
         violations: &mut Vec<Violation>,
     ) {
-        if let Some(mut violation) = self.is_manual_clear_pattern(node, source) {
+        if let Some(mut violation) = self.is_manual_clear_pattern(ast_context, node, source) {
             violation.file = file_path.to_owned();
             violation.line = base_line + violation.line - 1;
             violations.push(violation);
@@ -253,7 +279,7 @@ impl UseClearFunctions {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(child, source, file_path, base_line, violations);
+            self.check_node(ast_context, child, source, file_path, base_line, violations);
         }
     }
 }

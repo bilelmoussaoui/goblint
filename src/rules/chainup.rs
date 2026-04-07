@@ -35,13 +35,17 @@ impl Rule for DisposeFinalizeChainsUp {
                         let root = tree.root_node();
 
                         // Verify it's a GObject virtual method
-                        if !self.is_gobject_virtual_method_from_source(root, func_source) {
+                        if !self.is_gobject_virtual_method_from_source(
+                            ast_context,
+                            root,
+                            func_source,
+                        ) {
                             continue;
                         }
 
                         // Find the body
-                        if let Some(body) = self.find_body(root) {
-                            if !self.has_chainup_call(body, func_source, method_type) {
+                        if let Some(body) = ast_context.find_body(root) {
+                            if !self.has_chainup_call(ast_context, body, func_source, method_type) {
                                 violations.push(self.violation(path, func.line, 1, format!(
                                         "{} must chain up to parent class (e.g., G_OBJECT_CLASS (parent_class)->{} (object))",
                                         func.name, method_type
@@ -72,9 +76,14 @@ impl DisposeFinalizeChainsUp {
         None
     }
 
-    fn is_gobject_parameter(&self, param_node: Node, source: &[u8]) -> bool {
+    fn is_gobject_parameter(
+        &self,
+        ast_context: &AstContext,
+        param_node: Node,
+        source: &[u8],
+    ) -> bool {
         // Get the type of the parameter
-        let param_text = self.get_node_text(param_node, source);
+        let param_text = ast_context.get_node_text(param_node, source);
 
         // Check if parameter type is GObject* or the parameter name is "object"
         // Common patterns:
@@ -87,7 +96,13 @@ impl DisposeFinalizeChainsUp {
             || param_text.contains("*object")
     }
 
-    fn has_chainup_call(&self, node: Node, source: &[u8], method_type: &str) -> bool {
+    fn has_chainup_call(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        source: &[u8],
+        method_type: &str,
+    ) -> bool {
         // Pattern 1: Direct call - G_OBJECT_CLASS (xxx)->dispose/finalize
         // Pattern 2: Indirect - variable assigned from parent class, then variable->dispose/finalize
 
@@ -100,7 +115,7 @@ impl DisposeFinalizeChainsUp {
                 if field_str == method_type {
                     // Check if the argument contains G_OBJECT_CLASS or similar parent class macro
                     if let Some(argument) = node.child_by_field_name("argument") {
-                        let arg_text = self.get_node_text(argument, source);
+                        let arg_text = ast_context.get_node_text(argument, source);
 
                         // Pattern 1: Direct parent class cast
                         if self.looks_like_parent_class_cast(&arg_text) {
@@ -120,7 +135,7 @@ impl DisposeFinalizeChainsUp {
         // Recursively check children
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if self.has_chainup_call(child, source, method_type) {
+            if self.has_chainup_call(ast_context, child, source, method_type) {
                 return true;
             }
         }
@@ -161,33 +176,18 @@ impl DisposeFinalizeChainsUp {
         false
     }
 
-    fn get_node_text(&self, node: Node, source: &[u8]) -> String {
-        let text = &source[node.byte_range()];
-        std::str::from_utf8(text).unwrap_or("").to_string()
-    }
-
-    fn find_body<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
-        if node.kind() == "compound_statement" {
-            return Some(node);
-        }
-
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if let Some(result) = self.find_body(child) {
-                return Some(result);
-            }
-        }
-
-        None
-    }
-
-    fn is_gobject_virtual_method_from_source(&self, node: Node, source: &[u8]) -> bool {
+    fn is_gobject_virtual_method_from_source(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        source: &[u8],
+    ) -> bool {
         if let Some(func_decl) = self.find_function_declarator(node) {
             if let Some(parameters) = func_decl.child_by_field_name("parameters") {
                 let mut cursor = parameters.walk();
                 for child in parameters.children(&mut cursor) {
                     if child.kind() == "parameter_declaration" {
-                        return self.is_gobject_parameter(child, source);
+                        return self.is_gobject_parameter(ast_context, child, source);
                     }
                 }
             }
