@@ -51,8 +51,8 @@ gtask_source_tag = false
 # Detect unnecessary NULL checks before g_free/g_clear_pointer
 unnecessary_null_check = true
 
-# Suggest making non-static, non-public functions static
-function_visibility = false
-
 # Enforce semicolons after G_DECLARE_* macros
 gdeclare_semicolon = true
+
+# Report functions declared in headers but not implemented
+missing_implementation = true

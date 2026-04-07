@@ -2,11 +2,11 @@ use crate::ast_context::AstContext;
 use crate::config::Config;
 use crate::rules::chainup::DisposeFinalizeChainsUp;
 use crate::rules::deprecated_add_private::DeprecatedAddPrivate;
-use crate::rules::function_visibility_ast::FunctionVisibilityAst;
 use crate::rules::g_param_spec::GParamSpecNullNickBlurb;
 use crate::rules::gdeclare_semicolon::GDeclareSemicolon;
 use crate::rules::gerror_init::GErrorInit;
 use crate::rules::gtask_source_tag::GTaskSourceTag;
+use crate::rules::missing_implementation::MissingImplementation;
 use crate::rules::property_enum_zero::PropertyEnumZero;
 use crate::rules::unnecessary_null_check::UnnecessaryNullCheck;
 use crate::rules::use_clear_functions::UseClearFunctions;
@@ -27,14 +27,12 @@ pub fn scan_with_ast(
         sp.set_message("Running linter rules...");
     }
 
-    // Run function visibility checks
-    if config.rules.function_visibility {
-        let rule = FunctionVisibilityAst;
-        violations.extend(rule.check_all(ast_context, config));
-    }
-
     // Run G_DECLARE semicolon checks
     let rule = GDeclareSemicolon;
+    violations.extend(rule.check_all(ast_context, config));
+
+    // Run missing implementation checks
+    let rule = MissingImplementation;
     violations.extend(rule.check_all(ast_context, config));
 
     // Run deprecated API checks

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use globset::GlobSet;
-use gobject_ast::{FunctionInfo, GObjectTypeKind, Parser, Project};
+use gobject_ast::{FunctionInfo, Parser, Project};
 use indicatif::ProgressBar;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -58,6 +58,32 @@ impl AstContext {
         Ok(Self { project })
     }
 
+    /// Find functions declared in headers that have no implementation
+    /// Returns (file_path, function_info) tuples
+    pub fn find_declared_but_not_defined(&self) -> Vec<(&Path, &FunctionInfo)> {
+        self.project
+            .files
+            .iter()
+            .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "h"))
+            .flat_map(|(path, file)| {
+                file.functions
+                    .iter()
+                    .filter(|f| !f.is_definition)
+                    .filter(|f| {
+                        // Check if there's a matching definition in any C file
+                        !self
+                            .project
+                            .files
+                            .iter()
+                            .filter(|(p, _)| p.extension().is_some_and(|ext| ext == "c"))
+                            .flat_map(|(_, file)| &file.functions)
+                            .any(|def| def.name == f.name && def.is_definition)
+                    })
+                    .map(move |f| (path.as_path(), f))
+            })
+            .collect()
+    }
+
     /// Get the source text for an entire function
     pub fn get_function_source<'a>(
         &'a self,
@@ -72,121 +98,4 @@ impl AstContext {
             None
         }
     }
-
-    /// Check if a function is declared in any header file
-    pub fn is_declared_in_header(&self, func_name: &str) -> bool {
-        for (path, file) in &self.project.files {
-            if path.extension().is_some_and(|ext| ext == "h")
-                && file.functions.iter().any(|f| f.name == func_name)
-            {
-                return true;
-            }
-        }
-        false
-    }
-
-    /// Find all non-static functions that are NOT declared in headers and don't have export macros
-    /// Returns (file_path, function_info) tuples
-    /// These should either be:
-    /// 1. Made static (if only used in one file)
-    /// 2. Given an export macro (if part of public API)
-    /// 3. Declared in a header (if part of internal API)
-    pub fn find_undeclared_non_static_functions(&self) -> Vec<(&Path, &FunctionInfo)> {
-        self.project
-            .files
-            .iter()
-            .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "c"))
-            .flat_map(|(path, file)| {
-                file.functions
-                    .iter()
-                    .filter(|f| f.is_definition)
-                    .filter(|f| !f.is_static)
-                    .filter(|f| f.export_macros.is_empty())
-                    .filter(|f| !self.is_declared_in_header(&f.name))
-                    .filter(|f| !is_special_function(&f.name))
-                    .map(move |f| (path.as_path(), f))
-            })
-            .collect()
-    }
-
-    /// Check if a function is part of a GObject type definition
-    /// (e.g., type registration functions, vfuncs, etc.)
-    pub fn is_gobject_internal(&self, func_name: &str) -> bool {
-        // Check if it's a _get_type function
-        if func_name.ends_with("_get_type") {
-            return true;
-        }
-
-        // Check if it's part of a GObject type's class_init, instance_init, etc.
-        for file in self.project.files.values() {
-            for gtype in &file.gobject_types {
-                let prefix = match &gtype.kind {
-                    GObjectTypeKind::DeclareFinal {
-                        function_prefix, ..
-                    }
-                    | GObjectTypeKind::DeclareDerivable {
-                        function_prefix, ..
-                    }
-                    | GObjectTypeKind::DeclareInterface {
-                        function_prefix, ..
-                    }
-                    | GObjectTypeKind::DefineType {
-                        function_prefix, ..
-                    }
-                    | GObjectTypeKind::DefineTypeWithPrivate {
-                        function_prefix, ..
-                    }
-                    | GObjectTypeKind::DefineAbstractType {
-                        function_prefix, ..
-                    } => function_prefix,
-                };
-
-                // GObject generates functions like: prefix_class_init, prefix_init, prefix_finalize
-                if func_name.starts_with(prefix) {
-                    let suffix = &func_name[prefix.len()..];
-                    if matches!(
-                        suffix,
-                        "_class_init"
-                            | "_init"
-                            | "_finalize"
-                            | "_dispose"
-                            | "_constructed"
-                            | "_set_property"
-                            | "_get_property"
-                    ) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        false
-    }
-}
-
-/// Check if a function name indicates it's a special function that shouldn't be linted
-fn is_special_function(name: &str) -> bool {
-    // main function
-    if name == "main" {
-        return true;
-    }
-
-    // GObject type registration functions
-    if name.ends_with("_get_type") || name.ends_with("_error_quark") {
-        return true;
-    }
-
-    // Common GObject lifecycle functions
-    if name.ends_with("_class_init")
-        || name.ends_with("_init")
-        || name.ends_with("_finalize")
-        || name.ends_with("_dispose")
-        || name.ends_with("_constructed")
-        || name.ends_with("_set_property")
-        || name.ends_with("_get_property")
-    {
-        return true;
-    }
-
-    false
 }

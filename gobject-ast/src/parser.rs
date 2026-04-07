@@ -264,12 +264,15 @@ impl Parser {
             let mut func_names = Vec::new();
             self.find_all_function_names(node, source, &mut func_names);
 
+            // Check if this declaration has 'static' storage class
+            let is_static = self.has_static_storage_class(node, source);
+
             for func_name in func_names {
                 if !is_macro_identifier(&func_name) && !is_gobject_type_macro(&func_name) {
                     file_model.functions.push(FunctionInfo {
                         name: func_name.clone(),
                         line: node.start_position().row + 1,
-                        is_static: false,
+                        is_static,
                         export_macros: export_macros.clone(),
                         has_static_forward_decl: static_forwards.contains(&func_name),
                         is_definition: false,
@@ -292,10 +295,14 @@ impl Parser {
                 .as_ref()
                 .map_or(false, |(name, _)| name.starts_with("G_DECLARE_"));
 
-            // Still recurse into function_definition to find identifiers/structs inside
+            // Only recurse into the declarator/type, NOT into the function body
+            // This prevents picking up function calls inside function bodies as declarations
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                self.visit_node(child, source, file_model, macro_map, static_forwards);
+                // Skip compound_statement (function body) to avoid false declarations
+                if child.kind() != "compound_statement" {
+                    self.visit_node(child, source, file_model, macro_map, static_forwards);
+                }
             }
 
             // Don't add G_DECLARE as a function
@@ -704,6 +711,19 @@ impl Parser {
         Some((name, is_static))
     }
 
+    fn has_static_storage_class(&self, node: Node, source: &[u8]) -> bool {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "storage_class_specifier" {
+                let text = &source[child.byte_range()];
+                if std::str::from_utf8(text).unwrap_or("") == "static" {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     fn find_all_function_names(&self, node: Node, source: &[u8], result: &mut Vec<String>) {
         if node.kind() == "function_declarator" {
             if let Some(name) = self.extract_declarator_name(node, source) {
@@ -734,6 +754,17 @@ impl Parser {
         if declarator.kind() == "identifier" {
             let name = &source[declarator.byte_range()];
             return Some(std::str::from_utf8(name).ok()?.to_string());
+        }
+
+        // Handle parenthesized declarators like (function_name) used to prevent macro expansion
+        if declarator.kind() == "parenthesized_declarator" {
+            let mut cursor = declarator.walk();
+            for child in declarator.children(&mut cursor) {
+                if child.kind() == "identifier" {
+                    let name = &source[child.byte_range()];
+                    return Some(std::str::from_utf8(name).ok()?.to_string());
+                }
+            }
         }
 
         None
@@ -1035,7 +1066,8 @@ fn is_gobject_type_macro(name: &str) -> bool {
 }
 
 fn is_macro_identifier(name: &str) -> bool {
-    name == "G_DECLARE_FINAL_TYPE"
+    // Specific known macros and keywords
+    if name == "G_DECLARE_FINAL_TYPE"
         || name == "G_DECLARE_DERIVABLE_TYPE"
         || name == "G_DECLARE_INTERFACE"
         || name == "void"
@@ -1050,4 +1082,25 @@ fn is_macro_identifier(name: &str) -> bool {
         || name.ends_with("_error_quark")
         || name.ends_with("_END")
         || name == "main"
+    {
+        return true;
+    }
+
+    // Heuristic: if the identifier is ALL_CAPS (with underscores), it's likely a macro
+    // Exception: single words like NULL, TRUE, FALSE are constants, not macro calls
+    if name
+        .chars()
+        .all(|c| c.is_uppercase() || c == '_' || c.is_numeric())
+    {
+        // But allow common constants/types that are legitimately all-caps
+        if name == "NULL" || name == "TRUE" || name == "FALSE" {
+            return false;
+        }
+        // If it contains an underscore or is longer than 4 chars, likely a macro
+        if name.contains('_') || name.len() > 4 {
+            return true;
+        }
+    }
+
+    false
 }
