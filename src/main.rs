@@ -67,7 +67,8 @@ fn main() -> Result<()> {
     )?;
 
     // Run AST-based rules
-    let violations = scanner::scan_with_ast(&ast_context, &config, spinner.as_ref())?;
+    let violations =
+        scanner::scan_with_ast(&ast_context, &config, &args.directory, spinner.as_ref())?;
 
     if let Some(sp) = spinner {
         sp.finish_and_clear();

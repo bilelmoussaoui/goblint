@@ -38,14 +38,14 @@ impl PropertyEnumZero {
         if self.is_property_enum(node, source) {
             if let Some((prop_name, line_offset)) = self.check_first_enumerator(node, source) {
                 violations.push(Violation {
-                    file: file_path.display().to_string(),
+                    file: file_path.to_owned(),
                     line: base_line + line_offset,
                     column: 1,
                     message: format!(
                         "Property enum should start with PROP_0, not {} = 0. First property should be PROP_0, second should be {}",
                         prop_name, prop_name
                     ),
-                    rule: "property_enum_zero".to_string(),
+                    rule: "property_enum_zero",
                     snippet: None,
                 });
             }

@@ -188,11 +188,11 @@ impl UnnecessaryNullCheck {
             };
 
             violations.push(Violation {
-                file: file_path.display().to_string(),
+                file: file_path.to_owned(),
                 line: base_line + node.start_position().row,
                 column: node.start_position().column + 1,
                 message: suggestion,
-                rule: "unnecessary_null_check".to_string(),
+                rule: "unnecessary_null_check",
                 snippet: None,
             });
         }

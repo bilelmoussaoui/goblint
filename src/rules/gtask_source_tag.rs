@@ -138,14 +138,14 @@ impl GTaskSourceTag {
                             for (var_name, line_offset, col) in task_vars {
                                 if !self.has_set_source_tag_call(body, &var_name, func_source) {
                                     violations.push(Violation {
-                                        file: path.display().to_string(),
+                                        file: path.to_owned(),
                                         line: func.line + line_offset - 1,
                                         column: col,
                                         message: format!(
                                             "GTask {} created without g_task_set_source_tag. Add: g_task_set_source_tag ({}, <function_name>);",
                                             var_name, var_name
                                         ),
-                                        rule: "gtask_source_tag".to_string(),
+                                        rule: "gtask_source_tag",
                                         snippet: None,
                                     });
                                 }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 pub mod chainup;
 pub mod deprecated_add_private;
 pub mod g_param_spec;
@@ -12,10 +14,10 @@ pub mod use_g_strcmp0;
 
 #[derive(Debug, Clone)]
 pub struct Violation {
-    pub file: String,
+    pub file: PathBuf,
     pub line: usize,
     pub column: usize,
     pub message: String,
-    pub rule: String,
+    pub rule: &'static str,
     pub snippet: Option<String>,
 }

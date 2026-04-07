@@ -54,14 +54,14 @@ impl UseGStrcmp0 {
                         };
 
                         violations.push(Violation {
-                            file: file_path.display().to_string(),
+                            file: file_path.to_owned(),
                             line: base_line + node.start_position().row,
                             column: node.start_position().column + 1,
                             message: format!(
                                 "Use {} instead of {} (NULL-safe)",
                                 suggestion, func_name
                             ),
-                            rule: "use_g_strcmp0".to_string(),
+                            rule: "use_g_strcmp0",
                             snippet: None,
                         });
                     }

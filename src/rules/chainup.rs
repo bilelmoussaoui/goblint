@@ -157,14 +157,14 @@ impl DisposeFinalizeChainsUp {
                         if let Some(body) = self.find_body(root) {
                             if !self.has_chainup_call(body, func_source, method_type) {
                                 violations.push(Violation {
-                                    file: path.display().to_string(),
+                                    file: path.to_owned(),
                                     line: func.line,
                                     column: 1,
                                     message: format!(
                                         "{} must chain up to parent class (e.g., G_OBJECT_CLASS (parent_class)->{} (object))",
                                         func.name, method_type
                                     ),
-                                    rule: "dispose_finalize_chains_up".to_string(),
+                                    rule: "dispose_finalize_chains_up",
                                     snippet: None,
                                 });
                             }

@@ -52,11 +52,11 @@ impl DeprecatedAddPrivate {
                 if let Ok(text) = std::str::from_utf8(func_text) {
                     if text == "g_type_class_add_private" {
                         violations.push(Violation {
-                            file: file_path.display().to_string(),
+                            file: file_path.to_owned(),
                             line: base_line + node.start_position().row,
                             column: node.start_position().column + 1,
                             message: "g_type_class_add_private is deprecated since GLib 2.58. Use G_DEFINE_TYPE_WITH_PRIVATE or G_ADD_PRIVATE instead".to_string(),
-                            rule: "deprecated_add_private".to_string(),
+                            rule: "deprecated_add_private",
                             snippet: None,
                         });
                     }

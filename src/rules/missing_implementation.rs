@@ -26,14 +26,14 @@ impl MissingImplementation {
             }
 
             violations.push(Violation {
-                file: path.display().to_string(),
+                file: path.to_owned(),
                 line: func.line,
                 column: 1,
                 message: format!(
                     "Function '{}' is declared in a header but has no implementation",
                     func.name
                 ),
-                rule: "missing_implementation".to_string(),
+                rule: "missing_implementation",
                 snippet: None,
             });
         }

@@ -2,7 +2,6 @@ use crate::config::Config;
 use crate::rules::Violation;
 use colored::*;
 use std::env;
-use std::path::Path;
 
 pub fn report_violations(violations: &[Violation], verbose: bool, config: &Config) {
     if violations.is_empty() {
@@ -43,33 +42,33 @@ pub fn report_violations(violations: &[Violation], verbose: bool, config: &Confi
 }
 
 fn create_clickable_link(
-    file_path: &str,
+    file_path: &std::path::Path,
     line: usize,
     column: usize,
     editor_url_template: &Option<String>,
 ) -> String {
     // Convert to absolute path if relative
-    let abs_path = if Path::new(file_path).is_absolute() {
-        file_path.to_string()
+    let abs_path = if file_path.is_absolute() {
+        file_path
     } else {
         match env::current_dir() {
-            Ok(cwd) => cwd.join(file_path).display().to_string(),
-            Err(_) => file_path.to_string(),
+            Ok(cwd) => &cwd.join(file_path),
+            Err(_) => file_path,
         }
     };
 
     // Format: file:line:column
-    let location = format!("{}:{}:{}", file_path, line, column);
+    let location = format!("{}:{}:{}", abs_path.display(), line, column);
 
     // Use configured editor URL or default
     let file_url = if let Some(template) = editor_url_template {
         template
-            .replace("{path}", &abs_path)
+            .replace("{path}", &abs_path.display().to_string())
             .replace("{line}", &line.to_string())
             .replace("{column}", &column.to_string())
     } else {
         // Default: just use file:// protocol
-        format!("file://{}", abs_path)
+        format!("file://{}", abs_path.display())
     };
 
     // OSC 8 hyperlink escape sequence

@@ -75,7 +75,7 @@ impl GParamSpecNullNickBlurb {
 
                             if !issues.is_empty() {
                                 violations.push(Violation {
-                                    file: file_path.display().to_string(),
+                                    file: file_path.to_owned(),
                                     line: base_line + node.start_position().row,
                                     column: node.start_position().column + 1,
                                     message: format!(
@@ -83,7 +83,7 @@ impl GParamSpecNullNickBlurb {
                                         function_str,
                                         issues.join(" and ")
                                     ),
-                                    rule: "g_param_spec_null_nick_blurb".to_string(),
+                                    rule: "g_param_spec_null_nick_blurb",
                                     snippet: None,
                                 });
                             }

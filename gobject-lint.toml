@@ -57,4 +57,4 @@ gdeclare_semicolon = true
 # Report functions declared in headers but not implemented
 # Can also be configured with per-rule ignore patterns:
 # missing_implementation = { enabled = true, ignore = ["src/backends/**"] }
-missing_implementation = true
+missing_implementation = { enabled = true, ignore = ["src/backends/meta-egl-ext.h"] }

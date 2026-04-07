@@ -44,11 +44,11 @@ impl GDeclareSemicolon {
                             let after_paren = &trimmed[paren_pos + 1..].trim();
                             if after_paren.is_empty() {
                                 violations.push(Violation {
-                                    file: path.display().to_string(),
+                                    file: path.to_owned(),
                                     line: line_num + 1,
                                     column: paren_pos + 1,
                                     message: "G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.".to_string(),
-                                    rule: "gdeclare_semicolon".to_string(),
+                                    rule: "gdeclare_semicolon",
                                     snippet: Some(format!("{}; // Add semicolon here", trimmed)),
                                 });
                             }

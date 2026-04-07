@@ -21,6 +21,7 @@ use std::path::Path;
 fn filter_violations_in_place(
     violations: &mut Vec<Violation>,
     start_index: usize,
+    project_root: &Path,
     config: &Config,
     rule_config: &RuleConfig,
 ) -> Result<()> {
@@ -30,7 +31,11 @@ fn filter_violations_in_place(
     let mut i = start_index;
     while i < violations.len() {
         let path = Path::new(&violations[i].file);
-        if ignore_matcher.is_match(path) {
+
+        // Try to make path relative to project root for matching
+        let relative_path = path.strip_prefix(project_root).unwrap_or(path);
+
+        if ignore_matcher.is_match(relative_path) {
             violations.remove(i);
         } else {
             i += 1;
@@ -44,6 +49,7 @@ fn filter_violations_in_place(
 pub fn scan_with_ast(
     ast_context: &AstContext,
     config: &Config,
+    project_root: &Path,
     spinner: Option<&ProgressBar>,
 ) -> Result<Vec<Violation>> {
     let mut violations = Vec::new();
@@ -60,6 +66,7 @@ pub fn scan_with_ast(
         filter_violations_in_place(
             &mut violations,
             start,
+            project_root,
             config,
             &config.rules.gdeclare_semicolon,
         )?;
@@ -73,6 +80,7 @@ pub fn scan_with_ast(
         filter_violations_in_place(
             &mut violations,
             start,
+            project_root,
             config,
             &config.rules.missing_implementation,
         )?;
@@ -86,6 +94,7 @@ pub fn scan_with_ast(
         filter_violations_in_place(
             &mut violations,
             start,
+            project_root,
             config,
             &config.rules.deprecated_add_private,
         )?;
@@ -96,7 +105,13 @@ pub fn scan_with_ast(
         let start = violations.len();
         let rule = UseGStrcmp0;
         rule.check_all(ast_context, config, &mut violations);
-        filter_violations_in_place(&mut violations, start, config, &config.rules.use_g_strcmp0)?;
+        filter_violations_in_place(
+            &mut violations,
+            start,
+            project_root,
+            config,
+            &config.rules.use_g_strcmp0,
+        )?;
     }
 
     // Run g_param_spec checks
@@ -107,6 +122,7 @@ pub fn scan_with_ast(
         filter_violations_in_place(
             &mut violations,
             start,
+            project_root,
             config,
             &config.rules.g_param_spec_null_nick_blurb,
         )?;
@@ -117,7 +133,13 @@ pub fn scan_with_ast(
         let start = violations.len();
         let rule = GErrorInit;
         rule.check_all(ast_context, config, &mut violations);
-        filter_violations_in_place(&mut violations, start, config, &config.rules.gerror_init)?;
+        filter_violations_in_place(
+            &mut violations,
+            start,
+            project_root,
+            config,
+            &config.rules.gerror_init,
+        )?;
     }
 
     // Run property enum checks
@@ -128,6 +150,7 @@ pub fn scan_with_ast(
         filter_violations_in_place(
             &mut violations,
             start,
+            project_root,
             config,
             &config.rules.property_enum_zero,
         )?;
@@ -141,6 +164,7 @@ pub fn scan_with_ast(
         filter_violations_in_place(
             &mut violations,
             start,
+            project_root,
             config,
             &config.rules.dispose_finalize_chains_up,
         )?;
@@ -154,6 +178,7 @@ pub fn scan_with_ast(
         filter_violations_in_place(
             &mut violations,
             start,
+            project_root,
             config,
             &config.rules.gtask_source_tag,
         )?;
@@ -167,6 +192,7 @@ pub fn scan_with_ast(
         filter_violations_in_place(
             &mut violations,
             start,
+            project_root,
             config,
             &config.rules.unnecessary_null_check,
         )?;
@@ -180,6 +206,7 @@ pub fn scan_with_ast(
         filter_violations_in_place(
             &mut violations,
             start,
+            project_root,
             config,
             &config.rules.use_clear_functions,
         )?;

@@ -45,14 +45,14 @@ impl GErrorInit {
         if let Some((var_name, is_initialized_to_null)) = self.is_gerror_declaration(node, source) {
             if !is_initialized_to_null {
                 violations.push(Violation {
-                    file: file_path.display().to_string(),
+                    file: file_path.to_owned(),
                     line: base_line + node.start_position().row,
                     column: node.start_position().column + 1,
                     message: format!(
                         "GError *{} must be initialized to NULL (GError *{} = NULL;)",
                         var_name, var_name
                     ),
-                    rule: "gerror_init".to_string(),
+                    rule: "gerror_init",
                     snippet: None,
                 });
             }

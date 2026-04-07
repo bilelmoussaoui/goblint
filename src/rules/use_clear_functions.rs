@@ -34,14 +34,14 @@ impl UseClearFunctions {
             let suggested_function = self.suggest_clear_function(&unref_function);
 
             return Some(Violation {
-                file: String::new(), // Will be filled by caller
+                file: Default::default(), // Will be filled by caller
                 line: position.row + 1,
                 column: position.column + 1,
                 message: format!(
                     "Use {} (&{}) instead of manual NULL check, unref, and assignment",
                     suggested_function, checked_var
                 ),
-                rule: "use_clear_functions".to_string(),
+                rule: "use_clear_functions",
                 snippet: None,
             });
         }
@@ -248,7 +248,7 @@ impl UseClearFunctions {
         violations: &mut Vec<Violation>,
     ) {
         if let Some(mut violation) = self.is_manual_clear_pattern(node, source) {
-            violation.file = file_path.display().to_string();
+            violation.file = file_path.to_owned();
             violation.line = base_line + violation.line - 1;
             violations.push(violation);
         }
