@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
@@ -12,6 +13,9 @@ use gobject_lint::scanner;
 pub struct GObjectBackend {
     client: Client,
     documents: Arc<Mutex<HashMap<Url, String>>>,
+    workspace_root: Arc<Mutex<Option<PathBuf>>>,
+    ast_context: Arc<Mutex<Option<AstContext>>>,
+    config: Arc<Mutex<Option<Config>>>,
 }
 
 impl GObjectBackend {
@@ -19,29 +23,42 @@ impl GObjectBackend {
         GObjectBackend {
             client,
             documents: Arc::new(Mutex::new(HashMap::new())),
+            workspace_root: Arc::new(Mutex::new(None)),
+            ast_context: Arc::new(Mutex::new(None)),
+            config: Arc::new(Mutex::new(None)),
         }
     }
 
-    async fn lint_document(&self, uri: &Url) -> Result<()> {
-        let path = uri
-            .to_file_path()
-            .map_err(|_| tower_lsp::jsonrpc::Error::invalid_params("Invalid file path"))?;
+    /// Initialize workspace (find root, load config, build AST context)
+    async fn initialize_workspace(&self, file_path: &std::path::Path) -> Result<()> {
+        // Find workspace root by looking for gobject-lint.toml
+        let mut current = file_path;
+        let mut root = None;
+        while let Some(parent) = current.parent() {
+            let config_path = parent.join("gobject-lint.toml");
+            if config_path.exists() {
+                root = Some(parent.to_path_buf());
+                break;
+            }
+            current = parent;
+        }
 
-        // Get workspace root (parent directory of the file)
-        let workspace_root = path.parent().unwrap_or(&path).to_path_buf();
+        let workspace_root =
+            root.unwrap_or_else(|| file_path.parent().unwrap_or(file_path).to_path_buf());
 
-        // Load config from workspace root
+        // Load config
         let config_path = workspace_root.join("gobject-lint.toml");
         let config = if config_path.exists() {
             match Config::load(&config_path) {
                 Ok(c) => c,
                 Err(e) => {
-                    eprintln!("Failed to load config: {}", e);
+                    self.client
+                        .log_message(MessageType::ERROR, format!("Failed to load config: {}", e))
+                        .await;
                     return Ok(());
                 }
             }
         } else {
-            // Create empty config
             Config {
                 ignore: Vec::new(),
                 rules: Default::default(),
@@ -53,29 +70,89 @@ impl GObjectBackend {
         let ignore_matcher = match config.build_ignore_matcher() {
             Ok(m) => m,
             Err(e) => {
-                eprintln!("Failed to build ignore matcher: {}", e);
+                self.client
+                    .log_message(
+                        MessageType::ERROR,
+                        format!("Failed to build ignore matcher: {}", e),
+                    )
+                    .await;
                 return Ok(());
             }
         };
 
-        // Build AST context for the workspace
+        // Build AST context
         let ast_context =
             match AstContext::build_with_ignore(&workspace_root, &ignore_matcher, None) {
                 Ok(ctx) => ctx,
                 Err(e) => {
-                    eprintln!("Failed to build AST context: {}", e);
+                    self.client
+                        .log_message(
+                            MessageType::ERROR,
+                            format!("Failed to build AST context: {}", e),
+                        )
+                        .await;
                     return Ok(());
                 }
             };
 
-        // Run scanner
-        let violations = match scanner::scan_with_ast(&ast_context, &config, &workspace_root, None)
-        {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Failed to scan: {}", e);
-                return Ok(());
+        // Store in state
+        *self.workspace_root.lock().await = Some(workspace_root);
+        *self.config.lock().await = Some(config);
+        *self.ast_context.lock().await = Some(ast_context);
+
+        self.client
+            .log_message(MessageType::INFO, "Workspace initialized")
+            .await;
+
+        Ok(())
+    }
+
+    async fn lint_document(&self, uri: &Url) -> Result<()> {
+        let path = uri
+            .to_file_path()
+            .map_err(|_| tower_lsp::jsonrpc::Error::invalid_params("Invalid file path"))?;
+
+        // Initialize workspace if not already done
+        if self.workspace_root.lock().await.is_none() {
+            self.initialize_workspace(&path).await?;
+        }
+
+        // Update the specific file in AST context
+        if let Some(ast_context) = self.ast_context.lock().await.as_mut() {
+            if let Err(e) = ast_context.update_file(&path) {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("Failed to update file {}: {}", path.display(), e),
+                    )
+                    .await;
             }
+        }
+
+        // Get workspace root and config
+        let workspace_root = match self.workspace_root.lock().await.as_ref() {
+            Some(root) => root.clone(),
+            None => return Ok(()),
+        };
+
+        let config = match self.config.lock().await.as_ref() {
+            Some(cfg) => cfg.clone(),
+            None => return Ok(()),
+        };
+
+        // Run scanner with locked AST context
+        let ast_context_guard = self.ast_context.lock().await;
+        let violations = match ast_context_guard.as_ref() {
+            Some(ctx) => match scanner::scan_with_ast(ctx, &config, &workspace_root, None) {
+                Ok(v) => v,
+                Err(e) => {
+                    self.client
+                        .log_message(MessageType::ERROR, format!("Failed to scan: {}", e))
+                        .await;
+                    return Ok(());
+                }
+            },
+            None => return Ok(()),
         };
 
         // Convert violations to diagnostics

@@ -70,6 +70,24 @@ impl AstContext {
         })
     }
 
+    /// Update a single file in the project
+    pub fn update_file(&mut self, file_path: &Path) -> Result<()> {
+        let mut parser = Parser::new()?;
+
+        // Parse the file
+        if let Ok(file_project) = parser.parse_file(file_path) {
+            // Update or insert the file in the project
+            for (path, file_model) in file_project.files {
+                self.project.files.insert(path, file_model);
+            }
+        } else {
+            // If parsing failed, remove the file from the project
+            self.project.files.remove(file_path);
+        }
+
+        Ok(())
+    }
+
     /// Find functions declared in headers that have no implementation
     /// Returns (file_path, function_info) tuples
     pub fn find_declared_but_not_defined(&self) -> Vec<(&Path, &FunctionInfo)> {

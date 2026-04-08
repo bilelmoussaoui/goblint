@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub rules: RulesConfig,
@@ -93,7 +93,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct RulesConfig {
     #[serde(default)]
     pub g_param_spec_null_nick_blurb: RuleConfig,
