@@ -67,3 +67,6 @@ use_g_set_str = true
 
 # Suggest g_autoptr(GError) instead of manual g_error_free
 suggest_g_autoptr_error = true
+
+# Suggest g_autoptr instead of goto error cleanup pattern
+suggest_g_autoptr_goto_cleanup = true

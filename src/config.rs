@@ -136,6 +136,9 @@ pub struct RulesConfig {
 
     #[serde(default)]
     pub suggest_g_autoptr_error: RuleConfig,
+
+    #[serde(default)]
+    pub suggest_g_autoptr_goto_cleanup: RuleConfig,
 }
 
 impl Config {
