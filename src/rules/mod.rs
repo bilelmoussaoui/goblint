@@ -19,6 +19,7 @@ pub mod use_clear_functions;
 pub mod use_g_clear_error;
 pub mod use_g_set_str;
 pub mod use_g_strcmp0;
+pub mod use_g_string_free_and_steal;
 
 #[derive(Debug, Clone)]
 pub struct Violation {

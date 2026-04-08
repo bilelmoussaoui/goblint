@@ -182,6 +182,9 @@ pub struct RulesConfig {
 
     #[serde(default)]
     pub suggest_g_autofree: RuleConfig,
+
+    #[serde(default)]
+    pub use_g_string_free_and_steal: RuleConfig,
 }
 
 impl Config {

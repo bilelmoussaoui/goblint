@@ -82,3 +82,6 @@ suggest_g_autoptr_inline_cleanup = true
 
 # Suggest g_autofree for string/buffer types instead of manual g_free (requires GLib >= 2.44)
 suggest_g_autofree = true
+
+# Suggest use_g_string_free_and_steal instead of g_string_free with FALSE as a parameter (requires GLib >= 2.76)
+use_g_string_free_and_steal = true
