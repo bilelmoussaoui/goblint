@@ -10,6 +10,7 @@ use crate::rules::missing_implementation::MissingImplementation;
 use crate::rules::property_enum_zero::PropertyEnumZero;
 use crate::rules::strcmp_equal::StrcmpForStringEqual;
 use crate::rules::suggest_g_autoptr_goto::SuggestGAutoptrGoto;
+use crate::rules::suggest_g_autoptr_inline::SuggestGAutoptrInline;
 use crate::rules::unnecessary_null_check::UnnecessaryNullCheck;
 use crate::rules::use_clear_functions::UseClearFunctions;
 use crate::rules::use_g_clear_error::SuggestGAutoptrError;
@@ -160,6 +161,11 @@ pub fn scan_with_ast(
             rule: Box::new(SuggestGAutoptrGoto),
             enabled: config.rules.suggest_g_autoptr_goto_cleanup.enabled,
             rule_config: config.rules.suggest_g_autoptr_goto_cleanup.clone(),
+        },
+        RuleEntry {
+            rule: Box::new(SuggestGAutoptrInline),
+            enabled: config.rules.suggest_g_autoptr_inline_cleanup.enabled,
+            rule_config: config.rules.suggest_g_autoptr_inline_cleanup.clone(),
         },
     ];
 

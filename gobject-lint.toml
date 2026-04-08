@@ -34,7 +34,7 @@ dispose_finalize_chains_up = true
 use_clear_functions = true
 
 # Use g_strcmp0 instead of strcmp (NULL-safe)
-use_g_strcmp0 = false
+use_g_strcmp0 = true
 
 # Ensure property enums start with PROP_0, not PROP_NAME = 0
 property_enum_zero = true
@@ -46,21 +46,21 @@ deprecated_add_private = true
 gerror_init = true
 
 # Ensure g_task_set_source_tag is called after g_task_new
-gtask_source_tag = false
+gtask_source_tag = true
 
 # Detect unnecessary NULL checks before g_free/g_clear_pointer
 unnecessary_null_check = true
 
 # Enforce semicolons after G_DECLARE_* macros
-gdeclare_semicolon = false
+gdeclare_semicolon = true
 
 # Report functions declared in headers but not implemented
 # Can also be configured with per-rule ignore patterns:
 # missing_implementation = { enabled = true, ignore = ["src/backends/**"] }
-missing_implementation = { enabled = false, ignore = ["src/backends/meta-egl-ext.h"] }
+missing_implementation = { enabled = true, ignore = ["src/backends/meta-egl-ext.h"] }
 
 # Suggest g_str_equal() instead of strcmp() == 0 for better readability
-strcmp_for_string_equal = false
+strcmp_for_string_equal = true
 
 # Suggest g_set_str() instead of manual strcmp, g_free, and g_strdup
 use_g_set_str = true
@@ -70,3 +70,6 @@ suggest_g_autoptr_error = true
 
 # Suggest g_autoptr instead of goto error cleanup pattern
 suggest_g_autoptr_goto_cleanup = true
+
+# Suggest g_autoptr instead of inline manual cleanup (g_object_unref/g_free)
+suggest_g_autoptr_inline_cleanup = true

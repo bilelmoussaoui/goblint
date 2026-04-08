@@ -1,0 +1,331 @@
+use super::Rule;
+use crate::ast_context::AstContext;
+use crate::config::Config;
+use crate::rules::Violation;
+use std::collections::HashMap;
+use tree_sitter::Node;
+
+pub struct SuggestGAutoptrInline;
+
+impl Rule for SuggestGAutoptrInline {
+    fn name(&self) -> &'static str {
+        "suggest_g_autoptr_inline_cleanup"
+    }
+
+    fn check_all(
+        &self,
+        ast_context: &AstContext,
+        _config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
+        for (path, file) in ast_context.iter_c_files() {
+            for func in &file.functions {
+                if !func.is_definition {
+                    continue;
+                }
+
+                if let Some(func_source) = ast_context.get_function_source(path, func) {
+                    if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        self.check_function(
+                            ast_context,
+                            tree.root_node(),
+                            func_source,
+                            path,
+                            func.line,
+                            violations,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl SuggestGAutoptrInline {
+    fn check_function(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        source: &[u8],
+        file_path: &std::path::Path,
+        base_line: usize,
+        violations: &mut Vec<Violation>,
+    ) {
+        if let Some(body) = ast_context.find_body(node) {
+            // Find all local pointer declarations
+            let local_vars = self.find_local_pointer_vars(ast_context, body, source);
+
+            // For each variable, check if it's a candidate for g_autoptr
+            for (var_name, (var_type, decl_node)) in &local_vars {
+                // Check if variable is allocated
+                let is_allocated = self.is_var_allocated(ast_context, body, var_name, source);
+
+                // Check if variable is manually freed
+                let is_manually_freed =
+                    self.is_var_manually_freed(ast_context, body, var_name, source);
+
+                // Check if variable is returned without being freed
+                let is_returned = self.is_var_returned(ast_context, body, var_name, source);
+
+                // Suggest g_autoptr if:
+                // 1. Variable is allocated
+                // 2. Variable is manually freed at least once
+                // 3. Variable is not returned directly (would need g_steal_pointer)
+                if is_allocated && is_manually_freed && !is_returned {
+                    let base_type = self.extract_base_type(var_type);
+                    let position = decl_node.start_position();
+                    violations.push(self.violation(
+                        file_path,
+                        base_line + position.row,
+                        position.column + 1,
+                        format!(
+                            "Consider using g_autoptr({}) {} to avoid manual cleanup",
+                            base_type, var_name
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
+    fn find_local_pointer_vars<'a>(
+        &self,
+        ast_context: &AstContext,
+        body: Node<'a>,
+        source: &[u8],
+    ) -> HashMap<String, (String, Node<'a>)> {
+        let mut result = HashMap::new();
+        self.collect_local_vars(ast_context, body, source, &mut result);
+        result
+    }
+
+    fn collect_local_vars<'a>(
+        &self,
+        ast_context: &AstContext,
+        node: Node<'a>,
+        source: &[u8],
+        result: &mut HashMap<String, (String, Node<'a>)>,
+    ) {
+        // Only look at top-level declarations in the function body
+        if node.kind() == "compound_statement" {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "declaration" {
+                    if let Some(type_node) = child.child_by_field_name("type") {
+                        let type_text = ast_context.get_node_text(type_node, source);
+
+                        // Find declarators
+                        let mut decl_cursor = child.walk();
+                        for decl_child in child.children(&mut decl_cursor) {
+                            if decl_child.kind() == "init_declarator"
+                                || decl_child.kind() == "pointer_declarator"
+                            {
+                                if let Some(var_name) =
+                                    self.extract_var_name(ast_context, decl_child, source)
+                                {
+                                    // Only simple identifiers
+                                    if !var_name.contains("->") && !var_name.contains(".") {
+                                        result.insert(var_name, (type_text.clone(), child));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn extract_var_name(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        source: &[u8],
+    ) -> Option<String> {
+        match node.kind() {
+            "init_declarator" => {
+                if let Some(declarator) = node.child_by_field_name("declarator") {
+                    return self.extract_var_name(ast_context, declarator, source);
+                }
+            }
+            "pointer_declarator" => {
+                if let Some(declarator) = node.child_by_field_name("declarator") {
+                    return self.extract_var_name(ast_context, declarator, source);
+                }
+            }
+            "identifier" => {
+                return Some(ast_context.get_node_text(node, source));
+            }
+            _ => {}
+        }
+        None
+    }
+
+    fn is_var_allocated(
+        &self,
+        ast_context: &AstContext,
+        body: Node,
+        var_name: &str,
+        source: &[u8],
+    ) -> bool {
+        self.find_var_allocation(ast_context, body, var_name, source)
+    }
+
+    fn find_var_allocation(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        var_name: &str,
+        source: &[u8],
+    ) -> bool {
+        // Look for: var_name = allocation_call()
+        if node.kind() == "assignment_expression" {
+            if let Some(left) = node.child_by_field_name("left") {
+                let left_text = ast_context.get_node_text(left, source);
+                if left_text == var_name {
+                    if let Some(right) = node.child_by_field_name("right") {
+                        if self.is_allocation_call(ast_context, right, source) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also check init declarator: Type *var = allocation_call()
+        if node.kind() == "init_declarator" {
+            if let Some(declarator) = node.child_by_field_name("declarator") {
+                if let Some(found_var) = self.extract_var_name(ast_context, declarator, source) {
+                    if found_var == var_name {
+                        if let Some(value) = node.child_by_field_name("value") {
+                            if self.is_allocation_call(ast_context, value, source) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recurse
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if self.find_var_allocation(ast_context, child, var_name, source) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn is_allocation_call(&self, ast_context: &AstContext, node: Node, source: &[u8]) -> bool {
+        if node.kind() == "call_expression" {
+            if let Some(function) = node.child_by_field_name("function") {
+                let func_name = ast_context.get_node_text(function, source);
+
+                if func_name == "g_object_new"
+                    || func_name == "g_new"
+                    || func_name == "g_new0"
+                    || func_name == "g_malloc"
+                    || func_name == "g_malloc0"
+                    || func_name.ends_with("_new")
+                    || func_name.contains("_new_")
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn is_var_manually_freed(
+        &self,
+        ast_context: &AstContext,
+        body: Node,
+        var_name: &str,
+        source: &[u8],
+    ) -> bool {
+        self.find_manual_free(ast_context, body, var_name, source)
+    }
+
+    fn find_manual_free(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        var_name: &str,
+        source: &[u8],
+    ) -> bool {
+        if node.kind() == "call_expression" {
+            if let Some(function) = node.child_by_field_name("function") {
+                let func_name = ast_context.get_node_text(function, source);
+                if func_name == "g_object_unref" || func_name == "g_free" {
+                    if let Some(arguments) = node.child_by_field_name("arguments") {
+                        let args_text = ast_context.get_node_text(arguments, source);
+                        if args_text.contains(var_name) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recurse
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if self.find_manual_free(ast_context, child, var_name, source) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn is_var_returned(
+        &self,
+        ast_context: &AstContext,
+        body: Node,
+        var_name: &str,
+        source: &[u8],
+    ) -> bool {
+        self.find_return_of_var(ast_context, body, var_name, source)
+    }
+
+    fn find_return_of_var(
+        &self,
+        ast_context: &AstContext,
+        node: Node,
+        var_name: &str,
+        source: &[u8],
+    ) -> bool {
+        if node.kind() == "return_statement" {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "identifier" {
+                    let id = ast_context.get_node_text(child, source);
+                    if id == var_name {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Recurse
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if self.find_return_of_var(ast_context, child, var_name, source) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn extract_base_type(&self, type_text: &str) -> String {
+        type_text
+            .trim()
+            .replace("const ", "")
+            .replace("*", "")
+            .trim()
+            .to_string()
+    }
+}
