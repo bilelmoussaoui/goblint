@@ -128,15 +128,39 @@ impl UseGSetStr {
         if let Some(call) = ast_context.find_call_expression(node) {
             if let Some(function) = call.child_by_field_name("function") {
                 let func_name = ast_context.get_node_text(function, source);
+
+                // Match g_free(var)
                 if func_name == "g_free" {
                     if let Some(args) = call.child_by_field_name("arguments") {
                         // Get the first argument (skip the parentheses)
                         let mut cursor = args.walk();
                         for child in args.children(&mut cursor) {
-                            if child.kind() != "(" && child.kind() != ")" {
+                            if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
                                 return Some(
                                     ast_context.get_node_text(child, source).trim().to_string(),
                                 );
+                            }
+                        }
+                    }
+                }
+                // Match g_clear_pointer(&var, g_free)
+                else if func_name == "g_clear_pointer" {
+                    if let Some(args) = call.child_by_field_name("arguments") {
+                        let mut cursor = args.walk();
+                        let mut args_list = Vec::new();
+                        for child in args.children(&mut cursor) {
+                            if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
+                                args_list.push(child);
+                            }
+                        }
+                        // Check if second arg is g_free
+                        if args_list.len() == 2 {
+                            let second_arg = ast_context.get_node_text(args_list[1], source);
+                            if second_arg.trim() == "g_free" {
+                                // First arg should be &var, strip the &
+                                let first_arg = ast_context.get_node_text(args_list[0], source);
+                                let var_name = first_arg.trim().trim_start_matches('&');
+                                return Some(var_name.to_string());
                             }
                         }
                     }
