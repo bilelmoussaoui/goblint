@@ -230,4 +230,87 @@ impl AstContext {
 
         None
     }
+
+    /// Check if a call expression is an allocation function
+    /// Recognizes g_object_new, g_new, _new, _new_, etc.
+    pub fn is_allocation_call(&self, node: tree_sitter::Node, source: &[u8]) -> bool {
+        if node.kind() == "call_expression" {
+            if let Some(function) = node.child_by_field_name("function") {
+                let func_name = self.get_node_text(function, source);
+
+                // Known GLib allocation functions
+                if func_name == "g_object_new"
+                    || func_name == "g_new"
+                    || func_name == "g_new0"
+                    || func_name == "g_malloc"
+                    || func_name == "g_malloc0"
+                    || func_name == "g_strdup"
+                    || func_name == "g_strndup"
+                {
+                    return true;
+                }
+
+                // Functions ending with _new or containing _new_
+                if func_name.ends_with("_new") || func_name.contains("_new_") {
+                    return true;
+                }
+
+                // Functions containing "create"
+                if func_name.contains("_create") || func_name.contains("create_") {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if a call expression is a cleanup/free function
+    /// Returns (is_cleanup, function_name)
+    pub fn is_cleanup_call(&self, node: tree_sitter::Node, source: &[u8]) -> (bool, String) {
+        if node.kind() == "call_expression" {
+            if let Some(function) = node.child_by_field_name("function") {
+                let func_name = self.get_node_text(function, source);
+
+                if func_name == "g_object_unref"
+                    || func_name == "g_free"
+                    || func_name == "g_clear_object"
+                    || func_name == "g_clear_pointer"
+                    || func_name == "g_error_free"
+                    || func_name == "g_hash_table_unref"
+                    || func_name == "g_hash_table_destroy"
+                    || func_name == "g_list_free"
+                    || func_name == "g_slist_free"
+                {
+                    return (true, func_name);
+                }
+            }
+        }
+        (false, String::new())
+    }
+
+    /// Find a function call by name(s)
+    pub fn find_function_call_by_name<'a>(
+        &self,
+        node: tree_sitter::Node<'a>,
+        function_names: &[&str],
+        source: &[u8],
+    ) -> Option<tree_sitter::Node<'a>> {
+        if node.kind() == "call_expression" {
+            if let Some(function) = node.child_by_field_name("function") {
+                let func_name = self.get_node_text(function, source);
+                if function_names.contains(&func_name.as_str()) {
+                    return Some(node);
+                }
+            }
+        }
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(call) = self.find_function_call_by_name(child, function_names, source) {
+                return Some(call);
+            }
+        }
+
+        None
+    }
 }

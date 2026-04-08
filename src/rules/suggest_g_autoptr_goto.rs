@@ -198,7 +198,7 @@ impl SuggestGAutoptrGoto {
         if node.kind() == "declaration" {
             if let Some(init_declarator) = self.find_init_declarator(node) {
                 if let Some(value) = init_declarator.child_by_field_name("value") {
-                    if self.is_allocation_call(ast_context, value, source) {
+                    if ast_context.is_allocation_call(value, source) {
                         if let Some(declarator) = init_declarator.child_by_field_name("declarator")
                         {
                             if let Some(var_name) =
@@ -222,7 +222,7 @@ impl SuggestGAutoptrGoto {
                 // Only simple identifiers, not field expressions
                 if !var_name.contains("->") && !var_name.contains(".") {
                     if let Some(right) = node.child_by_field_name("right") {
-                        if self.is_allocation_call(ast_context, right, source) {
+                        if ast_context.is_allocation_call(right, source) {
                             if let Some((type_text, decl_node)) = local_vars.get(&var_name) {
                                 result.insert(var_name.clone(), (type_text.clone(), *decl_node));
                             }
@@ -248,36 +248,6 @@ impl SuggestGAutoptrGoto {
             }
         }
         None
-    }
-
-    fn is_allocation_call(&self, ast_context: &AstContext, node: Node, source: &[u8]) -> bool {
-        if node.kind() == "call_expression" {
-            if let Some(function) = node.child_by_field_name("function") {
-                let func_name = ast_context.get_node_text(function, source);
-
-                // Known GLib allocation functions
-                if func_name == "g_object_new"
-                    || func_name == "g_new"
-                    || func_name == "g_new0"
-                    || func_name == "g_malloc"
-                    || func_name == "g_malloc0"
-                {
-                    return true;
-                }
-
-                // Functions ending with _new or containing _new_
-                // e.g., cogl_display_new, _cogl_offscreen_new_with_texture_full
-                if func_name.ends_with("_new") || func_name.contains("_new_") {
-                    return true;
-                }
-
-                // Functions containing "create" (e.g., create_context, g_hash_table_create)
-                if func_name.contains("_create") || func_name.contains("create_") {
-                    return true;
-                }
-            }
-        }
-        false
     }
 
     fn extract_var_name(
@@ -380,25 +350,17 @@ impl SuggestGAutoptrGoto {
         source: &[u8],
         cleanup_vars: &mut Vec<String>,
     ) {
-        if node.kind() == "call_expression" {
-            if let Some(function) = node.child_by_field_name("function") {
-                let func_name = ast_context.get_node_text(function, source);
-                if func_name == "g_object_unref"
-                    || func_name == "g_free"
-                    || func_name == "g_clear_object"
-                    || func_name == "g_clear_pointer"
-                {
-                    // Get the argument
-                    if let Some(arguments) = node.child_by_field_name("arguments") {
-                        let mut cursor = arguments.walk();
-                        for child in arguments.children(&mut cursor) {
-                            if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
-                                let var_text = ast_context.get_node_text(child, source);
-                                // For g_clear_object(&var), extract var from &var
-                                let var_name = var_text.trim_start_matches('&');
-                                cleanup_vars.push(var_name.to_string());
-                            }
-                        }
+        let (is_cleanup, _) = ast_context.is_cleanup_call(node, source);
+        if is_cleanup {
+            // Get the argument
+            if let Some(arguments) = node.child_by_field_name("arguments") {
+                let mut cursor = arguments.walk();
+                for child in arguments.children(&mut cursor) {
+                    if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
+                        let var_text = ast_context.get_node_text(child, source);
+                        // For g_clear_object(&var), extract var from &var
+                        let var_name = var_text.trim_start_matches('&');
+                        cleanup_vars.push(var_name.to_string());
                     }
                 }
             }

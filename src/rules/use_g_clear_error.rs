@@ -162,17 +162,12 @@ impl SuggestGAutoptrError {
         var_name: &str,
         source: &[u8],
     ) -> bool {
-        if node.kind() == "call_expression" {
-            if let Some(function) = node.child_by_field_name("function") {
-                let func_name = ast_context.get_node_text(function, source);
-                if func_name == "g_error_free" {
-                    if let Some(arguments) = node.child_by_field_name("arguments") {
-                        let args_text = ast_context.get_node_text(arguments, source);
-                        // Check if the variable name is in the arguments
-                        if args_text.contains(var_name) {
-                            return true;
-                        }
-                    }
+        let (is_cleanup, func_name) = ast_context.is_cleanup_call(node, source);
+        if is_cleanup && func_name == "g_error_free" {
+            if let Some(arguments) = node.child_by_field_name("arguments") {
+                let args_text = ast_context.get_node_text(arguments, source);
+                if args_text.contains(var_name) {
+                    return true;
                 }
             }
         }

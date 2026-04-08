@@ -184,7 +184,7 @@ impl SuggestGAutoptrInline {
                 let left_text = ast_context.get_node_text(left, source);
                 if left_text == var_name {
                     if let Some(right) = node.child_by_field_name("right") {
-                        if self.is_allocation_call(ast_context, right, source) {
+                        if ast_context.is_allocation_call(right, source) {
                             return true;
                         }
                     }
@@ -198,7 +198,7 @@ impl SuggestGAutoptrInline {
                 if let Some(found_var) = self.extract_var_name(ast_context, declarator, source) {
                     if found_var == var_name {
                         if let Some(value) = node.child_by_field_name("value") {
-                            if self.is_allocation_call(ast_context, value, source) {
+                            if ast_context.is_allocation_call(value, source) {
                                 return true;
                             }
                         }
@@ -215,26 +215,6 @@ impl SuggestGAutoptrInline {
             }
         }
 
-        false
-    }
-
-    fn is_allocation_call(&self, ast_context: &AstContext, node: Node, source: &[u8]) -> bool {
-        if node.kind() == "call_expression" {
-            if let Some(function) = node.child_by_field_name("function") {
-                let func_name = ast_context.get_node_text(function, source);
-
-                if func_name == "g_object_new"
-                    || func_name == "g_new"
-                    || func_name == "g_new0"
-                    || func_name == "g_malloc"
-                    || func_name == "g_malloc0"
-                    || func_name.ends_with("_new")
-                    || func_name.contains("_new_")
-                {
-                    return true;
-                }
-            }
-        }
         false
     }
 
@@ -255,16 +235,12 @@ impl SuggestGAutoptrInline {
         var_name: &str,
         source: &[u8],
     ) -> bool {
-        if node.kind() == "call_expression" {
-            if let Some(function) = node.child_by_field_name("function") {
-                let func_name = ast_context.get_node_text(function, source);
-                if func_name == "g_object_unref" || func_name == "g_free" {
-                    if let Some(arguments) = node.child_by_field_name("arguments") {
-                        let args_text = ast_context.get_node_text(arguments, source);
-                        if args_text.contains(var_name) {
-                            return true;
-                        }
-                    }
+        let (is_cleanup, _) = ast_context.is_cleanup_call(node, source);
+        if is_cleanup {
+            if let Some(arguments) = node.child_by_field_name("arguments") {
+                let args_text = ast_context.get_node_text(arguments, source);
+                if args_text.contains(var_name) {
+                    return true;
                 }
             }
         }
