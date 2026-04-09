@@ -60,6 +60,11 @@ pub trait Rule {
     /// Human-readable description of what this rule checks
     fn description(&self) -> &'static str;
 
+    /// Whether this rule supports automated fixes via --fix
+    fn fixable(&self) -> bool {
+        false
+    }
+
     /// Check the AST and add violations to the provided vector
     fn check_all(&self, ast_context: &AstContext, config: &Config, violations: &mut Vec<Violation>);
 

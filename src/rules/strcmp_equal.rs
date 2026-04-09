@@ -13,6 +13,11 @@ impl Rule for StrcmpForStringEqual {
     fn description(&self) -> &'static str {
         "Suggest g_str_equal() instead of strcmp() == 0 for better readability"
     }
+
+    fn fixable(&self) -> bool {
+        true
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

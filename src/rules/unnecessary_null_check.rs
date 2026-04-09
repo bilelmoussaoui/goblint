@@ -14,6 +14,10 @@ impl Rule for UnnecessaryNullCheck {
         "Detect unnecessary NULL checks before g_free/g_clear_pointer"
     }
 
+    fn fixable(&self) -> bool {
+        true
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

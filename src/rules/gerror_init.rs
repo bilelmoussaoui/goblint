@@ -13,6 +13,11 @@ impl Rule for GErrorInit {
     fn description(&self) -> &'static str {
         "Ensure GError* variables are initialized to NULL"
     }
+
+    fn fixable(&self) -> bool {
+        true
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

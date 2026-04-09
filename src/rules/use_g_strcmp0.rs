@@ -13,6 +13,11 @@ impl Rule for UseGStrcmp0 {
     fn description(&self) -> &'static str {
         "Use g_strcmp0 instead of strcmp (NULL-safe)"
     }
+
+    fn fixable(&self) -> bool {
+        true
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

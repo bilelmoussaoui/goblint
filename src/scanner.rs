@@ -208,7 +208,12 @@ pub fn list_all_rules(config: &Config) {
         };
         let name = entry.rule.name().cyan().bold();
         let desc = entry.rule.description().dimmed();
-        println!("  {} {} - {}", status, name, desc);
+        let fixable = if entry.rule.fixable() {
+            format!(" {}", "[auto-fix]".yellow())
+        } else {
+            "".to_string()
+        };
+        println!("  {} {}{} - {}", status, name, fixable, desc);
     }
 }
 

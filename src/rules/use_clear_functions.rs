@@ -14,6 +14,10 @@ impl Rule for UseClearFunctions {
         "Suggest g_clear_object/g_clear_pointer instead of manual unref and NULL assignment"
     }
 
+    fn fixable(&self) -> bool {
+        true
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

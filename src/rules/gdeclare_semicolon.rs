@@ -15,6 +15,11 @@ impl Rule for GDeclareSemicolon {
     fn description(&self) -> &'static str {
         "Enforce semicolons after G_DECLARE_* macros"
     }
+
+    fn fixable(&self) -> bool {
+        true
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

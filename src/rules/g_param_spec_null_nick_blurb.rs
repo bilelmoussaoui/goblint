@@ -13,6 +13,11 @@ impl Rule for GParamSpecNullNickBlurb {
     fn description(&self) -> &'static str {
         "Ensure g_param_spec_* functions have NULL for nick and blurb parameters"
     }
+
+    fn fixable(&self) -> bool {
+        true
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

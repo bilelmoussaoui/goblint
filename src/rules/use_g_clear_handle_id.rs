@@ -14,6 +14,10 @@ impl Rule for UseGClearHandleId {
         "Suggest g_clear_handle_id instead of manual cleanup and zero assignment"
     }
 
+    fn fixable(&self) -> bool {
+        true
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

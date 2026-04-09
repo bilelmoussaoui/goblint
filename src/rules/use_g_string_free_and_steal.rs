@@ -14,6 +14,10 @@ impl Rule for UseGStringFreeAndSteal {
         "Suggests g_string_free_and_steal instead of g_string_free (..., FALSE) for better readability"
     }
 
+    fn fixable(&self) -> bool {
+        true
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,
