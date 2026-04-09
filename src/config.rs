@@ -1,8 +1,8 @@
+use std::{fs, path::Path};
+
 use anyhow::{Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::Deserialize;
-use std::fs;
-use std::path::Path;
 
 /// Parse a GLib version string like "2.76" into (major, minor)
 fn parse_glib_version(version: &str) -> Option<(u32, u32)> {
@@ -69,8 +69,9 @@ impl<'de> Deserialize<'de> for RuleConfig {
     where
         D: serde::Deserializer<'de>,
     {
-        use serde::de::{self, MapAccess, Visitor};
         use std::fmt;
+
+        use serde::de::{self, MapAccess, Visitor};
 
         struct RuleConfigVisitor;
 
@@ -211,7 +212,8 @@ impl Config {
         builder.build().context("Failed to build ignore matcher")
     }
 
-    /// Build an ignore matcher for a specific rule, combining global and per-rule ignores
+    /// Build an ignore matcher for a specific rule, combining global and
+    /// per-rule ignores
     pub fn build_rule_ignore_matcher(&self, rule_config: &RuleConfig) -> Result<GlobSet> {
         let mut builder = GlobSetBuilder::new();
 

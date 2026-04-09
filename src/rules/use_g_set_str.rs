@@ -1,8 +1,7 @@
-use super::Rule;
-use crate::ast_context::AstContext;
-use crate::config::Config;
-use crate::rules::Violation;
 use tree_sitter::Node;
+
+use super::Rule;
+use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseGSetStr;
 
@@ -54,7 +53,8 @@ impl UseGSetStr {
         base_line: usize,
         violations: &mut Vec<Violation>,
     ) {
-        // Look for g_free(var) followed by var = g_strdup(...) in any compound statement or if body
+        // Look for g_free(var) followed by var = g_strdup(...) in any compound
+        // statement or if body
         if node.kind() == "compound_statement" || node.kind() == "if_statement" {
             let body = if node.kind() == "if_statement" {
                 node.child_by_field_name("consequence")

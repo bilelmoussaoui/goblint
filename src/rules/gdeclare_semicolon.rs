@@ -1,7 +1,5 @@
 use super::Rule;
-use crate::ast_context::AstContext;
-use crate::config::Config;
-use crate::rules::Violation;
+use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 /// Rule that enforces semicolons after G_DECLARE_* macros
 ///

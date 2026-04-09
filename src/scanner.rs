@@ -1,28 +1,25 @@
-use crate::ast_context::AstContext;
-use crate::config::{Config, RuleConfig};
-use crate::rules::chainup::DisposeFinalizeChainsUp;
-use crate::rules::deprecated_add_private::DeprecatedAddPrivate;
-use crate::rules::g_param_spec::GParamSpecNullNickBlurb;
-use crate::rules::gdeclare_semicolon::GDeclareSemicolon;
-use crate::rules::gerror_init::GErrorInit;
-use crate::rules::gtask_source_tag::GTaskSourceTag;
-use crate::rules::missing_implementation::MissingImplementation;
-use crate::rules::property_enum_zero::PropertyEnumZero;
-use crate::rules::strcmp_equal::StrcmpForStringEqual;
-use crate::rules::suggest_g_autofree::SuggestGAutofree;
-use crate::rules::suggest_g_autoptr_goto::SuggestGAutoptrGoto;
-use crate::rules::suggest_g_autoptr_inline::SuggestGAutoptrInline;
-use crate::rules::unnecessary_null_check::UnnecessaryNullCheck;
-use crate::rules::use_clear_functions::UseClearFunctions;
-use crate::rules::use_g_clear_error::SuggestGAutoptrError;
-use crate::rules::use_g_set_str::UseGSetStr;
-use crate::rules::use_g_strcmp0::UseGStrcmp0;
-use crate::rules::{Rule, Violation};
+use std::{fs, path::Path};
+
 use anyhow::Result;
 use colored::Colorize;
 use indicatif::ProgressBar;
-use std::fs;
-use std::path::Path;
+
+use crate::{
+    ast_context::AstContext,
+    config::{Config, RuleConfig},
+    rules::{
+        chainup::DisposeFinalizeChainsUp, deprecated_add_private::DeprecatedAddPrivate,
+        g_param_spec::GParamSpecNullNickBlurb, gdeclare_semicolon::GDeclareSemicolon,
+        gerror_init::GErrorInit, gtask_source_tag::GTaskSourceTag,
+        missing_implementation::MissingImplementation, property_enum_zero::PropertyEnumZero,
+        strcmp_equal::StrcmpForStringEqual, suggest_g_autofree::SuggestGAutofree,
+        suggest_g_autoptr_goto::SuggestGAutoptrGoto,
+        suggest_g_autoptr_inline::SuggestGAutoptrInline,
+        unnecessary_null_check::UnnecessaryNullCheck, use_clear_functions::UseClearFunctions,
+        use_g_clear_error::SuggestGAutoptrError, use_g_set_str::UseGSetStr,
+        use_g_strcmp0::UseGStrcmp0, Rule, Violation,
+    },
+};
 
 /// Extract a source snippet from a file at the given line
 fn get_source_snippet(file_path: &Path, line: usize) -> Option<String> {
@@ -78,7 +75,8 @@ struct RuleEntry {
     rule_config: RuleConfig,
 }
 
-/// Macro to define all rules in execution order with their minimum GLib version requirements
+/// Macro to define all rules in execution order with their minimum GLib version
+/// requirements
 #[macro_export]
 macro_rules! for_each_rule {
     ($callback:ident) => {
@@ -174,7 +172,8 @@ pub fn scan_with_ast(
         )?;
     }
 
-    // Deduplicate: keep only violations from later rules (higher index) when multiple rules fire on same line
+    // Deduplicate: keep only violations from later rules (higher index) when
+    // multiple rules fire on same line
     deduplicate_by_rule_precedence(&mut violations);
 
     Ok(violations)
@@ -202,7 +201,8 @@ pub fn list_all_rules(config: &Config) {
     }
 }
 
-/// Keep only the violation with the highest rule_index for each (file, line) pair
+/// Keep only the violation with the highest rule_index for each (file, line)
+/// pair
 fn deduplicate_by_rule_precedence(violations: &mut Vec<Violation>) {
     use std::collections::HashMap;
 

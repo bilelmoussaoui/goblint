@@ -1,10 +1,14 @@
-use crate::model::*;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
+
 use anyhow::{Context, Result};
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::Path;
 use tree_sitter::{Node, Parser as TSParser};
 use walkdir::WalkDir;
+
+use crate::model::*;
 
 pub struct Parser {
     parser: TSParser,
@@ -72,7 +76,8 @@ impl Parser {
         // Second pass: extract class structs for derivable types
         self.extract_class_structs(tree.root_node(), &source, &mut file_model);
 
-        // Third pass: extract class structs from source text (for cases where tree-sitter misparsed)
+        // Third pass: extract class structs from source text (for cases where
+        // tree-sitter misparsed)
         self.extract_class_structs_from_text(&source, &mut file_model);
 
         // Store the source for detailed pattern matching by rules
@@ -182,7 +187,8 @@ impl Parser {
         macro_map: &HashMap<usize, Vec<String>>,
         static_forwards: &HashSet<String>,
     ) {
-        // Extract GObject type declarations (G_DECLARE_* macros) before skipping preproc
+        // Extract GObject type declarations (G_DECLARE_* macros) before skipping
+        // preproc
         if node.kind() == "preproc_call" {
             if let Some(gobject_type) = self.extract_gobject_type_declaration(node, source) {
                 file_model.gobject_types.push(gobject_type);
@@ -196,7 +202,8 @@ impl Parser {
             }
         }
 
-        // Skip preprocessor macro definitions and includes, but traverse conditional blocks
+        // Skip preprocessor macro definitions and includes, but traverse conditional
+        // blocks
         if node.kind() == "preproc_def"
             || node.kind() == "preproc_function_def"
             || node.kind() == "preproc_call"
@@ -212,7 +219,8 @@ impl Parser {
             }
         }
 
-        // Extract GObject types from identifier pattern (handles ERROR nodes from macros)
+        // Extract GObject types from identifier pattern (handles ERROR nodes from
+        // macros)
         if node.kind() == "identifier" {
             let text = std::str::from_utf8(&source[node.byte_range()]).unwrap_or("");
             if text.starts_with("G_DECLARE_") || text.starts_with("G_DEFINE_") {
@@ -296,7 +304,8 @@ impl Parser {
                 .map_or(false, |(name, _)| name.starts_with("G_DECLARE_"));
 
             // Only recurse into the declarator/type, NOT into the function body
-            // This prevents picking up function calls inside function bodies as declarations
+            // This prevents picking up function calls inside function bodies as
+            // declarations
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 // Skip compound_statement (function body) to avoid false declarations
@@ -593,7 +602,8 @@ impl Parser {
         node: Node,
         source: &[u8],
     ) -> Option<TypedefInfo> {
-        // type_definition has "declarator" for the typedef name and "type" for what it's typedef'ing
+        // type_definition has "declarator" for the typedef name and "type" for what
+        // it's typedef'ing
         let declarator_node = node.child_by_field_name("declarator")?;
         let name = std::str::from_utf8(&source[declarator_node.byte_range()])
             .ok()?
@@ -756,7 +766,8 @@ impl Parser {
             return Some(std::str::from_utf8(name).ok()?.to_string());
         }
 
-        // Handle parenthesized declarators like (function_name) used to prevent macro expansion
+        // Handle parenthesized declarators like (function_name) used to prevent macro
+        // expansion
         if declarator.kind() == "parenthesized_declarator" {
             let mut cursor = declarator.walk();
             for child in declarator.children(&mut cursor) {
@@ -1086,8 +1097,9 @@ fn is_macro_identifier(name: &str) -> bool {
         return true;
     }
 
-    // Heuristic: if the identifier is ALL_CAPS (with underscores), it's likely a macro
-    // Exception: single words like NULL, TRUE, FALSE are constants, not macro calls
+    // Heuristic: if the identifier is ALL_CAPS (with underscores), it's likely a
+    // macro Exception: single words like NULL, TRUE, FALSE are constants, not
+    // macro calls
     if name
         .chars()
         .all(|c| c.is_uppercase() || c == '_' || c.is_numeric())

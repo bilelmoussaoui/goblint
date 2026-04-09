@@ -1,7 +1,7 @@
+use std::{env, path::PathBuf};
+
 use anyhow::Result;
 use gobject_ast::{Parser, Project};
-use std::env;
-use std::path::PathBuf;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();

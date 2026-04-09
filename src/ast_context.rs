@@ -1,12 +1,13 @@
+use std::{cell::RefCell, path::Path};
+
 use anyhow::Result;
 use globset::GlobSet;
 use gobject_ast::{FunctionInfo, Parser, Project};
 use indicatif::ProgressBar;
-use std::cell::RefCell;
-use std::path::Path;
 use walkdir::WalkDir;
 
-/// AST-based project context that replaces the old tree-sitter based ProjectContext
+/// AST-based project context that replaces the old tree-sitter based
+/// ProjectContext
 pub struct AstContext {
     pub project: Project,
     /// Tree-sitter parser for rules that need to parse C code
@@ -156,7 +157,8 @@ impl AstContext {
     }
 
     /// Parse C source code with the internal tree-sitter parser
-    /// This is a convenience method for rules that need to parse function bodies
+    /// This is a convenience method for rules that need to parse function
+    /// bodies
     pub fn parse_c_source(&self, source: &[u8]) -> Option<tree_sitter::Tree> {
         self.ts_parser.borrow_mut().parse(source, None)
     }
@@ -185,7 +187,8 @@ impl AstContext {
         None
     }
 
-    /// Extract variable name from a declarator (handles pointer_declarator -> identifier)
+    /// Extract variable name from a declarator (handles pointer_declarator ->
+    /// identifier)
     pub fn extract_variable_name(
         &self,
         declarator: tree_sitter::Node,

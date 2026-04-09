@@ -1,8 +1,7 @@
-use super::Rule;
-use crate::ast_context::AstContext;
-use crate::config::Config;
-use crate::rules::Violation;
 use tree_sitter::Node;
+
+use super::Rule;
+use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct SuggestGAutoptrError;
 
@@ -89,7 +88,8 @@ impl SuggestGAutoptrError {
         source: &[u8],
     ) -> Option<(String, Node<'a>)> {
         // Look for: GError *var_name = NULL;
-        // Tree structure: declaration -> type: pointer_declarator -> declarator: identifier
+        // Tree structure: declaration -> type: pointer_declarator -> declarator:
+        // identifier
 
         // Get the type specifier
         if let Some(type_node) = node.child_by_field_name("type") {

@@ -1,9 +1,9 @@
+use std::{env, path::PathBuf};
+
 /// Example showing how to use gobject-ast for linting
 /// Run with: cargo run --example ast_lint_example -- /path/to/code
 use anyhow::Result;
 use gobject_ast::Parser;
-use std::env;
-use std::path::PathBuf;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();

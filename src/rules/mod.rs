@@ -1,6 +1,6 @@
-use crate::ast_context::AstContext;
-use crate::config::Config;
 use std::path::PathBuf;
+
+use crate::{ast_context::AstContext, config::Config};
 
 pub mod chainup;
 pub mod deprecated_add_private;
@@ -28,7 +28,8 @@ pub struct Violation {
     pub message: String,
     pub rule: &'static str,
     pub snippet: Option<String>,
-    /// Rule execution order - higher means more specific/later rules take precedence
+    /// Rule execution order - higher means more specific/later rules take
+    /// precedence
     pub rule_index: usize,
 }
 

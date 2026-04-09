@@ -1,6 +1,5 @@
 use super::Rule;
-use crate::ast_context::AstContext;
-use crate::config::Config;
+use crate::{ast_context::AstContext, config::Config};
 
 /// Rule that checks for functions declared in headers but never implemented
 pub struct MissingImplementation;
@@ -22,8 +21,8 @@ impl Rule for MissingImplementation {
     ) {
         // Find all declared but not defined functions
         for (path, func) in ast_context.find_declared_but_not_defined() {
-            // Skip static function declarations - they're file-local and often forward declarations
-            // within the same header file
+            // Skip static function declarations - they're file-local and often forward
+            // declarations within the same header file
             if func.is_static {
                 continue;
             }

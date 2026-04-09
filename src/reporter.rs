@@ -1,7 +1,8 @@
-use crate::config::Config;
-use crate::rules::Violation;
-use colored::*;
 use std::env;
+
+use colored::*;
+
+use crate::{config::Config, rules::Violation};
 
 pub fn report_violations(violations: &[Violation], verbose: bool, config: &Config) {
     if violations.is_empty() {

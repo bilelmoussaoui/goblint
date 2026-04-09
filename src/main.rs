@@ -1,9 +1,9 @@
-use anyhow::Result;
-use clap::Parser;
-use indicatif::{ProgressBar, ProgressStyle};
 use std::path::PathBuf;
 
+use anyhow::Result;
+use clap::Parser;
 use gobject_lint::{ast_context, config, reporter, scanner};
+use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Parser, Debug)]
 #[command(name = "gobject-lint")]

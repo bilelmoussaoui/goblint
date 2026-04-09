@@ -1,8 +1,7 @@
-use super::Rule;
-use crate::ast_context::AstContext;
-use crate::config::Config;
-use crate::rules::Violation;
 use tree_sitter::Node;
+
+use super::Rule;
+use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct DisposeFinalizeChainsUp;
 
@@ -110,7 +109,8 @@ impl DisposeFinalizeChainsUp {
         method_type: &str,
     ) -> bool {
         // Pattern 1: Direct call - G_OBJECT_CLASS (xxx)->dispose/finalize
-        // Pattern 2: Indirect - variable assigned from parent class, then variable->dispose/finalize
+        // Pattern 2: Indirect - variable assigned from parent class, then
+        // variable->dispose/finalize
 
         if node.kind() == "field_expression" {
             // Check if field name matches method_type (dispose/finalize)

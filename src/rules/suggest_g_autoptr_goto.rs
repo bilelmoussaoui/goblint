@@ -1,9 +1,9 @@
-use super::Rule;
-use crate::ast_context::AstContext;
-use crate::config::Config;
-use crate::rules::Violation;
 use std::collections::HashMap;
+
 use tree_sitter::Node;
+
+use super::Rule;
+use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct SuggestGAutoptrGoto;
 
@@ -135,7 +135,8 @@ impl SuggestGAutoptrGoto {
             if let Some(type_node) = node.child_by_field_name("type") {
                 let type_text = ast_context.get_node_text(type_node, source);
 
-                // Find all declarators in this declaration (could be multiple: Type *a = NULL, *b = NULL;)
+                // Find all declarators in this declaration (could be multiple: Type *a = NULL,
+                // *b = NULL;)
                 let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {
                     if child.kind() == "init_declarator" || child.kind() == "pointer_declarator" {

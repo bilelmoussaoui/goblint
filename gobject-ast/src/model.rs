@@ -1,6 +1,6 @@
+use std::{collections::HashMap, path::PathBuf};
+
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::PathBuf;
 
 /// The complete project model - a map of files to their content
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -65,7 +65,8 @@ pub struct FileModel {
     pub enums: Vec<EnumInfo>,
     pub functions: Vec<FunctionInfo>,
     pub gobject_types: Vec<GObjectType>,
-    /// The raw source code of this file - available for detailed pattern matching
+    /// The raw source code of this file - available for detailed pattern
+    /// matching
     #[serde(skip)]
     pub source: Vec<u8>,
 }
@@ -158,10 +159,12 @@ pub struct FunctionInfo {
     pub is_definition: bool,        // true = definition, false = declaration
     pub return_type: Option<String>,
     pub parameters: Vec<Parameter>,
-    /// Byte range of the entire function (for definitions) - use with FileModel.source
+    /// Byte range of the entire function (for definitions) - use with
+    /// FileModel.source
     pub start_byte: Option<usize>,
     pub end_byte: Option<usize>,
-    /// Byte range of just the function body (for definitions) - use with FileModel.source
+    /// Byte range of just the function body (for definitions) - use with
+    /// FileModel.source
     pub body_start_byte: Option<usize>,
     pub body_end_byte: Option<usize>,
 }

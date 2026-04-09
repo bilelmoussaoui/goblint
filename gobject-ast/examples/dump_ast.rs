@@ -1,9 +1,9 @@
+use std::{env, fs};
+
 /// Dump the tree-sitter AST as JSON for debugging
 /// Usage: cargo run --example dump_ast <file.c>
 use anyhow::Result;
 use serde_json::json;
-use std::env;
-use std::fs;
 use tree_sitter::{Node, Parser};
 
 fn main() -> Result<()> {

@@ -1,14 +1,8 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use tower_lsp::jsonrpc::Result;
-use tower_lsp::lsp_types::*;
-use tower_lsp::{Client, LanguageServer};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use gobject_lint::ast_context::AstContext;
-use gobject_lint::config::Config;
-use gobject_lint::scanner;
+use gobject_lint::{ast_context::AstContext, config::Config, scanner};
+use tokio::sync::Mutex;
+use tower_lsp::{jsonrpc::Result, lsp_types::*, Client, LanguageServer};
 
 pub struct GObjectBackend {
     client: Client,

@@ -1,8 +1,7 @@
-use super::Rule;
-use crate::ast_context::AstContext;
-use crate::config::Config;
-use crate::rules::Violation;
 use tree_sitter::Node;
+
+use super::Rule;
+use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseGStrcmp0;
 
