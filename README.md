@@ -48,6 +48,7 @@ All rules are enabled by default. Run `gobject-lint --list-rules` to see their c
 - **suggest_g_autoptr_goto_cleanup** - Suggest g_autoptr instead of goto error cleanup pattern
 - **suggest_g_autoptr_inline_cleanup** - Suggest g_autoptr instead of inline manual cleanup (g_object_unref/g_free)
 - **suggest_g_autofree** - Suggest g_autofree for string/buffer types instead of manual g_free
+- **use_g_clear_list** - Suggest g_clear_list/g_clear_slist instead of manual g_list_free/g_slist_free and NULL assignment
 - **use_g_string_free_and_steal** - Suggests g_string_free_and_steal instead of g_string_free (..., FALSE) for better readability
 
 ## Configuration
