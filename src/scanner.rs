@@ -17,7 +17,8 @@ use crate::{
         suggest_g_autoptr_inline::SuggestGAutoptrInline,
         unnecessary_null_check::UnnecessaryNullCheck, use_clear_functions::UseClearFunctions,
         use_g_clear_error::SuggestGAutoptrError, use_g_clear_handle_id::UseGClearHandleId,
-        use_g_clear_list::UseGClearList, use_g_set_str::UseGSetStr, use_g_strcmp0::UseGStrcmp0,
+        use_g_clear_list::UseGClearList, use_g_object_notify_by_pspec::UseGObjectNotifyByPspec,
+        use_g_set_str::UseGSetStr, use_g_strcmp0::UseGStrcmp0,
         use_g_string_free_and_steal::UseGStringFreeAndSteal, Rule, Violation,
     },
 };
@@ -102,6 +103,7 @@ macro_rules! for_each_rule {
             (suggest_g_autofree, SuggestGAutofree, 2, 44),
             (use_g_clear_handle_id, UseGClearHandleId, 2, 56),
             (use_g_clear_list, UseGClearList, 2, 64),
+            (use_g_object_notify_by_pspec, UseGObjectNotifyByPspec, 2, 26),
             (use_g_string_free_and_steal, UseGStringFreeAndSteal, 2, 76),
         }
     };

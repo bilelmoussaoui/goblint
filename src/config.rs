@@ -193,6 +193,9 @@ pub struct RulesConfig {
     pub use_g_clear_list: RuleConfig,
 
     #[serde(default)]
+    pub use_g_object_notify_by_pspec: RuleConfig,
+
+    #[serde(default)]
     pub use_g_string_free_and_steal: RuleConfig,
 }
 

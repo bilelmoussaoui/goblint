@@ -92,5 +92,8 @@ use_g_clear_handle_id = true
 # Suggest g_clear_list/g_clear_slist instead of manual g_list_free/g_slist_free and NULL assignment (requires GLib >= 2.64)
 use_g_clear_list = true
 
+# Suggest g_object_notify_by_pspec instead of g_object_notify for better performance (requires GLib >= 2.26)
+use_g_object_notify_by_pspec = true
+
 # Suggest use_g_string_free_and_steal instead of g_string_free with FALSE as a parameter (requires GLib >= 2.76)
 use_g_string_free_and_steal = true
