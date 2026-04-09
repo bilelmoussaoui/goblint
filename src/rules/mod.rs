@@ -37,6 +37,7 @@ pub mod suggest_g_autoptr_goto;
 pub mod suggest_g_autoptr_inline;
 pub mod unnecessary_null_check;
 pub mod use_clear_functions;
+pub mod use_explicit_default_flags;
 pub mod use_g_clear_error;
 pub mod use_g_clear_handle_id;
 pub mod use_g_clear_list;

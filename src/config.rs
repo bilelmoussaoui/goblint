@@ -142,6 +142,9 @@ pub struct RulesConfig {
     pub use_clear_functions: RuleConfig,
 
     #[serde(default)]
+    pub use_explicit_default_flags: RuleConfig,
+
+    #[serde(default)]
     pub use_g_strcmp0: RuleConfig,
 
     #[serde(default)]

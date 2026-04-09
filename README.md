@@ -38,6 +38,7 @@ All rules are enabled by default. Run `gobject-lint --list-rules` to see their c
 - **prefer_g_variant_new_typed** - Prefer g_variant_new_string/boolean/etc over g_variant_new with format strings
 - **use_g_strcmp0** - Use g_strcmp0 instead of strcmp (NULL-safe)
 - **use_clear_functions** - Suggest g_clear_object/g_clear_pointer instead of manual unref and NULL assignment
+- **use_explicit_default_flags** - Use explicit default flag constants (e.g., G_APPLICATION_DEFAULT_FLAGS) instead of 0
 - **g_param_spec_null_nick_blurb** - Ensure g_param_spec_* functions have NULL for nick and blurb parameters
 - **gerror_init** - Ensure GError* variables are initialized to NULL
 - **property_enum_zero** - Ensure property enums start with PROP_0, not PROP_NAME = 0

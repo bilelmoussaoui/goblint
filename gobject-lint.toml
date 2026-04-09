@@ -39,6 +39,9 @@ dispose_finalize_chains_up = true
 # Suggest g_clear_object/g_clear_pointer instead of manual unref and NULL assignment (requires GLib >= 2.28)
 use_clear_functions = true
 
+# Use explicit default flag constants (e.g., G_APPLICATION_DEFAULT_FLAGS) instead of 0
+use_explicit_default_flags = true
+
 # Use g_strcmp0 instead of strcmp (NULL-safe) (requires GLib >= 2.16)
 use_g_strcmp0 = true
 
