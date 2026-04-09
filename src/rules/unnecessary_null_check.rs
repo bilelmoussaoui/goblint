@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::Rule;
+use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UnnecessaryNullCheck;
@@ -28,12 +28,14 @@ impl Rule for UnnecessaryNullCheck {
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
                     if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        let base_byte = func.start_byte.unwrap_or(0);
                         self.check_node(
                             ast_context,
                             tree.root_node(),
                             func_source,
                             path,
                             func.line,
+                            base_byte,
                             violations,
                         );
                     }
@@ -44,12 +46,12 @@ impl Rule for UnnecessaryNullCheck {
 }
 
 impl UnnecessaryNullCheck {
-    fn check_if_statement(
+    fn check_if_statement<'a>(
         &self,
         ast_context: &AstContext,
-        node: Node,
+        node: Node<'a>,
         source: &[u8],
-    ) -> Option<(String, String)> {
+    ) -> Option<(String, String, Node<'a>)> {
         if node.kind() != "if_statement" {
             return None;
         }
@@ -67,7 +69,7 @@ impl UnnecessaryNullCheck {
         if let Some(free_func) =
             self.is_only_gfree_call(ast_context, consequence, &checked_var, source)
         {
-            return Some((checked_var, free_func));
+            return Some((checked_var, free_func, consequence));
         }
 
         None
@@ -125,24 +127,31 @@ impl UnnecessaryNullCheck {
         var_name: &str,
         source: &[u8],
     ) -> Option<String> {
-        // For compound statements, check if it contains only one g_free call
+        // For compound statements, check if it contains ONLY ONE statement total and
+        // it's a g_free
         if body.kind() == "compound_statement" {
             let mut found_free = None;
-            let mut statement_count = 0;
+            let mut total_statement_count = 0;
 
             let mut cursor = body.walk();
             for child in body.children(&mut cursor) {
-                if child.kind() == "expression_statement" {
-                    statement_count += 1;
-                    if let Some(func) = self.check_gfree_call(ast_context, child, var_name, source)
-                    {
-                        found_free = Some(func);
+                // Count ALL statement types, not just expression_statement
+                if child.kind().ends_with("_statement") || child.kind() == "declaration" {
+                    total_statement_count += 1;
+
+                    // Check if this specific statement is a g_free call
+                    if child.kind() == "expression_statement" {
+                        if let Some(func) =
+                            self.check_gfree_call(ast_context, child, var_name, source)
+                        {
+                            found_free = Some(func);
+                        }
                     }
                 }
             }
 
-            // Only flag if there's exactly one statement and it's a g_free
-            if statement_count == 1 && found_free.is_some() {
+            // Only flag if there's exactly ONE statement total and it's a g_free
+            if total_statement_count == 1 && found_free.is_some() {
                 return found_free;
             }
         } else if body.kind() == "expression_statement" {
@@ -191,9 +200,12 @@ impl UnnecessaryNullCheck {
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
+        base_byte: usize,
         violations: &mut Vec<Violation>,
     ) {
-        if let Some((_var_name, free_func)) = self.check_if_statement(ast_context, node, source) {
+        if let Some((_var_name, free_func, consequence)) =
+            self.check_if_statement(ast_context, node, source)
+        {
             let suggestion = if free_func == "g_free" {
                 "Remove unnecessary NULL check before g_free (g_free handles NULL)".to_string()
             } else {
@@ -203,17 +215,53 @@ impl UnnecessaryNullCheck {
                 )
             };
 
-            violations.push(self.violation(
+            // Extract the free call statement content to replace the whole if statement
+            let replacement = if consequence.kind() == "compound_statement" {
+                // Get the statement inside the compound block
+                let mut cursor = consequence.walk();
+                let mut stmt_text = String::new();
+                for child in consequence.children(&mut cursor) {
+                    if child.kind() == "expression_statement" {
+                        stmt_text = std::str::from_utf8(&source[child.byte_range()])
+                            .unwrap_or("")
+                            .to_string();
+                        break;
+                    }
+                }
+                stmt_text
+            } else {
+                // Single statement without braces
+                std::str::from_utf8(&source[consequence.byte_range()])
+                    .unwrap_or("")
+                    .to_string()
+            };
+
+            let fix = Fix {
+                start_byte: base_byte + node.start_byte(),
+                end_byte: base_byte + node.end_byte(),
+                replacement,
+            };
+
+            violations.push(self.violation_with_fix(
                 file_path,
                 base_line + node.start_position().row,
                 node.start_position().column + 1,
                 suggestion,
+                fix,
             ));
         }
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(ast_context, child, source, file_path, base_line, violations);
+            self.check_node(
+                ast_context,
+                child,
+                source,
+                file_path,
+                base_line,
+                base_byte,
+                violations,
+            );
         }
     }
 }

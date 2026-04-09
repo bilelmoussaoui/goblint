@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::Rule;
+use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct PreferGNew;
@@ -28,12 +28,14 @@ impl Rule for PreferGNew {
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
                     if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        let base_byte = func.start_byte.unwrap_or(0);
                         self.check_node(
                             ast_context,
                             tree.root_node(),
                             func_source,
                             path,
                             func.line,
+                            base_byte,
                             violations,
                         );
                     }
@@ -51,6 +53,7 @@ impl PreferGNew {
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
+        base_byte: usize,
         violations: &mut Vec<Violation>,
     ) {
         // Look for g_malloc/g_malloc0 calls
@@ -64,14 +67,26 @@ impl PreferGNew {
                 } else {
                     "g_new"
                 };
-                violations.push(self.violation(
+
+                // Remove any parentheses from type name that might come from sizeof parsing
+                let clean_type = type_name.trim_matches(|c| c == '(' || c == ')');
+                let replacement = format!("{} ({}, 1)", suggested_func, clean_type);
+
+                let fix = Fix {
+                    start_byte: base_byte + call_node.start_byte(),
+                    end_byte: base_byte + call_node.end_byte(),
+                    replacement: replacement.clone(),
+                };
+
+                violations.push(self.violation_with_fix(
                     file_path,
                     base_line + position.row,
                     position.column + 1,
                     format!(
-                        "Use {}({}, 1) instead of {}(sizeof({})) for type safety",
-                        suggested_func, type_name, malloc_func, type_name
+                        "Use {} instead of {}(sizeof({})) for type safety",
+                        replacement, malloc_func, type_name
                     ),
+                    fix,
                 ));
             }
         }
@@ -79,7 +94,15 @@ impl PreferGNew {
         // Recurse
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(ast_context, child, source, file_path, base_line, violations);
+            self.check_node(
+                ast_context,
+                child,
+                source,
+                file_path,
+                base_line,
+                base_byte,
+                violations,
+            );
         }
     }
 

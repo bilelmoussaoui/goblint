@@ -2,9 +2,20 @@ use std::path::PathBuf;
 
 use crate::{ast_context::AstContext, config::Config};
 
+/// Represents an automated fix for a violation
+#[derive(Debug, Clone)]
+pub struct Fix {
+    /// Byte offset where the fix starts
+    pub start_byte: usize,
+    /// Byte offset where the fix ends (exclusive)
+    pub end_byte: usize,
+    /// Replacement text
+    pub replacement: String,
+}
+
 pub mod chainup;
 pub mod deprecated_add_private;
-pub mod g_param_spec;
+pub mod g_param_spec_null_nick_blurb;
 pub mod gdeclare_semicolon;
 pub mod gerror_init;
 pub mod gtask_source_tag;
@@ -37,6 +48,8 @@ pub struct Violation {
     /// Rule execution order - higher means more specific/later rules take
     /// precedence
     pub rule_index: usize,
+    /// Optional automated fix
+    pub fix: Option<Fix>,
 }
 
 /// Trait that all linting rules must implement
@@ -66,6 +79,28 @@ pub trait Rule {
             rule: self.name(),
             snippet: None,
             rule_index: 0, // Will be set by scanner based on execution order
+            fix: None,
+        }
+    }
+
+    /// Helper to create a violation with an automated fix
+    fn violation_with_fix(
+        &self,
+        file: &std::path::Path,
+        line: usize,
+        column: usize,
+        message: String,
+        fix: Fix,
+    ) -> Violation {
+        Violation {
+            file: file.to_path_buf(),
+            line,
+            column,
+            message,
+            rule: self.name(),
+            snippet: None,
+            rule_index: 0,
+            fix: Some(fix),
         }
     }
 }

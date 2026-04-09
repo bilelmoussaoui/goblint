@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::Rule;
+use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct StrcmpForStringEqual;
@@ -27,12 +27,14 @@ impl Rule for StrcmpForStringEqual {
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
                     if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        let base_byte = func.start_byte.unwrap_or(0);
                         self.check_node(
                             ast_context,
                             tree.root_node(),
                             func_source,
                             path,
                             func.line,
+                            base_byte,
                             violations,
                         );
                     }
@@ -50,6 +52,7 @@ impl StrcmpForStringEqual {
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
+        base_byte: usize,
         violations: &mut Vec<Violation>,
     ) {
         // Look for binary expressions like: strcmp(a, b) == 0
@@ -70,6 +73,7 @@ impl StrcmpForStringEqual {
                                 source,
                                 file_path,
                                 base_line,
+                                base_byte,
                                 node,
                                 violations,
                             );
@@ -82,6 +86,7 @@ impl StrcmpForStringEqual {
                                 source,
                                 file_path,
                                 base_line,
+                                base_byte,
                                 node,
                                 violations,
                             );
@@ -94,7 +99,15 @@ impl StrcmpForStringEqual {
         // Recurse into children
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(ast_context, child, source, file_path, base_line, violations);
+            self.check_node(
+                ast_context,
+                child,
+                source,
+                file_path,
+                base_line,
+                base_byte,
+                violations,
+            );
         }
     }
 
@@ -108,6 +121,7 @@ impl StrcmpForStringEqual {
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
+        base_byte: usize,
         parent_node: Node,
         violations: &mut Vec<Violation>,
     ) {
@@ -134,25 +148,37 @@ impl StrcmpForStringEqual {
             return;
         }
 
-        // Found a pattern!
-        let suggestion = if operator == "==" {
-            "g_str_equal"
-        } else {
-            "!g_str_equal"
-        };
-
         // Extract the arguments
         if let Some(args) = strcmp_side.child_by_field_name("arguments") {
+            // Preserve spacing between function name and arguments
+            let spacing_start = function.end_byte();
+            let spacing_end = args.start_byte();
+            let spacing = std::str::from_utf8(&source[spacing_start..spacing_end]).unwrap_or("");
+
             let args_text = ast_context.get_node_text(args, source);
 
-            violations.push(self.violation(
+            // Build the replacement preserving original spacing
+            let replacement = if operator == "==" {
+                format!("g_str_equal{}{}", spacing, args_text)
+            } else {
+                format!("!g_str_equal{}{}", spacing, args_text)
+            };
+
+            let fix = Fix {
+                start_byte: base_byte + parent_node.start_byte(),
+                end_byte: base_byte + parent_node.end_byte(),
+                replacement: replacement.clone(),
+            };
+
+            violations.push(self.violation_with_fix(
                 file_path,
                 base_line + parent_node.start_position().row,
                 parent_node.start_position().column + 1,
                 format!(
-                    "Use {} {} instead of {} {} 0 for string equality",
-                    suggestion, args_text, func_name, operator
+                    "Use {} instead of strcmp() {} 0 for string equality",
+                    replacement, operator
                 ),
+                fix,
             ));
         }
     }

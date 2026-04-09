@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::Rule;
+use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct GParamSpecNullNickBlurb;
@@ -27,7 +27,15 @@ impl Rule for GParamSpecNullNickBlurb {
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
                     if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_node(tree.root_node(), func_source, path, func.line, violations);
+                        let base_byte = func.start_byte.unwrap_or(0);
+                        self.check_node(
+                            tree.root_node(),
+                            func_source,
+                            path,
+                            func.line,
+                            base_byte,
+                            violations,
+                        );
                     }
                 }
             }
@@ -42,6 +50,7 @@ impl GParamSpecNullNickBlurb {
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
+        base_byte: usize,
         violations: &mut Vec<Violation>,
     ) {
         if node.kind() == "call_expression" {
@@ -65,18 +74,50 @@ impl GParamSpecNullNickBlurb {
                             let nick_arg = args[1];
                             let blurb_arg = args[2];
 
-                            let mut issues = Vec::new();
+                            let nick_is_null = self.check_argument_is_null(nick_arg, source);
+                            let blurb_is_null = self.check_argument_is_null(blurb_arg, source);
 
-                            if !self.check_argument_is_null(nick_arg, source) {
+                            let mut issues = Vec::new();
+                            if !nick_is_null {
                                 issues.push("nick (parameter 2)");
                             }
-
-                            if !self.check_argument_is_null(blurb_arg, source) {
+                            if !blurb_is_null {
                                 issues.push("blurb (parameter 3)");
                             }
 
                             if !issues.is_empty() {
-                                violations.push(self.violation(
+                                // If both need fixing, replace both in a single fix
+                                // If only one needs fixing, replace just that one
+                                let (start, end, replacement) = if !nick_is_null && !blurb_is_null {
+                                    // Replace both: from start of nick to end of blurb
+                                    (
+                                        base_byte + nick_arg.start_byte(),
+                                        base_byte + blurb_arg.end_byte(),
+                                        "NULL, NULL".to_string(),
+                                    )
+                                } else if !nick_is_null {
+                                    // Replace only nick
+                                    (
+                                        base_byte + nick_arg.start_byte(),
+                                        base_byte + nick_arg.end_byte(),
+                                        "NULL".to_string(),
+                                    )
+                                } else {
+                                    // Replace only blurb
+                                    (
+                                        base_byte + blurb_arg.start_byte(),
+                                        base_byte + blurb_arg.end_byte(),
+                                        "NULL".to_string(),
+                                    )
+                                };
+
+                                let fix = Fix {
+                                    start_byte: start,
+                                    end_byte: end,
+                                    replacement,
+                                };
+
+                                violations.push(self.violation_with_fix(
                                     file_path,
                                     base_line + node.start_position().row,
                                     node.start_position().column + 1,
@@ -85,6 +126,7 @@ impl GParamSpecNullNickBlurb {
                                         function_str,
                                         issues.join(" and ")
                                     ),
+                                    fix,
                                 ));
                             }
                         }
@@ -95,7 +137,7 @@ impl GParamSpecNullNickBlurb {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(child, source, file_path, base_line, violations);
+            self.check_node(child, source, file_path, base_line, base_byte, violations);
         }
     }
 

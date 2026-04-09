@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use gobject_lint::{ast_context, config, reporter, scanner};
+use gobject_lint::{ast_context, config, fixer, reporter, scanner};
 use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Parser, Debug)]
@@ -32,6 +32,10 @@ struct Args {
     /// Enable only specific rules (can be repeated, overrides config)
     #[arg(long, value_name = "RULE")]
     only: Vec<String>,
+
+    /// Automatically apply fixes for violations
+    #[arg(long)]
+    fix: bool,
 }
 
 fn main() -> Result<()> {
@@ -108,6 +112,15 @@ fn main() -> Result<()> {
             total_functions,
             total_gobject_types
         );
+    }
+
+    // Apply fixes if --fix was passed
+    if args.fix {
+        let fixed_count = fixer::apply_fixes(&violations)?;
+        println!("Fixed {} violation(s)", fixed_count);
+
+        // Don't exit with error code when we fixed things
+        return Ok(());
     }
 
     // Report violations

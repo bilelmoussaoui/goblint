@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::Rule;
+use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseGSetStr;
@@ -28,12 +28,14 @@ impl Rule for UseGSetStr {
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
                     if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        let base_byte = func.start_byte.unwrap_or(0);
                         self.check_node(
                             ast_context,
                             tree.root_node(),
                             func_source,
                             path,
                             func.line,
+                            base_byte,
                             violations,
                         );
                     }
@@ -51,6 +53,7 @@ impl UseGSetStr {
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
+        base_byte: usize,
         violations: &mut Vec<Violation>,
     ) {
         // Look for g_free(var) followed by var = g_strdup(...) in any compound
@@ -63,20 +66,27 @@ impl UseGSetStr {
             };
 
             if let Some(body_node) = body {
-                if let Some(((var_name, args_text), gfree_node)) =
+                if let Some(((var_name, args_text), first_stmt, second_stmt)) =
                     self.check_free_then_strdup(ast_context, body_node, source)
                 {
-                    let position = gfree_node.start_position();
+                    let position = first_stmt.start_position();
                     // Strip parentheses from args if present
                     let args_clean = args_text.trim_start_matches('(').trim_end_matches(')');
-                    violations.push(self.violation(
+
+                    let replacement = format!("g_set_str (&{}, {});", var_name, args_clean);
+
+                    let fix = Fix {
+                        start_byte: base_byte + first_stmt.start_byte(),
+                        end_byte: base_byte + second_stmt.end_byte(),
+                        replacement: replacement.clone(),
+                    };
+
+                    violations.push(self.violation_with_fix(
                         file_path,
                         base_line + position.row,
                         position.column + 1,
-                        format!(
-                            "Use g_set_str(&{}, {}) instead of g_free and g_strdup",
-                            var_name, args_clean
-                        ),
+                        format!("Use {} instead of g_free and g_strdup", replacement),
+                        fix,
                     ));
                 }
             }
@@ -85,17 +95,26 @@ impl UseGSetStr {
         // Recurse
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(ast_context, child, source, file_path, base_line, violations);
+            self.check_node(
+                ast_context,
+                child,
+                source,
+                file_path,
+                base_line,
+                base_byte,
+                violations,
+            );
         }
     }
 
     /// Check for consecutive g_free + g_strdup
+    /// Returns ((var_name, args_text), first_stmt, second_stmt)
     fn check_free_then_strdup<'a>(
         &self,
         ast_context: &AstContext,
         compound: Node<'a>,
         source: &[u8],
-    ) -> Option<((String, String), Node<'a>)> {
+    ) -> Option<((String, String), Node<'a>, Node<'a>)> {
         let mut cursor = compound.walk();
         let statements: Vec<_> = compound
             .children(&mut cursor)
@@ -114,7 +133,7 @@ impl UseGSetStr {
                     self.extract_strdup_assignment(ast_context, second, source)
                 {
                     if assign_var.trim() == var_name.trim() {
-                        return Some(((var_name, new_val), first));
+                        return Some(((var_name, new_val), first, second));
                     }
                 }
             }

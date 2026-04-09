@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::Rule;
+use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseGStringFreeAndSteal;
@@ -28,12 +28,14 @@ impl Rule for UseGStringFreeAndSteal {
 
                 if let Some(func_source) = ast_context.get_function_source(path, func) {
                     if let Some(tree) = ast_context.parse_c_source(func_source) {
+                        let base_byte = func.start_byte.unwrap_or(0);
                         self.check_node(
                             ast_context,
                             tree.root_node(),
                             func_source,
                             path,
                             func.line,
+                            base_byte,
                             violations,
                         );
                     }
@@ -51,6 +53,7 @@ impl UseGStringFreeAndSteal {
         source: &[u8],
         file_path: &std::path::Path,
         base_line: usize,
+        base_byte: usize,
         violations: &mut Vec<Violation>,
     ) {
         if let Some(call) = ast_context.find_function_call_by_name(node, &["g_string_free"], source)
@@ -64,16 +67,27 @@ impl UseGStringFreeAndSteal {
                     let second = ast_context.get_node_text(second, source);
 
                     if matches!(second.as_str(), "FALSE" | "false" | "0") {
-                        let first = ast_context.get_node_text(first, source);
+                        let first_text = ast_context.get_node_text(first, source);
+
+                        // Build replacement with proper spacing
+                        let replacement = format!("g_string_free_and_steal ({})", first_text);
+
+                        let fix = Fix {
+                            start_byte: base_byte + call.start_byte(),
+                            end_byte: base_byte + call.end_byte(),
+                            replacement: replacement.clone(),
+                        };
 
                         let position = call.start_position();
-                        violations.push(self.violation(
+                        violations.push(self.violation_with_fix(
                             file_path,
                             base_line + position.row,
                             position.column + 1,
                             format!(
-                                "Consider using g_string_free_and_steal({first}) instead of g_string_free({first}, {second}) for readability",
+                                "Use {} instead of g_string_free({}, {}) for readability",
+                                replacement, first_text, second
                             ),
+                            fix,
                         ));
                     }
                 }

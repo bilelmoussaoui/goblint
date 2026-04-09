@@ -1,4 +1,4 @@
-use super::Rule;
+use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 /// Rule that enforces semicolons after G_DECLARE_* macros
@@ -25,6 +25,9 @@ impl Rule for GDeclareSemicolon {
             // Use the already-loaded source from the file model
             let source = String::from_utf8_lossy(&file.source);
 
+            // Track byte offset as we go through lines
+            let mut byte_offset = 0;
+
             // Look for G_DECLARE_* macros
             for (line_num, line) in source.lines().enumerate() {
                 let trimmed = line.trim();
@@ -37,14 +40,22 @@ impl Rule for GDeclareSemicolon {
                     // Check if it's the closing line (contains closing paren)
                     if trimmed.contains(')') && !trimmed.ends_with(");") {
                         // Find the closing paren and check what comes after
-                        if let Some(paren_pos) = trimmed.rfind(')') {
-                            let after_paren = &trimmed[paren_pos + 1..].trim();
+                        if let Some(paren_pos) = line.rfind(')') {
+                            let after_paren = &line[paren_pos + 1..].trim();
                             if after_paren.is_empty() {
-                                let mut v = self.violation(
+                                // Calculate byte position right after the closing paren
+                                let fix_byte_pos = byte_offset + paren_pos + 1;
+
+                                let mut v = self.violation_with_fix(
                                     path,
                                     line_num + 1,
                                     paren_pos + 1,
                                     "G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.".to_string(),
+                                    Fix {
+                                        start_byte: fix_byte_pos,
+                                        end_byte: fix_byte_pos,
+                                        replacement: ";".to_string(),
+                                    },
                                 );
                                 v.snippet = Some(format!("{}; // Add semicolon here", trimmed));
                                 violations.push(v);
@@ -52,6 +63,9 @@ impl Rule for GDeclareSemicolon {
                         }
                     }
                 }
+
+                // Update byte offset for next line (line length + newline)
+                byte_offset += line.len() + 1;
             }
         }
     }
