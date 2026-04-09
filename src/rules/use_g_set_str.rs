@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseGSetStr;
@@ -30,19 +30,16 @@ impl Rule for UseGSetStr {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(ast_context, tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -54,10 +51,7 @@ impl UseGSetStr {
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         violations: &mut Vec<Violation>,
     ) {
         // Look for g_free(var) followed by var = g_strdup(...) in any compound
@@ -69,45 +63,36 @@ impl UseGSetStr {
                 Some(node)
             };
 
-            if let Some(body_node) = body {
-                if let Some(((var_name, args_text), first_stmt, second_stmt)) =
-                    self.check_free_then_strdup(ast_context, body_node, source)
-                {
-                    let position = first_stmt.start_position();
-                    // Strip parentheses from args if present
-                    let args_clean = args_text.trim_start_matches('(').trim_end_matches(')');
+            if let Some(body_node) = body
+                && let Some(((var_name, args_text), first_stmt, second_stmt)) =
+                    self.check_free_then_strdup(ast_context, body_node, ctx.source)
+            {
+                let position = first_stmt.start_position();
+                // Strip parentheses from args if present
+                let args_clean = args_text.trim_start_matches('(').trim_end_matches(')');
 
-                    let replacement = format!("g_set_str (&{}, {});", var_name, args_clean);
+                let replacement = format!("g_set_str (&{}, {});", var_name, args_clean);
 
-                    let fix = Fix {
-                        start_byte: base_byte + first_stmt.start_byte(),
-                        end_byte: base_byte + second_stmt.end_byte(),
-                        replacement: replacement.clone(),
-                    };
+                let fix = Fix {
+                    start_byte: ctx.base_byte + first_stmt.start_byte(),
+                    end_byte: ctx.base_byte + second_stmt.end_byte(),
+                    replacement: replacement.clone(),
+                };
 
-                    violations.push(self.violation_with_fix(
-                        file_path,
-                        base_line + position.row,
-                        position.column + 1,
-                        format!("Use {} instead of g_free and g_strdup", replacement),
-                        fix,
-                    ));
-                }
+                violations.push(self.violation_with_fix(
+                    ctx.file_path,
+                    ctx.base_line + position.row,
+                    position.column + 1,
+                    format!("Use {} instead of g_free and g_strdup", replacement),
+                    fix,
+                ));
             }
         }
 
         // Recurse
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(
-                ast_context,
-                child,
-                source,
-                file_path,
-                base_line,
-                base_byte,
-                violations,
-            );
+            self.check_node(ast_context, child, ctx, violations);
         }
     }
 
@@ -135,10 +120,9 @@ impl UseGSetStr {
                 // Check if second is assignment with g_strdup
                 if let Some((assign_var, new_val)) =
                     self.extract_strdup_assignment(ast_context, second, source)
+                    && assign_var.trim() == var_name.trim()
                 {
-                    if assign_var.trim() == var_name.trim() {
-                        return Some(((var_name, new_val), first, second));
-                    }
+                    return Some(((var_name, new_val), first, second));
                 }
             }
         }
@@ -152,44 +136,44 @@ impl UseGSetStr {
         node: Node,
         source: &[u8],
     ) -> Option<String> {
-        if let Some(call) = ast_context.find_call_expression(node) {
-            if let Some(function) = call.child_by_field_name("function") {
-                let func_name = ast_context.get_node_text(function, source);
+        if let Some(call) = ast_context.find_call_expression(node)
+            && let Some(function) = call.child_by_field_name("function")
+        {
+            let func_name = ast_context.get_node_text(function, source);
 
-                // Match g_free(var)
-                if func_name == "g_free" {
-                    if let Some(args) = call.child_by_field_name("arguments") {
-                        // Get the first argument (skip the parentheses)
-                        let mut cursor = args.walk();
-                        for child in args.children(&mut cursor) {
-                            if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
-                                return Some(
-                                    ast_context.get_node_text(child, source).trim().to_string(),
-                                );
-                            }
+            // Match g_free(var)
+            if func_name == "g_free" {
+                if let Some(args) = call.child_by_field_name("arguments") {
+                    // Get the first argument (skip the parentheses)
+                    let mut cursor = args.walk();
+                    for child in args.children(&mut cursor) {
+                        if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
+                            return Some(
+                                ast_context.get_node_text(child, source).trim().to_string(),
+                            );
                         }
                     }
                 }
-                // Match g_clear_pointer(&var, g_free)
-                else if func_name == "g_clear_pointer" {
-                    if let Some(args) = call.child_by_field_name("arguments") {
-                        let mut cursor = args.walk();
-                        let mut args_list = Vec::new();
-                        for child in args.children(&mut cursor) {
-                            if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
-                                args_list.push(child);
-                            }
-                        }
-                        // Check if second arg is g_free
-                        if args_list.len() == 2 {
-                            let second_arg = ast_context.get_node_text(args_list[1], source);
-                            if second_arg.trim() == "g_free" {
-                                // First arg should be &var, strip the &
-                                let first_arg = ast_context.get_node_text(args_list[0], source);
-                                let var_name = first_arg.trim().trim_start_matches('&');
-                                return Some(var_name.to_string());
-                            }
-                        }
+            }
+            // Match g_clear_pointer(&var, g_free)
+            else if func_name == "g_clear_pointer"
+                && let Some(args) = call.child_by_field_name("arguments")
+            {
+                let mut cursor = args.walk();
+                let mut args_list = Vec::new();
+                for child in args.children(&mut cursor) {
+                    if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
+                        args_list.push(child);
+                    }
+                }
+                // Check if second arg is g_free
+                if args_list.len() == 2 {
+                    let second_arg = ast_context.get_node_text(args_list[1], source);
+                    if second_arg.trim() == "g_free" {
+                        // First arg should be &var, strip the &
+                        let first_arg = ast_context.get_node_text(args_list[0], source);
+                        let var_name = first_arg.trim().trim_start_matches('&');
+                        return Some(var_name.to_string());
                     }
                 }
             }
@@ -203,46 +187,41 @@ impl UseGSetStr {
         node: Node,
         source: &[u8],
     ) -> Option<(String, String)> {
-        if let Some(assignment) = self.find_assignment(node) {
-            if let Some(left) = assignment.child_by_field_name("left") {
-                let left_text = ast_context.get_node_text(left, source);
-                if let Some(right) = assignment.child_by_field_name("right") {
-                    // Direct g_strdup call
-                    if right.kind() == "call_expression" {
-                        if let Some(func) = right.child_by_field_name("function") {
-                            let func_name = ast_context.get_node_text(func, source);
-                            if func_name == "g_strdup" || func_name == "g_strndup" {
-                                if let Some(args) = right.child_by_field_name("arguments") {
-                                    let args_text = ast_context.get_node_text(args, source);
-                                    return Some((
-                                        left_text.trim().to_string(),
-                                        args_text.trim().to_string(),
-                                    ));
-                                }
-                            }
+        if let Some(assignment) = self.find_assignment(node)
+            && let Some(left) = assignment.child_by_field_name("left")
+        {
+            let left_text = ast_context.get_node_text(left, source);
+            if let Some(right) = assignment.child_by_field_name("right") {
+                // Direct g_strdup call
+                if right.kind() == "call_expression" {
+                    if let Some(func) = right.child_by_field_name("function") {
+                        let func_name = ast_context.get_node_text(func, source);
+                        if (func_name == "g_strdup" || func_name == "g_strndup")
+                            && let Some(args) = right.child_by_field_name("arguments")
+                        {
+                            let args_text = ast_context.get_node_text(args, source);
+                            return Some((
+                                left_text.trim().to_string(),
+                                args_text.trim().to_string(),
+                            ));
                         }
                     }
-                    // Ternary: var ? g_strdup(var) : NULL
-                    else if right.kind() == "conditional_expression" {
-                        if let Some(consequence) = right.child_by_field_name("consequence") {
-                            if consequence.kind() == "call_expression" {
-                                if let Some(func) = consequence.child_by_field_name("function") {
-                                    let func_name = ast_context.get_node_text(func, source);
-                                    if func_name == "g_strdup" || func_name == "g_strndup" {
-                                        // For ternary, suggest the condition variable
-                                        if let Some(condition) =
-                                            right.child_by_field_name("condition")
-                                        {
-                                            let cond_text =
-                                                ast_context.get_node_text(condition, source);
-                                            return Some((
-                                                left_text.trim().to_string(),
-                                                cond_text.trim().to_string(),
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
+                }
+                // Ternary: var ? g_strdup(var) : NULL
+                else if right.kind() == "conditional_expression"
+                    && let Some(consequence) = right.child_by_field_name("consequence")
+                    && consequence.kind() == "call_expression"
+                    && let Some(func) = consequence.child_by_field_name("function")
+                {
+                    let func_name = ast_context.get_node_text(func, source);
+                    if func_name == "g_strdup" || func_name == "g_strndup" {
+                        // For ternary, suggest the condition variable
+                        if let Some(condition) = right.child_by_field_name("condition") {
+                            let cond_text = ast_context.get_node_text(condition, source);
+                            return Some((
+                                left_text.trim().to_string(),
+                                cond_text.trim().to_string(),
+                            ));
                         }
                     }
                 }

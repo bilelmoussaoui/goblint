@@ -28,17 +28,17 @@ impl Rule for SuggestGAutofree {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_function(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    self.check_function(
+                        ast_context,
+                        tree.root_node(),
+                        func_source,
+                        path,
+                        func.line,
+                        violations,
+                    );
                 }
             }
         }
@@ -163,23 +163,21 @@ impl SuggestGAutofree {
         if node.kind() == "compound_statement" {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                if child.kind() == "declaration" {
-                    if let Some(type_node) = child.child_by_field_name("type") {
-                        let type_text = ast_context.get_node_text(type_node, source);
+                if child.kind() == "declaration"
+                    && let Some(type_node) = child.child_by_field_name("type")
+                {
+                    let type_text = ast_context.get_node_text(type_node, source);
 
-                        let mut decl_cursor = child.walk();
-                        for decl_child in child.children(&mut decl_cursor) {
-                            if decl_child.kind() == "init_declarator"
-                                || decl_child.kind() == "pointer_declarator"
-                            {
-                                if let Some(var_name) =
-                                    self.extract_var_name(ast_context, decl_child, source)
-                                {
-                                    if !var_name.contains("->") && !var_name.contains(".") {
-                                        result.insert(var_name, (type_text.clone(), child));
-                                    }
-                                }
-                            }
+                    let mut decl_cursor = child.walk();
+                    for decl_child in child.children(&mut decl_cursor) {
+                        if (decl_child.kind() == "init_declarator"
+                            || decl_child.kind() == "pointer_declarator")
+                            && let Some(var_name) =
+                                self.extract_var_name(ast_context, decl_child, source)
+                            && !var_name.contains("->")
+                            && !var_name.contains(".")
+                        {
+                            result.insert(var_name, (type_text.clone(), child));
                         }
                     }
                 }
@@ -230,32 +228,27 @@ impl SuggestGAutofree {
         source: &[u8],
     ) -> bool {
         // Check assignment: var = g_strdup(...)
-        if node.kind() == "assignment_expression" {
-            if let Some(left) = node.child_by_field_name("left") {
-                let left_text = ast_context.get_node_text(left, source);
-                if left_text == var_name {
-                    if let Some(right) = node.child_by_field_name("right") {
-                        if self.is_autofree_allocation(ast_context, right, source) {
-                            return true;
-                        }
-                    }
-                }
+        if node.kind() == "assignment_expression"
+            && let Some(left) = node.child_by_field_name("left")
+        {
+            let left_text = ast_context.get_node_text(left, source);
+            if left_text == var_name
+                && let Some(right) = node.child_by_field_name("right")
+                && self.is_autofree_allocation(ast_context, right, source)
+            {
+                return true;
             }
         }
 
         // Check init: char *var = g_strdup(...)
-        if node.kind() == "init_declarator" {
-            if let Some(declarator) = node.child_by_field_name("declarator") {
-                if let Some(found_var) = self.extract_var_name(ast_context, declarator, source) {
-                    if found_var == var_name {
-                        if let Some(value) = node.child_by_field_name("value") {
-                            if self.is_autofree_allocation(ast_context, value, source) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
+        if node.kind() == "init_declarator"
+            && let Some(declarator) = node.child_by_field_name("declarator")
+            && let Some(found_var) = self.extract_var_name(ast_context, declarator, source)
+            && found_var == var_name
+            && let Some(value) = node.child_by_field_name("value")
+            && self.is_autofree_allocation(ast_context, value, source)
+        {
+            return true;
         }
 
         // Recurse
@@ -270,24 +263,24 @@ impl SuggestGAutofree {
     }
 
     fn is_autofree_allocation(&self, ast_context: &AstContext, node: Node, source: &[u8]) -> bool {
-        if node.kind() == "call_expression" {
-            if let Some(function) = node.child_by_field_name("function") {
-                let func_name = ast_context.get_node_text(function, source);
+        if node.kind() == "call_expression"
+            && let Some(function) = node.child_by_field_name("function")
+        {
+            let func_name = ast_context.get_node_text(function, source);
 
-                // Functions that allocate memory suitable for g_autofree
-                if func_name == "g_strdup"
-                    || func_name == "g_strndup"
-                    || func_name == "g_strdup_printf"
-                    || func_name == "g_strdup_vprintf"
-                    || func_name == "g_malloc"
-                    || func_name == "g_malloc0"
-                    || func_name == "g_realloc"
-                    || func_name == "g_try_malloc"
-                    || func_name == "g_try_malloc0"
-                    || func_name == "g_memdup"
-                {
-                    return true;
-                }
+            // Functions that allocate memory suitable for g_autofree
+            if func_name == "g_strdup"
+                || func_name == "g_strndup"
+                || func_name == "g_strdup_printf"
+                || func_name == "g_strdup_vprintf"
+                || func_name == "g_malloc"
+                || func_name == "g_malloc0"
+                || func_name == "g_realloc"
+                || func_name == "g_try_malloc"
+                || func_name == "g_try_malloc0"
+                || func_name == "g_memdup"
+            {
+                return true;
             }
         }
         false
@@ -311,12 +304,13 @@ impl SuggestGAutofree {
         source: &[u8],
     ) -> bool {
         let (is_cleanup, func_name) = ast_context.is_cleanup_call(node, source);
-        if is_cleanup && func_name == "g_free" {
-            if let Some(arguments) = node.child_by_field_name("arguments") {
-                let args_text = ast_context.get_node_text(arguments, source);
-                if args_text.contains(var_name) {
-                    return true;
-                }
+        if is_cleanup
+            && func_name == "g_free"
+            && let Some(arguments) = node.child_by_field_name("arguments")
+        {
+            let args_text = ast_context.get_node_text(arguments, source);
+            if args_text.contains(var_name) {
+                return true;
             }
         }
 

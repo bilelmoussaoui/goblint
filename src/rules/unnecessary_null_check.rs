@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UnnecessaryNullCheck;
@@ -30,19 +30,16 @@ impl Rule for UnnecessaryNullCheck {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(ast_context, tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -144,12 +141,11 @@ impl UnnecessaryNullCheck {
                     total_statement_count += 1;
 
                     // Check if this specific statement is a g_free call
-                    if child.kind() == "expression_statement" {
-                        if let Some(func) =
+                    if child.kind() == "expression_statement"
+                        && let Some(func) =
                             self.check_gfree_call(ast_context, child, var_name, source)
-                        {
-                            found_free = Some(func);
-                        }
+                    {
+                        found_free = Some(func);
                     }
                 }
             }
@@ -174,21 +170,21 @@ impl UnnecessaryNullCheck {
         source: &[u8],
     ) -> Option<String> {
         // Look for g_free(var_name) or g_clear_pointer(&var_name, ...)
-        if let Some(call) = ast_context.find_call_expression(node) {
-            if let Some(function) = call.child_by_field_name("function") {
-                let func_name = ast_context.get_node_text(function, source);
+        if let Some(call) = ast_context.find_call_expression(node)
+            && let Some(function) = call.child_by_field_name("function")
+        {
+            let func_name = ast_context.get_node_text(function, source);
 
-                if func_name == "g_free" || func_name == "g_clear_pointer" {
-                    // Check if the argument matches our variable
-                    if let Some(arguments) = call.child_by_field_name("arguments") {
-                        let args_text = ast_context.get_node_text(arguments, source);
+            if func_name == "g_free" || func_name == "g_clear_pointer" {
+                // Check if the argument matches our variable
+                if let Some(arguments) = call.child_by_field_name("arguments") {
+                    let args_text = ast_context.get_node_text(arguments, source);
 
-                        // Simple check: does arguments contain the variable?
-                        // For g_free: g_free(ptr)
-                        // For g_clear_pointer: g_clear_pointer(&ptr, ...)
-                        if args_text.contains(var_name) {
-                            return Some(func_name);
-                        }
+                    // Simple check: does arguments contain the variable?
+                    // For g_free: g_free(ptr)
+                    // For g_clear_pointer: g_clear_pointer(&ptr, ...)
+                    if args_text.contains(var_name) {
+                        return Some(func_name);
                     }
                 }
             }
@@ -201,14 +197,11 @@ impl UnnecessaryNullCheck {
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         violations: &mut Vec<Violation>,
     ) {
         if let Some((_var_name, free_func, consequence)) =
-            self.check_if_statement(ast_context, node, source)
+            self.check_if_statement(ast_context, node, ctx.source)
         {
             let suggestion = if free_func == "g_free" {
                 "Remove unnecessary NULL check before g_free (g_free handles NULL)".to_string()
@@ -226,7 +219,7 @@ impl UnnecessaryNullCheck {
                 let mut stmt_text = String::new();
                 for child in consequence.children(&mut cursor) {
                     if child.kind() == "expression_statement" {
-                        stmt_text = std::str::from_utf8(&source[child.byte_range()])
+                        stmt_text = std::str::from_utf8(&ctx.source[child.byte_range()])
                             .unwrap_or("")
                             .to_string();
                         break;
@@ -235,20 +228,20 @@ impl UnnecessaryNullCheck {
                 stmt_text
             } else {
                 // Single statement without braces
-                std::str::from_utf8(&source[consequence.byte_range()])
+                std::str::from_utf8(&ctx.source[consequence.byte_range()])
                     .unwrap_or("")
                     .to_string()
             };
 
             let fix = Fix {
-                start_byte: base_byte + node.start_byte(),
-                end_byte: base_byte + node.end_byte(),
+                start_byte: ctx.base_byte + node.start_byte(),
+                end_byte: ctx.base_byte + node.end_byte(),
                 replacement,
             };
 
             violations.push(self.violation_with_fix(
-                file_path,
-                base_line + node.start_position().row,
+                ctx.file_path,
+                ctx.base_line + node.start_position().row,
                 node.start_position().column + 1,
                 suggestion,
                 fix,
@@ -257,15 +250,7 @@ impl UnnecessaryNullCheck {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(
-                ast_context,
-                child,
-                source,
-                file_path,
-                base_line,
-                base_byte,
-                violations,
-            );
+            self.check_node(ast_context, child, ctx, violations);
         }
     }
 }

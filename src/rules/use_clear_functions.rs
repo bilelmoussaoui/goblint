@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseClearFunctions;
@@ -30,19 +30,16 @@ impl Rule for UseClearFunctions {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(ast_context, tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -123,15 +120,15 @@ impl UseClearFunctions {
         // For binary expressions (field != NULL), find the field
         if node.kind() == "binary_expression" {
             // Try both left and right sides
-            if let Some(left) = node.child_by_field_name("left") {
-                if let Some(var) = self.find_variable_in_condition(ast_context, left, source) {
-                    return Some(var);
-                }
+            if let Some(left) = node.child_by_field_name("left")
+                && let Some(var) = self.find_variable_in_condition(ast_context, left, source)
+            {
+                return Some(var);
             }
-            if let Some(right) = node.child_by_field_name("right") {
-                if let Some(var) = self.find_variable_in_condition(ast_context, right, source) {
-                    return Some(var);
-                }
+            if let Some(right) = node.child_by_field_name("right")
+                && let Some(var) = self.find_variable_in_condition(ast_context, right, source)
+            {
+                return Some(var);
             }
         }
 
@@ -150,12 +147,12 @@ impl UseClearFunctions {
 
     fn has_logical_operators(&self, ast_context: &AstContext, node: Node, source: &[u8]) -> bool {
         // Check if the condition contains && or || operators
-        if node.kind() == "binary_expression" {
-            if let Some(operator) = node.child_by_field_name("operator") {
-                let op_text = ast_context.get_node_text(operator, source);
-                if op_text == "&&" || op_text == "||" {
-                    return true;
-                }
+        if node.kind() == "binary_expression"
+            && let Some(operator) = node.child_by_field_name("operator")
+        {
+            let op_text = ast_context.get_node_text(operator, source);
+            if op_text == "&&" || op_text == "||" {
+                return true;
             }
         }
 
@@ -213,21 +210,19 @@ impl UseClearFunctions {
         if body.kind() == "compound_statement" {
             let mut cursor = body.walk();
             for child in body.children(&mut cursor) {
-                if child.kind() == "expression_statement" {
-                    if let Some(call) = ast_context.find_call_expression(child) {
-                        if let Some(function) = call.child_by_field_name("function") {
-                            let func_name = ast_context.get_node_text(function, source);
+                if child.kind() == "expression_statement"
+                    && let Some(call) = ast_context.find_call_expression(child)
+                    && let Some(function) = call.child_by_field_name("function")
+                {
+                    let func_name = ast_context.get_node_text(function, source);
 
-                            for &expected_func in &unref_functions {
-                                if func_name == expected_func {
-                                    if let Some(arguments) = call.child_by_field_name("arguments") {
-                                        let args_text =
-                                            ast_context.get_node_text(arguments, source);
-                                        if args_text.contains(var_name) {
-                                            return (true, func_name);
-                                        }
-                                    }
-                                }
+                    for &expected_func in &unref_functions {
+                        if func_name == expected_func
+                            && let Some(arguments) = call.child_by_field_name("arguments")
+                        {
+                            let args_text = ast_context.get_node_text(arguments, source);
+                            if args_text.contains(var_name) {
+                                return (true, func_name);
                             }
                         }
                     }
@@ -253,20 +248,20 @@ impl UseClearFunctions {
                     // Look for assignment_expression directly in this child
                     let mut child_cursor = child.walk();
                     for grandchild in child.children(&mut child_cursor) {
-                        if grandchild.kind() == "assignment_expression" {
-                            if let Some(left) = grandchild.child_by_field_name("left") {
-                                let left_text = ast_context.get_node_text(left, source);
-                                if left_text == var_name {
-                                    if let Some(right) = grandchild.child_by_field_name("right") {
-                                        let right_full = ast_context.get_node_text(right, source);
-                                        let right_text = right_full.trim();
-                                        if right_text == "NULL"
-                                            || right_text == "0"
-                                            || right_text == "((void*)0)"
-                                        {
-                                            return true;
-                                        }
-                                    }
+                        if grandchild.kind() == "assignment_expression"
+                            && let Some(left) = grandchild.child_by_field_name("left")
+                        {
+                            let left_text = ast_context.get_node_text(left, source);
+                            if left_text == var_name
+                                && let Some(right) = grandchild.child_by_field_name("right")
+                            {
+                                let right_full = ast_context.get_node_text(right, source);
+                                let right_text = right_full.trim();
+                                if right_text == "NULL"
+                                    || right_text == "0"
+                                    || right_text == "((void*)0)"
+                                {
+                                    return true;
                                 }
                             }
                         }
@@ -295,14 +290,11 @@ impl UseClearFunctions {
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         violations: &mut Vec<Violation>,
     ) {
         if let Some((var_name, suggested_function, unref_function, if_node)) =
-            self.is_manual_clear_pattern(ast_context, node, source)
+            self.is_manual_clear_pattern(ast_context, node, ctx.source)
         {
             let position = if_node.start_position();
 
@@ -315,14 +307,14 @@ impl UseClearFunctions {
             };
 
             let fix = Fix {
-                start_byte: base_byte + if_node.start_byte(),
-                end_byte: base_byte + if_node.end_byte(),
+                start_byte: ctx.base_byte + if_node.start_byte(),
+                end_byte: ctx.base_byte + if_node.end_byte(),
                 replacement: replacement.clone(),
             };
 
             violations.push(self.violation_with_fix(
-                file_path,
-                base_line + position.row,
+                ctx.file_path,
+                ctx.base_line + position.row,
                 position.column + 1,
                 format!(
                     "Use {} instead of manual NULL check, unref, and assignment",
@@ -334,15 +326,7 @@ impl UseClearFunctions {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(
-                ast_context,
-                child,
-                source,
-                file_path,
-                base_line,
-                base_byte,
-                violations,
-            );
+            self.check_node(ast_context, child, ctx, violations);
         }
     }
 }

@@ -51,17 +51,17 @@ impl PropertyEnumZero {
         base_line: usize,
         violations: &mut Vec<Violation>,
     ) {
-        if self.is_property_enum(ast_context, node, source) {
-            if let Some((prop_name, name_node)) =
+        if self.is_property_enum(ast_context, node, source)
+            && let Some((prop_name, name_node)) =
                 self.check_first_enumerator(ast_context, node, source)
-            {
-                let fix = Fix {
-                    start_byte: name_node.start_byte(),
-                    end_byte: name_node.end_byte(),
-                    replacement: "PROP_0".to_string(),
-                };
+        {
+            let fix = Fix {
+                start_byte: name_node.start_byte(),
+                end_byte: name_node.end_byte(),
+                replacement: "PROP_0".to_string(),
+            };
 
-                violations.push(self.violation_with_fix(
+            violations.push(self.violation_with_fix(
                     file_path,
                     base_line + name_node.start_position().row,
                     name_node.start_position().column + 1,
@@ -71,7 +71,6 @@ impl PropertyEnumZero {
                     ),
                     fix,
                 ));
-            }
         }
 
         let mut cursor = node.walk();
@@ -91,12 +90,12 @@ impl PropertyEnumZero {
 
         let mut cursor = body.walk();
         for child in body.children(&mut cursor) {
-            if child.kind() == "enumerator" {
-                if let Some(name) = child.child_by_field_name("name") {
-                    let name_text = ast_context.get_node_text(name, source);
-                    if name_text.starts_with("PROP_") {
-                        return true;
-                    }
+            if child.kind() == "enumerator"
+                && let Some(name) = child.child_by_field_name("name")
+            {
+                let name_text = ast_context.get_node_text(name, source);
+                if name_text.starts_with("PROP_") {
+                    return true;
                 }
             }
         }
@@ -114,29 +113,28 @@ impl PropertyEnumZero {
 
         let mut cursor = body.walk();
         for child in body.children(&mut cursor) {
-            if child.kind() == "enumerator" {
-                if let Some(name) = child.child_by_field_name("name") {
-                    let name_text = ast_context.get_node_text(name, source);
+            if child.kind() == "enumerator"
+                && let Some(name) = child.child_by_field_name("name")
+            {
+                let name_text = ast_context.get_node_text(name, source);
 
-                    if let Some(value) = child.child_by_field_name("value") {
-                        let value_text =
-                            ast_context.get_node_text(value, source).trim().to_string();
+                if let Some(value) = child.child_by_field_name("value") {
+                    let value_text = ast_context.get_node_text(value, source).trim().to_string();
 
-                        if name_text.starts_with("PROP_")
-                            && !name_text.ends_with("_0")
-                            && value_text == "0"
-                        {
-                            return Some((name_text, name));
-                        }
-                    } else {
-                        if name_text.starts_with("PROP_") && !name_text.ends_with("_0") {
-                            return Some((name_text, name));
-                        }
+                    if name_text.starts_with("PROP_")
+                        && !name_text.ends_with("_0")
+                        && value_text == "0"
+                    {
+                        return Some((name_text, name));
                     }
-
-                    if name_text.starts_with("PROP_") {
-                        break;
+                } else {
+                    if name_text.starts_with("PROP_") && !name_text.ends_with("_0") {
+                        return Some((name_text, name));
                     }
+                }
+
+                if name_text.starts_with("PROP_") {
+                    break;
                 }
             }
         }

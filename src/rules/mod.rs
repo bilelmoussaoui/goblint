@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::{ast_context::AstContext, config::Config};
 
@@ -11,6 +11,14 @@ pub struct Fix {
     pub end_byte: usize,
     /// Replacement text
     pub replacement: String,
+}
+
+/// Context passed to check_node functions to avoid too many arguments
+pub struct CheckContext<'a> {
+    pub source: &'a [u8],
+    pub file_path: &'a Path,
+    pub base_line: usize,
+    pub base_byte: usize,
 }
 
 pub mod chainup;

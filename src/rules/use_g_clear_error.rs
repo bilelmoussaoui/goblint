@@ -26,17 +26,17 @@ impl Rule for SuggestGAutoptrError {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    self.check_node(
+                        ast_context,
+                        tree.root_node(),
+                        func_source,
+                        path,
+                        func.line,
+                        violations,
+                    );
                 }
             }
         }
@@ -54,23 +54,25 @@ impl SuggestGAutoptrError {
         violations: &mut Vec<Violation>,
     ) {
         // Look for GError* variable declarations
-        if node.kind() == "declaration" {
-            if let Some((var_name, decl_node)) =
+        if node.kind() == "declaration"
+            && let Some((var_name, decl_node)) =
                 self.find_gerror_declaration(ast_context, node, source)
+        {
+            // Check if this variable is manually freed with g_error_free in the function
+            // We need to search the parent scope (function body)
+            if let Some(function_body) = self.find_parent_function_body(node)
+                && self.has_error_free_call(ast_context, function_body, &var_name, source)
             {
-                // Check if this variable is manually freed with g_error_free in the function
-                // We need to search the parent scope (function body)
-                if let Some(function_body) = self.find_parent_function_body(node) {
-                    if self.has_error_free_call(ast_context, function_body, &var_name, source) {
-                        let position = decl_node.start_position();
-                        violations.push(self.violation(
-                            file_path,
-                            base_line + position.row,
-                            position.column + 1,
-                            format!("Consider using g_autoptr(GError) {} instead of manual g_error_free", var_name),
-                        ));
-                    }
-                }
+                let position = decl_node.start_position();
+                violations.push(self.violation(
+                    file_path,
+                    base_line + position.row,
+                    position.column + 1,
+                    format!(
+                        "Consider using g_autoptr(GError) {} instead of manual g_error_free",
+                        var_name
+                    ),
+                ));
             }
         }
 
@@ -96,12 +98,11 @@ impl SuggestGAutoptrError {
             let type_text = ast_context.get_node_text(type_node, source);
             if type_text.contains("GError") {
                 // Find the declarator
-                if let Some(declarator) = node.child_by_field_name("declarator") {
-                    if let Some(var_name) =
+                if let Some(declarator) = node.child_by_field_name("declarator")
+                    && let Some(var_name) =
                         self.extract_pointer_var_name(ast_context, declarator, source)
-                    {
-                        return Some((var_name, node));
-                    }
+                {
+                    return Some((var_name, node));
                 }
             }
         }
@@ -167,12 +168,13 @@ impl SuggestGAutoptrError {
         source: &[u8],
     ) -> bool {
         let (is_cleanup, func_name) = ast_context.is_cleanup_call(node, source);
-        if is_cleanup && func_name == "g_error_free" {
-            if let Some(arguments) = node.child_by_field_name("arguments") {
-                let args_text = ast_context.get_node_text(arguments, source);
-                if args_text.contains(var_name) {
-                    return true;
-                }
+        if is_cleanup
+            && func_name == "g_error_free"
+            && let Some(arguments) = node.child_by_field_name("arguments")
+        {
+            let args_text = ast_context.get_node_text(arguments, source);
+            if args_text.contains(var_name) {
+                return true;
             }
         }
 

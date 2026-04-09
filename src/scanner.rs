@@ -8,7 +8,8 @@ use crate::{
     ast_context::AstContext,
     config::{Config, RuleConfig},
     rules::{
-        chainup::DisposeFinalizeChainsUp, deprecated_add_private::DeprecatedAddPrivate,
+        Rule, Violation, chainup::DisposeFinalizeChainsUp,
+        deprecated_add_private::DeprecatedAddPrivate,
         g_param_spec_null_nick_blurb::GParamSpecNullNickBlurb,
         gdeclare_semicolon::GDeclareSemicolon, gerror_init::GErrorInit,
         gtask_source_tag::GTaskSourceTag, missing_implementation::MissingImplementation,
@@ -21,8 +22,7 @@ use crate::{
         use_g_clear_list::UseGClearList,
         use_g_object_new_with_properties::UseGObjectNewWithProperties,
         use_g_object_notify_by_pspec::UseGObjectNotifyByPspec, use_g_set_str::UseGSetStr,
-        use_g_strcmp0::UseGStrcmp0, use_g_string_free_and_steal::UseGStringFreeAndSteal, Rule,
-        Violation,
+        use_g_strcmp0::UseGStrcmp0, use_g_string_free_and_steal::UseGStringFreeAndSteal,
     },
 };
 

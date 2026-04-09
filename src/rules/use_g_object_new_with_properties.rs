@@ -26,17 +26,17 @@ impl Rule for UseGObjectNewWithProperties {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    self.check_node(
+                        ast_context,
+                        tree.root_node(),
+                        func_source,
+                        path,
+                        func.line,
+                        violations,
+                    );
                 }
             }
         }
@@ -103,11 +103,11 @@ impl UseGObjectNewWithProperties {
                 let mut set_count = 0;
 
                 for next in children.iter().skip(i + 1) {
-                    if let Some(set_var) = self.extract_g_object_set(ast_context, *next, source) {
-                        if set_var.trim() == var_name.trim() {
-                            set_count += 1;
-                            continue;
-                        }
+                    if let Some(set_var) = self.extract_g_object_set(ast_context, *next, source)
+                        && set_var.trim() == var_name.trim()
+                    {
+                        set_count += 1;
+                        continue;
                     }
 
                     // Stop if we hit something that's not a g_object_set on our variable
@@ -139,12 +139,11 @@ impl UseGObjectNewWithProperties {
                     let left = assignment.child_by_field_name("left")?;
                     let right = assignment.child_by_field_name("right")?;
 
-                    if let Some(call) = self.find_call_in_node(right) {
-                        if self.is_g_object_new_empty(ast_context, call, source) {
-                            let var_name =
-                                ast_context.get_node_text(left, source).trim().to_string();
-                            return Some((var_name, node));
-                        }
+                    if let Some(call) = self.find_call_in_node(right)
+                        && self.is_g_object_new_empty(ast_context, call, source)
+                    {
+                        let var_name = ast_context.get_node_text(left, source).trim().to_string();
+                        return Some((var_name, node));
                     }
                 }
             }
@@ -153,12 +152,12 @@ impl UseGObjectNewWithProperties {
                     let declarator = init_declarator.child_by_field_name("declarator")?;
                     let value = init_declarator.child_by_field_name("value")?;
 
-                    if let Some(call) = self.find_call_in_node(value) {
-                        if self.is_g_object_new_empty(ast_context, call, source) {
-                            let var_name =
-                                self.extract_declarator_name(ast_context, declarator, source)?;
-                            return Some((var_name, node));
-                        }
+                    if let Some(call) = self.find_call_in_node(value)
+                        && self.is_g_object_new_empty(ast_context, call, source)
+                    {
+                        let var_name =
+                            self.extract_declarator_name(ast_context, declarator, source)?;
+                        return Some((var_name, node));
                     }
                 }
             }

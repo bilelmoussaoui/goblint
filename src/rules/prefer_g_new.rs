@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct PreferGNew;
@@ -30,19 +30,16 @@ impl Rule for PreferGNew {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(ast_context, tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -54,59 +51,47 @@ impl PreferGNew {
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         violations: &mut Vec<Violation>,
     ) {
         // Look for g_malloc/g_malloc0 calls
-        if node.kind() == "call_expression" {
-            if let Some((malloc_func, type_name, call_node)) =
-                self.extract_malloc_with_sizeof(ast_context, node, source)
-            {
-                let position = call_node.start_position();
-                let suggested_func = if malloc_func == "g_malloc0" {
-                    "g_new0"
-                } else {
-                    "g_new"
-                };
+        if node.kind() == "call_expression"
+            && let Some((malloc_func, type_name, call_node)) =
+                self.extract_malloc_with_sizeof(ast_context, node, ctx.source)
+        {
+            let position = call_node.start_position();
+            let suggested_func = if malloc_func == "g_malloc0" {
+                "g_new0"
+            } else {
+                "g_new"
+            };
 
-                // Remove any parentheses from type name that might come from sizeof parsing
-                let clean_type = type_name.trim_matches(|c| c == '(' || c == ')');
-                let replacement = format!("{} ({}, 1)", suggested_func, clean_type);
+            // Remove any parentheses from type name that might come from sizeof parsing
+            let clean_type = type_name.trim_matches(|c| c == '(' || c == ')');
+            let replacement = format!("{} ({}, 1)", suggested_func, clean_type);
 
-                let fix = Fix {
-                    start_byte: base_byte + call_node.start_byte(),
-                    end_byte: base_byte + call_node.end_byte(),
-                    replacement: replacement.clone(),
-                };
+            let fix = Fix {
+                start_byte: ctx.base_byte + call_node.start_byte(),
+                end_byte: ctx.base_byte + call_node.end_byte(),
+                replacement: replacement.clone(),
+            };
 
-                violations.push(self.violation_with_fix(
-                    file_path,
-                    base_line + position.row,
-                    position.column + 1,
-                    format!(
-                        "Use {} instead of {}(sizeof({})) for type safety",
-                        replacement, malloc_func, type_name
-                    ),
-                    fix,
-                ));
-            }
+            violations.push(self.violation_with_fix(
+                ctx.file_path,
+                ctx.base_line + position.row,
+                position.column + 1,
+                format!(
+                    "Use {} instead of {}(sizeof({})) for type safety",
+                    replacement, malloc_func, type_name
+                ),
+                fix,
+            ));
         }
 
         // Recurse
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(
-                ast_context,
-                child,
-                source,
-                file_path,
-                base_line,
-                base_byte,
-                violations,
-            );
+            self.check_node(ast_context, child, ctx, violations);
         }
     }
 
@@ -133,10 +118,10 @@ impl PreferGNew {
         // Look for sizeof(...) as the argument
         let mut cursor = args.walk();
         for child in args.children(&mut cursor) {
-            if child.kind() == "sizeof_expression" {
-                if let Some(type_name) = self.extract_sizeof_type(ast_context, child, source) {
-                    return Some((malloc_func, type_name, call_node));
-                }
+            if child.kind() == "sizeof_expression"
+                && let Some(type_name) = self.extract_sizeof_type(ast_context, child, source)
+            {
+                return Some((malloc_func, type_name, call_node));
             }
         }
 

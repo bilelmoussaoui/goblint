@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseGObjectNotifyByPspec;
@@ -30,19 +30,16 @@ impl Rule for UseGObjectNotifyByPspec {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(ast_context, tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -54,46 +51,43 @@ impl UseGObjectNotifyByPspec {
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         violations: &mut Vec<Violation>,
     ) {
         // Look for g_object_notify calls
-        if node.kind() == "call_expression" {
-            if let Some((property_name, obj_arg, function_node, args_node)) =
-                self.extract_g_object_notify_with_string(ast_context, node, source)
-            {
-                let position = node.start_position();
+        if node.kind() == "call_expression"
+            && let Some((property_name, obj_arg, function_node, args_node)) =
+                self.extract_g_object_notify_with_string(ast_context, node, ctx.source)
+        {
+            let position = node.start_position();
 
-                // Convert property-name to PROP_NAME for the suggestion
-                let property_constant = self.property_name_to_constant(&property_name);
+            // Convert property-name to PROP_NAME for the suggestion
+            let property_constant = self.property_name_to_constant(&property_name);
 
-                // Get object argument text (preserve spacing)
-                let obj_text = ast_context.get_node_text(obj_arg, source);
+            // Get object argument text (preserve spacing)
+            let obj_text = ast_context.get_node_text(obj_arg, ctx.source);
 
-                // Calculate spacing between function name and opening paren
-                let spacing_start = function_node.end_byte();
-                let spacing_end = args_node.start_byte();
-                let spacing =
-                    std::str::from_utf8(&source[spacing_start..spacing_end]).unwrap_or("");
+            // Calculate spacing between function name and opening paren
+            let spacing_start = function_node.end_byte();
+            let spacing_end = args_node.start_byte();
+            let spacing =
+                std::str::from_utf8(&ctx.source[spacing_start..spacing_end]).unwrap_or("");
 
-                // Build replacement
-                let replacement = format!(
-                    "g_object_notify_by_pspec{}({}, properties[{}])",
-                    spacing, obj_text, property_constant
-                );
+            // Build replacement
+            let replacement = format!(
+                "g_object_notify_by_pspec{}({}, properties[{}])",
+                spacing, obj_text, property_constant
+            );
 
-                let fix = Fix {
-                    start_byte: base_byte + function_node.start_byte(),
-                    end_byte: base_byte + args_node.end_byte(),
-                    replacement,
-                };
+            let fix = Fix {
+                start_byte: ctx.base_byte + function_node.start_byte(),
+                end_byte: ctx.base_byte + args_node.end_byte(),
+                replacement,
+            };
 
-                violations.push(self.violation_with_fix(
-                    file_path,
-                    base_line + position.row,
+            violations.push(self.violation_with_fix(
+                    ctx.file_path,
+                    ctx.base_line + position.row,
                     position.column + 1,
                     format!(
                         "Use g_object_notify_by_pspec(obj, properties[{}]) instead of g_object_notify(obj, \"{}\") for better performance",
@@ -101,21 +95,12 @@ impl UseGObjectNotifyByPspec {
                     ),
                     fix,
                 ));
-            }
         }
 
         // Recurse
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(
-                ast_context,
-                child,
-                source,
-                file_path,
-                base_line,
-                base_byte,
-                violations,
-            );
+            self.check_node(ast_context, child, ctx, violations);
         }
     }
 

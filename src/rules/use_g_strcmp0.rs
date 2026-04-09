@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseGStrcmp0;
@@ -30,18 +30,16 @@ impl Rule for UseGStrcmp0 {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -49,50 +47,45 @@ impl Rule for UseGStrcmp0 {
 }
 
 impl UseGStrcmp0 {
-    fn check_node(
-        &self,
-        node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
-        violations: &mut Vec<Violation>,
-    ) {
-        if node.kind() == "call_expression" {
-            if let Some(function) = node.child_by_field_name("function") {
-                let func_text = &source[function.byte_range()];
-                if let Ok(func_name) = std::str::from_utf8(func_text) {
-                    if func_name == "strcmp" {
-                        // Only auto-fix strcmp, not strncmp (strncmp needs manual review)
-                        let fix = Fix {
-                            start_byte: base_byte + function.start_byte(),
-                            end_byte: base_byte + function.end_byte(),
-                            replacement: "g_strcmp0".to_string(),
-                        };
+    fn check_node(&self, node: Node, ctx: &CheckContext, violations: &mut Vec<Violation>) {
+        if node.kind() == "call_expression"
+            && let Some(function) = node.child_by_field_name("function")
+        {
+            let func_text = &ctx.source[function.byte_range()];
+            if let Ok(func_name) = std::str::from_utf8(func_text) {
+                if func_name == "strcmp" {
+                    // Only auto-fix strcmp, not strncmp (strncmp needs manual review)
+                    let fix = Fix {
+                        start_byte: ctx.base_byte + function.start_byte(),
+                        end_byte: ctx.base_byte + function.end_byte(),
+                        replacement: "g_strcmp0".to_string(),
+                    };
 
-                        violations.push(self.violation_with_fix(
-                            file_path,
-                            base_line + node.start_position().row,
+                    violations.push(self.violation_with_fix(
+                        ctx.file_path,
+                        ctx.base_line + node.start_position().row,
+                        node.start_position().column + 1,
+                        "Use g_strcmp0 instead of strcmp (NULL-safe)".to_string(),
+                        fix,
+                    ));
+                } else if func_name == "strncmp" {
+                    // strncmp is trickier - don't auto-fix
+                    violations.push(
+                        self.violation(
+                            ctx.file_path,
+                            ctx.base_line + node.start_position().row,
                             node.start_position().column + 1,
-                            "Use g_strcmp0 instead of strcmp (NULL-safe)".to_string(),
-                            fix,
-                        ));
-                    } else if func_name == "strncmp" {
-                        // strncmp is trickier - don't auto-fix
-                        violations.push(self.violation(
-                            file_path,
-                            base_line + node.start_position().row,
-                            node.start_position().column + 1,
-                            "Use g_strcmp0 or check for NULL first instead of strncmp (NULL-safe)".to_string(),
-                        ));
-                    }
+                            "Use g_strcmp0 or check for NULL first instead of strncmp (NULL-safe)"
+                                .to_string(),
+                        ),
+                    );
                 }
             }
         }
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(child, source, file_path, base_line, base_byte, violations);
+            self.check_node(child, ctx, violations);
         }
     }
 }

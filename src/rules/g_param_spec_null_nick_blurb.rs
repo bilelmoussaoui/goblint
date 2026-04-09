@@ -30,18 +30,18 @@ impl Rule for GParamSpecNullNickBlurb {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let base_byte = func.start_byte.unwrap_or(0);
+                    self.check_node(
+                        tree.root_node(),
+                        func_source,
+                        path,
+                        func.line,
+                        base_byte,
+                        violations,
+                    );
                 }
             }
         }
@@ -58,83 +58,82 @@ impl GParamSpecNullNickBlurb {
         base_byte: usize,
         violations: &mut Vec<Violation>,
     ) {
-        if node.kind() == "call_expression" {
-            if let Some(function_node) = node.child_by_field_name("function") {
-                let function_name = &source[function_node.byte_range()];
-                let function_str = std::str::from_utf8(function_name).unwrap_or("");
+        if node.kind() == "call_expression"
+            && let Some(function_node) = node.child_by_field_name("function")
+        {
+            let function_name = &source[function_node.byte_range()];
+            let function_str = std::str::from_utf8(function_name).unwrap_or("");
 
-                if function_str.starts_with("g_param_spec_")
-                    && function_str != "g_param_spec_internal"
-                {
-                    if let Some(arguments_node) = node.child_by_field_name("arguments") {
-                        let mut args = Vec::new();
-                        let mut cursor = arguments_node.walk();
-                        for child in arguments_node.children(&mut cursor) {
-                            if child.is_named() && child.kind() != "," {
-                                args.push(child);
-                            }
-                        }
+            if function_str.starts_with("g_param_spec_")
+                && function_str != "g_param_spec_internal"
+                && let Some(arguments_node) = node.child_by_field_name("arguments")
+            {
+                let mut args = Vec::new();
+                let mut cursor = arguments_node.walk();
+                for child in arguments_node.children(&mut cursor) {
+                    if child.is_named() && child.kind() != "," {
+                        args.push(child);
+                    }
+                }
 
-                        if args.len() >= 3 {
-                            let nick_arg = args[1];
-                            let blurb_arg = args[2];
+                if args.len() >= 3 {
+                    let nick_arg = args[1];
+                    let blurb_arg = args[2];
 
-                            let nick_is_null = self.check_argument_is_null(nick_arg, source);
-                            let blurb_is_null = self.check_argument_is_null(blurb_arg, source);
+                    let nick_is_null = self.check_argument_is_null(nick_arg, source);
+                    let blurb_is_null = self.check_argument_is_null(blurb_arg, source);
 
-                            let mut issues = Vec::new();
-                            if !nick_is_null {
-                                issues.push("nick (parameter 2)");
-                            }
-                            if !blurb_is_null {
-                                issues.push("blurb (parameter 3)");
-                            }
+                    let mut issues = Vec::new();
+                    if !nick_is_null {
+                        issues.push("nick (parameter 2)");
+                    }
+                    if !blurb_is_null {
+                        issues.push("blurb (parameter 3)");
+                    }
 
-                            if !issues.is_empty() {
-                                // If both need fixing, replace both in a single fix
-                                // If only one needs fixing, replace just that one
-                                let (start, end, replacement) = if !nick_is_null && !blurb_is_null {
-                                    // Replace both: from start of nick to end of blurb
-                                    (
-                                        base_byte + nick_arg.start_byte(),
-                                        base_byte + blurb_arg.end_byte(),
-                                        "NULL, NULL".to_string(),
-                                    )
-                                } else if !nick_is_null {
-                                    // Replace only nick
-                                    (
-                                        base_byte + nick_arg.start_byte(),
-                                        base_byte + nick_arg.end_byte(),
-                                        "NULL".to_string(),
-                                    )
-                                } else {
-                                    // Replace only blurb
-                                    (
-                                        base_byte + blurb_arg.start_byte(),
-                                        base_byte + blurb_arg.end_byte(),
-                                        "NULL".to_string(),
-                                    )
-                                };
+                    if !issues.is_empty() {
+                        // If both need fixing, replace both in a single fix
+                        // If only one needs fixing, replace just that one
+                        let (start, end, replacement) = if !nick_is_null && !blurb_is_null {
+                            // Replace both: from start of nick to end of blurb
+                            (
+                                base_byte + nick_arg.start_byte(),
+                                base_byte + blurb_arg.end_byte(),
+                                "NULL, NULL".to_string(),
+                            )
+                        } else if !nick_is_null {
+                            // Replace only nick
+                            (
+                                base_byte + nick_arg.start_byte(),
+                                base_byte + nick_arg.end_byte(),
+                                "NULL".to_string(),
+                            )
+                        } else {
+                            // Replace only blurb
+                            (
+                                base_byte + blurb_arg.start_byte(),
+                                base_byte + blurb_arg.end_byte(),
+                                "NULL".to_string(),
+                            )
+                        };
 
-                                let fix = Fix {
-                                    start_byte: start,
-                                    end_byte: end,
-                                    replacement,
-                                };
+                        let fix = Fix {
+                            start_byte: start,
+                            end_byte: end,
+                            replacement,
+                        };
 
-                                violations.push(self.violation_with_fix(
-                                    file_path,
-                                    base_line + node.start_position().row,
-                                    node.start_position().column + 1,
-                                    format!(
-                                        "{} should have NULL for {}",
-                                        function_str,
-                                        issues.join(" and ")
-                                    ),
-                                    fix,
-                                ));
-                            }
-                        }
+                        violations.push(self.violation_with_fix(
+                            file_path,
+                            base_line + node.start_position().row,
+                            node.start_position().column + 1,
+                            format!(
+                                "{} should have NULL for {}",
+                                function_str,
+                                issues.join(" and ")
+                            ),
+                            fix,
+                        ));
                     }
                 }
             }

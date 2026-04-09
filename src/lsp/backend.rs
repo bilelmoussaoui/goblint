@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use gobject_lint::{ast_context::AstContext, config::Config, scanner};
 use tokio::sync::Mutex;
-use tower_lsp::{jsonrpc::Result, lsp_types::*, Client, LanguageServer};
+use tower_lsp::{Client, LanguageServer, jsonrpc::Result, lsp_types::*};
 
 pub struct GObjectBackend {
     client: Client,
@@ -108,15 +108,15 @@ impl GObjectBackend {
         }
 
         // Update the specific file in AST context
-        if let Some(ast_context) = self.ast_context.lock().await.as_mut() {
-            if let Err(e) = ast_context.update_file(&path) {
-                self.client
-                    .log_message(
-                        MessageType::WARNING,
-                        format!("Failed to update file {}: {}", path.display(), e),
-                    )
-                    .await;
-            }
+        if let Some(ast_context) = self.ast_context.lock().await.as_mut()
+            && let Err(e) = ast_context.update_file(&path)
+        {
+            self.client
+                .log_message(
+                    MessageType::WARNING,
+                    format!("Failed to update file {}: {}", path.display(), e),
+                )
+                .await;
         }
 
         // Get workspace root and config

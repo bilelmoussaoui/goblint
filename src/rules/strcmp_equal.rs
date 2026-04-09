@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct StrcmpForStringEqual;
@@ -30,19 +30,16 @@ impl Rule for StrcmpForStringEqual {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(ast_context, tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -54,49 +51,40 @@ impl StrcmpForStringEqual {
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         violations: &mut Vec<Violation>,
     ) {
         // Look for binary expressions like: strcmp(a, b) == 0
-        if node.kind() == "binary_expression" {
-            if let Some(operator) = node.child_by_field_name("operator") {
-                let op_text = ast_context.get_node_text(operator, source);
+        if node.kind() == "binary_expression"
+            && let Some(operator) = node.child_by_field_name("operator")
+        {
+            let op_text = ast_context.get_node_text(operator, ctx.source);
 
-                // Only care about == and != comparisons
-                if op_text == "==" || op_text == "!=" {
-                    // Check left side
-                    if let Some(left) = node.child_by_field_name("left") {
-                        if let Some(right) = node.child_by_field_name("right") {
-                            self.check_strcmp_comparison(
-                                ast_context,
-                                left,
-                                right,
-                                &op_text,
-                                source,
-                                file_path,
-                                base_line,
-                                base_byte,
-                                node,
-                                violations,
-                            );
-                            // Also check reverse: 0 == strcmp(a, b)
-                            self.check_strcmp_comparison(
-                                ast_context,
-                                right,
-                                left,
-                                &op_text,
-                                source,
-                                file_path,
-                                base_line,
-                                base_byte,
-                                node,
-                                violations,
-                            );
-                        }
-                    }
+            // Only care about == and != comparisons
+            if op_text == "==" || op_text == "!=" {
+                // Check left side
+                if let Some(left) = node.child_by_field_name("left")
+                    && let Some(right) = node.child_by_field_name("right")
+                {
+                    self.check_strcmp_comparison(
+                        ast_context,
+                        left,
+                        right,
+                        &op_text,
+                        ctx,
+                        node,
+                        violations,
+                    );
+                    // Also check reverse: 0 == strcmp(a, b)
+                    self.check_strcmp_comparison(
+                        ast_context,
+                        right,
+                        left,
+                        &op_text,
+                        ctx,
+                        node,
+                        violations,
+                    );
                 }
             }
         }
@@ -104,15 +92,7 @@ impl StrcmpForStringEqual {
         // Recurse into children
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(
-                ast_context,
-                child,
-                source,
-                file_path,
-                base_line,
-                base_byte,
-                violations,
-            );
+            self.check_node(ast_context, child, ctx, violations);
         }
     }
 
@@ -123,10 +103,7 @@ impl StrcmpForStringEqual {
         strcmp_side: Node,
         value_side: Node,
         operator: &str,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         parent_node: Node,
         violations: &mut Vec<Violation>,
     ) {
@@ -139,14 +116,14 @@ impl StrcmpForStringEqual {
             return;
         };
 
-        let func_name = ast_context.get_node_text(function, source);
+        let func_name = ast_context.get_node_text(function, ctx.source);
         if func_name != "strcmp" {
             return;
         }
 
         // Check if value_side is 0
         let value_text = ast_context
-            .get_node_text(value_side, source)
+            .get_node_text(value_side, ctx.source)
             .trim()
             .to_string();
         if value_text != "0" {
@@ -158,9 +135,10 @@ impl StrcmpForStringEqual {
             // Preserve spacing between function name and arguments
             let spacing_start = function.end_byte();
             let spacing_end = args.start_byte();
-            let spacing = std::str::from_utf8(&source[spacing_start..spacing_end]).unwrap_or("");
+            let spacing =
+                std::str::from_utf8(&ctx.source[spacing_start..spacing_end]).unwrap_or("");
 
-            let args_text = ast_context.get_node_text(args, source);
+            let args_text = ast_context.get_node_text(args, ctx.source);
 
             // Build the replacement preserving original spacing
             let replacement = if operator == "==" {
@@ -170,14 +148,14 @@ impl StrcmpForStringEqual {
             };
 
             let fix = Fix {
-                start_byte: base_byte + parent_node.start_byte(),
-                end_byte: base_byte + parent_node.end_byte(),
+                start_byte: ctx.base_byte + parent_node.start_byte(),
+                end_byte: ctx.base_byte + parent_node.end_byte(),
                 replacement: replacement.clone(),
             };
 
             violations.push(self.violation_with_fix(
-                file_path,
-                base_line + parent_node.start_position().row,
+                ctx.file_path,
+                ctx.base_line + parent_node.start_position().row,
                 parent_node.start_position().column + 1,
                 format!(
                     "Use {} instead of strcmp() {} 0 for string equality",

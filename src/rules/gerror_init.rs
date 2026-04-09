@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct GErrorInit;
@@ -30,19 +30,16 @@ impl Rule for GErrorInit {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(ast_context, tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -54,44 +51,32 @@ impl GErrorInit {
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         violations: &mut Vec<Violation>,
     ) {
         if let Some((var_name, is_initialized_to_null, declarator_node)) =
-            self.is_gerror_declaration(ast_context, node, source)
+            self.is_gerror_declaration(ast_context, node, ctx.source)
+            && !is_initialized_to_null
         {
-            if !is_initialized_to_null {
-                // Add = NULL right after the declarator (before the semicolon)
-                let fix = Fix {
-                    start_byte: base_byte + declarator_node.end_byte(),
-                    end_byte: base_byte + declarator_node.end_byte(),
-                    replacement: " = NULL".to_string(),
-                };
+            // Add = NULL right after the declarator (before the semicolon)
+            let fix = Fix {
+                start_byte: ctx.base_byte + declarator_node.end_byte(),
+                end_byte: ctx.base_byte + declarator_node.end_byte(),
+                replacement: " = NULL".to_string(),
+            };
 
-                violations.push(self.violation_with_fix(
-                    file_path,
-                    base_line + node.start_position().row,
-                    node.start_position().column + 1,
-                    format!("GError *{} must be initialized to NULL", var_name),
-                    fix,
-                ));
-            }
+            violations.push(self.violation_with_fix(
+                ctx.file_path,
+                ctx.base_line + node.start_position().row,
+                node.start_position().column + 1,
+                format!("GError *{} must be initialized to NULL", var_name),
+                fix,
+            ));
         }
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(
-                ast_context,
-                child,
-                source,
-                file_path,
-                base_line,
-                base_byte,
-                violations,
-            );
+            self.check_node(ast_context, child, ctx, violations);
         }
     }
 

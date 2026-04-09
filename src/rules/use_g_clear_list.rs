@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseGClearList;
@@ -30,19 +30,16 @@ impl Rule for UseGClearList {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let base_byte = func.start_byte.unwrap_or(0);
-                        self.check_node(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            base_byte,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(ast_context, tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -54,10 +51,7 @@ impl UseGClearList {
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         violations: &mut Vec<Violation>,
     ) {
         // Look for compound statements that might have g_list_free/g_slist_free
@@ -71,7 +65,7 @@ impl UseGClearList {
 
             if let Some(body_node) = body {
                 for (var_name, list_type, first_stmt, second_stmt) in
-                    self.check_free_then_null(ast_context, body_node, source)
+                    self.check_free_then_null(ast_context, body_node, ctx.source)
                 {
                     let position = first_stmt.start_position();
                     let clear_fn = if list_type == "GList" {
@@ -83,14 +77,14 @@ impl UseGClearList {
                     let replacement = format!("{} (&{}, NULL);", clear_fn, var_name);
 
                     let fix = Fix {
-                        start_byte: base_byte + first_stmt.start_byte(),
-                        end_byte: base_byte + second_stmt.end_byte(),
+                        start_byte: ctx.base_byte + first_stmt.start_byte(),
+                        end_byte: ctx.base_byte + second_stmt.end_byte(),
                         replacement: replacement.clone(),
                     };
 
                     violations.push(self.violation_with_fix(
-                        file_path,
-                        base_line + position.row,
+                        ctx.file_path,
+                        ctx.base_line + position.row,
                         position.column + 1,
                         format!(
                             "Use {} instead of {}_free and NULL assignment",
@@ -106,15 +100,7 @@ impl UseGClearList {
         // Recurse
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(
-                ast_context,
-                child,
-                source,
-                file_path,
-                base_line,
-                base_byte,
-                violations,
-            );
+            self.check_node(ast_context, child, ctx, violations);
         }
     }
 
@@ -144,10 +130,9 @@ impl UseGClearList {
             {
                 // Check if second is assignment to NULL
                 if let Some(assign_var) = self.extract_null_assignment(ast_context, second, source)
+                    && assign_var.trim() == var_name.trim()
                 {
-                    if assign_var.trim() == var_name.trim() {
-                        results.push((var_name, list_type, first, second));
-                    }
+                    results.push((var_name, list_type, first, second));
                 }
             }
         }
@@ -161,26 +146,26 @@ impl UseGClearList {
         node: Node,
         source: &[u8],
     ) -> Option<(String, &'static str)> {
-        if let Some(call) = ast_context.find_call_expression(node) {
-            if let Some(function) = call.child_by_field_name("function") {
-                let func_name = ast_context.get_node_text(function, source);
+        if let Some(call) = ast_context.find_call_expression(node)
+            && let Some(function) = call.child_by_field_name("function")
+        {
+            let func_name = ast_context.get_node_text(function, source);
 
-                let list_type = match func_name.as_str() {
-                    "g_list_free" => "GList",
-                    "g_slist_free" => "GSList",
-                    _ => return None,
-                };
+            let list_type = match func_name.as_str() {
+                "g_list_free" => "GList",
+                "g_slist_free" => "GSList",
+                _ => return None,
+            };
 
-                // Get the first argument (the list variable)
-                if let Some(args) = call.child_by_field_name("arguments") {
-                    let mut cursor = args.walk();
-                    for child in args.children(&mut cursor) {
-                        if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
-                            return Some((
-                                ast_context.get_node_text(child, source).trim().to_string(),
-                                list_type,
-                            ));
-                        }
+            // Get the first argument (the list variable)
+            if let Some(args) = call.child_by_field_name("arguments") {
+                let mut cursor = args.walk();
+                for child in args.children(&mut cursor) {
+                    if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
+                        return Some((
+                            ast_context.get_node_text(child, source).trim().to_string(),
+                            list_type,
+                        ));
                     }
                 }
             }
@@ -194,14 +179,13 @@ impl UseGClearList {
         node: Node,
         source: &[u8],
     ) -> Option<String> {
-        if let Some(assignment) = self.find_assignment(node) {
-            if let Some(left) = assignment.child_by_field_name("left") {
-                if let Some(right) = assignment.child_by_field_name("right") {
-                    let right_text = ast_context.get_node_text(right, source);
-                    if right_text.trim() == "NULL" {
-                        return Some(ast_context.get_node_text(left, source).trim().to_string());
-                    }
-                }
+        if let Some(assignment) = self.find_assignment(node)
+            && let Some(left) = assignment.child_by_field_name("left")
+            && let Some(right) = assignment.child_by_field_name("right")
+        {
+            let right_text = ast_context.get_node_text(right, source);
+            if right_text.trim() == "NULL" {
+                return Some(ast_context.get_node_text(left, source).trim().to_string());
             }
         }
         None

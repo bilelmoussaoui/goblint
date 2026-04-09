@@ -26,22 +26,22 @@ impl Rule for GTaskSourceTag {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let root = tree.root_node();
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let root = tree.root_node();
 
-                        if let Some(body) = ast_context.find_body(root) {
-                            let task_vars =
-                                self.find_gtask_new_calls(ast_context, body, func_source);
+                    if let Some(body) = ast_context.find_body(root) {
+                        let task_vars = self.find_gtask_new_calls(ast_context, body, func_source);
 
-                            for (var_name, line_offset, col) in task_vars {
-                                if !self.has_set_source_tag_call(
-                                    ast_context,
-                                    body,
-                                    &var_name,
-                                    func_source,
-                                ) {
-                                    violations.push(self.violation(
+                        for (var_name, line_offset, col) in task_vars {
+                            if !self.has_set_source_tag_call(
+                                ast_context,
+                                body,
+                                &var_name,
+                                func_source,
+                            ) {
+                                violations.push(self.violation(
                                         path,
                                         func.line + line_offset - 1,
                                         col,
@@ -50,7 +50,6 @@ impl Rule for GTaskSourceTag {
                                             var_name, var_name
                                         ),
                                     ));
-                                }
                             }
                         }
                     }
@@ -70,32 +69,25 @@ impl GTaskSourceTag {
         let mut results = Vec::new();
 
         // Look for assignments like: task = g_task_new(...)
-        if node.kind() == "assignment_expression" {
-            if let Some(right) = node.child_by_field_name("right") {
-                if self.is_gtask_new_call(ast_context, right, source) {
-                    if let Some(left) = node.child_by_field_name("left") {
-                        let var_name = ast_context.get_node_text(left, source);
-                        let position = node.start_position();
-                        results.push((var_name, position.row + 1, position.column + 1));
-                    }
-                }
-            }
+        if node.kind() == "assignment_expression"
+            && let Some(right) = node.child_by_field_name("right")
+            && self.is_gtask_new_call(ast_context, right, source)
+            && let Some(left) = node.child_by_field_name("left")
+        {
+            let var_name = ast_context.get_node_text(left, source);
+            let position = node.start_position();
+            results.push((var_name, position.row + 1, position.column + 1));
         }
 
         // Look for declarations like: GTask *task = g_task_new(...)
-        if node.kind() == "init_declarator" {
-            if let Some(value) = node.child_by_field_name("value") {
-                if self.is_gtask_new_call(ast_context, value, source) {
-                    if let Some(declarator) = node.child_by_field_name("declarator") {
-                        if let Some(var_name) =
-                            ast_context.extract_variable_name(declarator, source)
-                        {
-                            let position = node.start_position();
-                            results.push((var_name, position.row + 1, position.column + 1));
-                        }
-                    }
-                }
-            }
+        if node.kind() == "init_declarator"
+            && let Some(value) = node.child_by_field_name("value")
+            && self.is_gtask_new_call(ast_context, value, source)
+            && let Some(declarator) = node.child_by_field_name("declarator")
+            && let Some(var_name) = ast_context.extract_variable_name(declarator, source)
+        {
+            let position = node.start_position();
+            results.push((var_name, position.row + 1, position.column + 1));
         }
 
         // Recursively check children
@@ -128,18 +120,18 @@ impl GTaskSourceTag {
         source: &[u8],
     ) -> bool {
         // Look for g_task_set_source_tag(var_name, ...)
-        if node.kind() == "call_expression" {
-            if let Some(function) = node.child_by_field_name("function") {
-                let func_text = ast_context.get_node_text(function, source);
+        if node.kind() == "call_expression"
+            && let Some(function) = node.child_by_field_name("function")
+        {
+            let func_text = ast_context.get_node_text(function, source);
 
-                if func_text == "g_task_set_source_tag" {
-                    // Check if first argument matches our variable
-                    if let Some(arguments) = node.child_by_field_name("arguments") {
-                        let args_text = ast_context.get_node_text(arguments, source);
-                        // Simple check: does the arguments contain our variable name?
-                        if args_text.contains(var_name) {
-                            return true;
-                        }
+            if func_text == "g_task_set_source_tag" {
+                // Check if first argument matches our variable
+                if let Some(arguments) = node.child_by_field_name("arguments") {
+                    let args_text = ast_context.get_node_text(arguments, source);
+                    // Simple check: does the arguments contain our variable name?
+                    if args_text.contains(var_name) {
+                        return true;
                     }
                 }
             }

@@ -26,10 +26,10 @@ impl Rule for DeprecatedAddPrivate {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_node(tree.root_node(), func_source, path, func.line, violations);
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    self.check_node(tree.root_node(), func_source, path, func.line, violations);
                 }
             }
         }
@@ -44,14 +44,14 @@ impl DeprecatedAddPrivate {
         base_line: usize,
         violations: &mut Vec<Violation>,
     ) {
-        if node.kind() == "call_expression" {
-            if let Some(function) = node.child_by_field_name("function") {
-                let func_text = &source[function.byte_range()];
-                if let Ok(text) = std::str::from_utf8(func_text) {
-                    if text == "g_type_class_add_private" {
-                        violations.push(self.violation(file_path, base_line + node.start_position().row, node.start_position().column + 1, "g_type_class_add_private is deprecated since GLib 2.58. Use G_DEFINE_TYPE_WITH_PRIVATE or G_ADD_PRIVATE instead".to_owned()));
-                    }
-                }
+        if node.kind() == "call_expression"
+            && let Some(function) = node.child_by_field_name("function")
+        {
+            let func_text = &source[function.byte_range()];
+            if let Ok(text) = std::str::from_utf8(func_text)
+                && text == "g_type_class_add_private"
+            {
+                violations.push(self.violation(file_path, base_line + node.start_position().row, node.start_position().column + 1, "g_type_class_add_private is deprecated since GLib 2.58. Use G_DEFINE_TYPE_WITH_PRIVATE or G_ADD_PRIVATE instead".to_owned()));
             }
         }
 

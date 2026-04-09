@@ -35,28 +35,24 @@ impl Rule for DisposeFinalizeChainsUp {
                     continue;
                 };
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        let root = tree.root_node();
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    let root = tree.root_node();
 
-                        // Verify it's a GObject virtual method
-                        if !self.is_gobject_virtual_method_from_source(
-                            ast_context,
-                            root,
-                            func_source,
-                        ) {
-                            continue;
-                        }
+                    // Verify it's a GObject virtual method
+                    if !self.is_gobject_virtual_method_from_source(ast_context, root, func_source) {
+                        continue;
+                    }
 
-                        // Find the body
-                        if let Some(body) = ast_context.find_body(root) {
-                            if !self.has_chainup_call(ast_context, body, func_source, method_type) {
-                                violations.push(self.violation(path, func.line, 1, format!(
+                    // Find the body
+                    if let Some(body) = ast_context.find_body(root)
+                        && !self.has_chainup_call(ast_context, body, func_source, method_type)
+                    {
+                        violations.push(self.violation(path, func.line, 1, format!(
                                         "{} must chain up to parent class (e.g., G_OBJECT_CLASS (parent_class)->{} (object))",
                                         func.name, method_type
                                     )));
-                            }
-                        }
                     }
                 }
             }
@@ -188,13 +184,13 @@ impl DisposeFinalizeChainsUp {
         node: Node,
         source: &[u8],
     ) -> bool {
-        if let Some(func_decl) = self.find_function_declarator(node) {
-            if let Some(parameters) = func_decl.child_by_field_name("parameters") {
-                let mut cursor = parameters.walk();
-                for child in parameters.children(&mut cursor) {
-                    if child.kind() == "parameter_declaration" {
-                        return self.is_gobject_parameter(ast_context, child, source);
-                    }
+        if let Some(func_decl) = self.find_function_declarator(node)
+            && let Some(parameters) = func_decl.child_by_field_name("parameters")
+        {
+            let mut cursor = parameters.walk();
+            for child in parameters.children(&mut cursor) {
+                if child.kind() == "parameter_declaration" {
+                    return self.is_gobject_parameter(ast_context, child, source);
                 }
             }
         }

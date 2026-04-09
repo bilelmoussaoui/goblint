@@ -28,17 +28,17 @@ impl Rule for SuggestGAutoptrGoto {
                     continue;
                 }
 
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    if let Some(tree) = ast_context.parse_c_source(func_source) {
-                        self.check_function(
-                            ast_context,
-                            tree.root_node(),
-                            func_source,
-                            path,
-                            func.line,
-                            violations,
-                        );
-                    }
+                if let Some(func_source) = ast_context.get_function_source(path, func)
+                    && let Some(tree) = ast_context.parse_c_source(func_source)
+                {
+                    self.check_function(
+                        ast_context,
+                        tree.root_node(),
+                        func_source,
+                        path,
+                        func.line,
+                        violations,
+                    );
                 }
             }
         }
@@ -69,12 +69,13 @@ impl SuggestGAutoptrGoto {
             // Match: if allocated var has goto to cleanup label that frees it
             for (var_name, (var_type, decl_node)) in &allocated_vars {
                 for goto_label in &goto_labels {
-                    if let Some(cleanup_vars) = cleanup_labels.get(goto_label) {
-                        if cleanup_vars.contains(var_name) {
-                            // Extract base type name (strip pointer and qualifiers)
-                            let base_type = self.extract_base_type(var_type);
-                            let position = decl_node.start_position();
-                            violations.push(self.violation(
+                    if let Some(cleanup_vars) = cleanup_labels.get(goto_label)
+                        && cleanup_vars.contains(var_name)
+                    {
+                        // Extract base type name (strip pointer and qualifiers)
+                        let base_type = self.extract_base_type(var_type);
+                        let position = decl_node.start_position();
+                        violations.push(self.violation(
                                 file_path,
                                 base_line + position.row,
                                 position.column + 1,
@@ -83,7 +84,6 @@ impl SuggestGAutoptrGoto {
                                     base_type, var_name
                                 ),
                             ));
-                        }
                     }
                 }
             }
@@ -139,14 +139,13 @@ impl SuggestGAutoptrGoto {
                 // *b = NULL;)
                 let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {
-                    if child.kind() == "init_declarator" || child.kind() == "pointer_declarator" {
-                        if let Some(var_name) =
+                    if (child.kind() == "init_declarator" || child.kind() == "pointer_declarator")
+                        && let Some(var_name) =
                             self.extract_var_name_from_declarator(ast_context, child, source)
-                        {
-                            // Only track simple identifiers, not field expressions
-                            if !var_name.contains("->") && !var_name.contains(".") {
-                                result.insert(var_name, (type_text.clone(), node));
-                            }
+                    {
+                        // Only track simple identifiers, not field expressions
+                        if !var_name.contains("->") && !var_name.contains(".") {
+                            result.insert(var_name, (type_text.clone(), node));
                         }
                     }
                 }
@@ -200,40 +199,30 @@ impl SuggestGAutoptrGoto {
         // Look for assignments or initializations of local vars with allocation calls
 
         // Pattern 1: Type *var = allocation_call();
-        if node.kind() == "declaration" {
-            if let Some(init_declarator) = self.find_init_declarator(node) {
-                if let Some(value) = init_declarator.child_by_field_name("value") {
-                    if ast_context.is_allocation_call(value, source) {
-                        if let Some(declarator) = init_declarator.child_by_field_name("declarator")
-                        {
-                            if let Some(var_name) =
-                                self.extract_var_name(ast_context, declarator, source)
-                            {
-                                if let Some((type_text, decl_node)) = local_vars.get(&var_name) {
-                                    result
-                                        .insert(var_name.clone(), (type_text.clone(), *decl_node));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        if node.kind() == "declaration"
+            && let Some(init_declarator) = self.find_init_declarator(node)
+            && let Some(value) = init_declarator.child_by_field_name("value")
+            && ast_context.is_allocation_call(value, source)
+            && let Some(declarator) = init_declarator.child_by_field_name("declarator")
+            && let Some(var_name) = self.extract_var_name(ast_context, declarator, source)
+            && let Some((type_text, decl_node)) = local_vars.get(&var_name)
+        {
+            result.insert(var_name.clone(), (type_text.clone(), *decl_node));
         }
 
         // Pattern 2: var = allocation_call();
-        if node.kind() == "assignment_expression" {
-            if let Some(left) = node.child_by_field_name("left") {
-                let var_name = ast_context.get_node_text(left, source);
-                // Only simple identifiers, not field expressions
-                if !var_name.contains("->") && !var_name.contains(".") {
-                    if let Some(right) = node.child_by_field_name("right") {
-                        if ast_context.is_allocation_call(right, source) {
-                            if let Some((type_text, decl_node)) = local_vars.get(&var_name) {
-                                result.insert(var_name.clone(), (type_text.clone(), *decl_node));
-                            }
-                        }
-                    }
-                }
+        if node.kind() == "assignment_expression"
+            && let Some(left) = node.child_by_field_name("left")
+        {
+            let var_name = ast_context.get_node_text(left, source);
+            // Only simple identifiers, not field expressions
+            if !var_name.contains("->")
+                && !var_name.contains(".")
+                && let Some(right) = node.child_by_field_name("right")
+                && ast_context.is_allocation_call(right, source)
+                && let Some((type_text, decl_node)) = local_vars.get(&var_name)
+            {
+                result.insert(var_name.clone(), (type_text.clone(), *decl_node));
             }
         }
 
@@ -327,17 +316,17 @@ impl SuggestGAutoptrGoto {
         source: &[u8],
         result: &mut HashMap<String, Vec<String>>,
     ) {
-        if node.kind() == "labeled_statement" {
-            if let Some(label) = node.child_by_field_name("label") {
-                let label_name = ast_context.get_node_text(label, source);
+        if node.kind() == "labeled_statement"
+            && let Some(label) = node.child_by_field_name("label")
+        {
+            let label_name = ast_context.get_node_text(label, source);
 
-                // Find cleanup calls in the label body
-                let mut cleanup_vars = Vec::new();
-                self.find_cleanup_calls(ast_context, node, source, &mut cleanup_vars);
+            // Find cleanup calls in the label body
+            let mut cleanup_vars = Vec::new();
+            self.find_cleanup_calls(ast_context, node, source, &mut cleanup_vars);
 
-                if !cleanup_vars.is_empty() {
-                    result.insert(label_name, cleanup_vars);
-                }
+            if !cleanup_vars.is_empty() {
+                result.insert(label_name, cleanup_vars);
             }
         }
 
