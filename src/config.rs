@@ -196,6 +196,9 @@ pub struct RulesConfig {
     pub use_g_clear_list: RuleConfig,
 
     #[serde(default)]
+    pub use_g_file_load_bytes: RuleConfig,
+
+    #[serde(default)]
     pub use_g_object_new_with_properties: RuleConfig,
 
     #[serde(default)]

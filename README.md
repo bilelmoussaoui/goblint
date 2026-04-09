@@ -52,6 +52,7 @@ All rules are enabled by default. Run `gobject-lint --list-rules` to see their c
 - **suggest_g_autofree** - Suggest g_autofree for string/buffer types instead of manual g_free
 - **use_g_clear_handle_id** - Suggest g_clear_handle_id instead of manual cleanup and zero assignment
 - **use_g_clear_list** - Suggest g_clear_list/g_clear_slist instead of manual g_list_free/g_slist_free and NULL assignment
+- **use_g_file_load_bytes** - Suggest g_file_load_bytes instead of g_file_load_contents + g_bytes_new_take
 - **use_g_object_new_with_properties** - Suggest setting properties in g_object_new instead of separate g_object_set calls
 - **use_g_object_notify_by_pspec** - Suggest g_object_notify_by_pspec instead of g_object_notify for better performance
 - **use_g_string_free_and_steal** - Suggests g_string_free_and_steal instead of g_string_free (..., FALSE) for better readability

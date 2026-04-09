@@ -40,6 +40,7 @@ pub mod use_clear_functions;
 pub mod use_g_clear_error;
 pub mod use_g_clear_handle_id;
 pub mod use_g_clear_list;
+pub mod use_g_file_load_bytes;
 pub mod use_g_object_new_with_properties;
 pub mod use_g_object_notify_by_pspec;
 pub mod use_g_set_str;
