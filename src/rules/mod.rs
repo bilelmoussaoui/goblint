@@ -54,12 +54,12 @@ pub struct CheckContext<'a> {
     pub base_byte: usize,
 }
 
-pub mod chainup;
 pub mod deprecated_add_private;
 pub mod g_param_spec_null_nick_blurb;
 pub mod g_param_spec_static_strings;
 pub mod gdeclare_semicolon;
 pub mod gerror_init;
+pub mod gobject_virtual_methods_chain_up;
 pub mod gtask_source_tag;
 pub mod matching_declare_define;
 pub mod missing_implementation;
@@ -89,12 +89,12 @@ pub mod use_g_source_constants;
 pub mod use_g_strcmp0;
 pub mod use_g_string_free_and_steal;
 
-pub use chainup::DisposeFinalizeChainsUp;
 pub use deprecated_add_private::DeprecatedAddPrivate;
 pub use g_param_spec_null_nick_blurb::GParamSpecNullNickBlurb;
 pub use g_param_spec_static_strings::GParamSpecStaticStrings;
 pub use gdeclare_semicolon::GDeclareSemicolon;
 pub use gerror_init::GErrorInit;
+pub use gobject_virtual_methods_chain_up::GObjectVirtualMethodsChainUp;
 pub use gtask_source_tag::GTaskSourceTag;
 pub use matching_declare_define::MatchingDeclareDefine;
 pub use missing_implementation::MissingImplementation;

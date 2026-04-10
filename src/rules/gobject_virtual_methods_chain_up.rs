@@ -3,15 +3,15 @@ use tree_sitter::Node;
 use super::Rule;
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
-pub struct DisposeFinalizeChainsUp;
+pub struct GObjectVirtualMethodsChainUp;
 
-impl Rule for DisposeFinalizeChainsUp {
+impl Rule for GObjectVirtualMethodsChainUp {
     fn name(&self) -> &'static str {
-        "dispose_finalize_chains_up"
+        "gobject_virtual_methods_chain_up"
     }
 
     fn description(&self) -> &'static str {
-        "Ensure dispose/finalize methods chain up to parent class"
+        "Ensure dispose/finalize/constructed methods chain up to parent class"
     }
 
     fn category(&self) -> super::Category {
@@ -30,11 +30,13 @@ impl Rule for DisposeFinalizeChainsUp {
                     continue;
                 }
 
-                // Check if function name ends with _dispose or _finalize
+                // Check if function name ends with _dispose, _finalize, or _constructed
                 let method_type = if func.name.ends_with("_dispose") {
                     "dispose"
                 } else if func.name.ends_with("_finalize") {
                     "finalize"
+                } else if func.name.ends_with("_constructed") {
+                    "constructed"
                 } else {
                     continue;
                 };
@@ -64,7 +66,7 @@ impl Rule for DisposeFinalizeChainsUp {
     }
 }
 
-impl DisposeFinalizeChainsUp {
+impl GObjectVirtualMethodsChainUp {
     fn find_function_declarator<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
         if node.kind() == "function_declarator" {
             return Some(node);

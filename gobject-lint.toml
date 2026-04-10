@@ -36,8 +36,8 @@ g_param_spec_null_nick_blurb = true
 # Ensure g_param_spec_* calls use G_PARAM_STATIC_STRINGS flag for string literals (saves memory)
 g_param_spec_static_strings = true
 
-# Ensure dispose/finalize methods chain up to parent class
-dispose_finalize_chains_up = true
+# Ensure dispose/finalize/constructed methods chain up to parent class
+gobject_virtual_methods_chain_up = true
 
 # Suggest g_clear_object/g_clear_pointer instead of manual unref and NULL assignment (requires GLib >= 2.28)
 use_clear_functions = true

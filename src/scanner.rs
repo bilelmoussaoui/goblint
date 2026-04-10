@@ -116,7 +116,7 @@ macro_rules! for_each_rule {
             (g_param_spec_static_strings, GParamSpecStaticStrings, 2, 0),
             (gerror_init, GErrorInit, 2, 0),
             (property_enum_zero, PropertyEnumZero, 2, 0),
-            (dispose_finalize_chains_up, DisposeFinalizeChainsUp, 2, 0),
+            (gobject_virtual_methods_chain_up, GObjectVirtualMethodsChainUp, 2, 0),
             (gtask_source_tag, GTaskSourceTag, 2, 36),
             (unnecessary_null_check, UnnecessaryNullCheck, 2, 0),
             (strcmp_for_string_equal, StrcmpForStringEqual, 2, 0),

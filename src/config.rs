@@ -149,8 +149,8 @@ pub struct RulesConfig {
     #[serde(default)]
     pub g_param_spec_static_strings: RuleConfig,
 
-    #[serde(default)]
-    pub dispose_finalize_chains_up: RuleConfig,
+    #[serde(default, alias = "dispose_finalize_chains_up")]
+    pub gobject_virtual_methods_chain_up: RuleConfig,
 
     #[serde(default)]
     pub use_clear_functions: RuleConfig,
