@@ -107,6 +107,12 @@ suggest_g_autoptr_inline_cleanup = true
 # Suggest g_autofree for string/buffer types instead of manual g_free (requires GLib >= 2.44)
 suggest_g_autofree = true
 
+# Suggest g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE (requires GLib >= 2.74)
+suggest_g_source_once = true
+
+# Use G_SOURCE_CONTINUE/G_SOURCE_REMOVE instead of TRUE/FALSE in GSourceFunc callbacks
+use_g_source_constants = true
+
 # Suggest g_clear_handle_id instead of manual cleanup and zero assignment (requires GLib >= 2.56)
 use_g_clear_handle_id = true
 

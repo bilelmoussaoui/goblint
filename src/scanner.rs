@@ -102,6 +102,8 @@ macro_rules! for_each_rule {
             (use_g_object_new_with_properties, UseGObjectNewWithProperties, 2, 0),
             (use_g_object_notify_by_pspec, UseGObjectNotifyByPspec, 2, 26),
             (use_g_string_free_and_steal, UseGStringFreeAndSteal, 2, 76),
+            (suggest_g_source_once, SuggestGSourceOnce, 2, 74),
+            (use_g_source_constants, UseGSourceConstants, 2, 0),
         }
     };
 }

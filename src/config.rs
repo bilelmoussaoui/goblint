@@ -219,6 +219,12 @@ pub struct RulesConfig {
     pub suggest_g_autofree: RuleConfig,
 
     #[serde(default)]
+    pub suggest_g_source_once: RuleConfig,
+
+    #[serde(default)]
+    pub use_g_source_constants: RuleConfig,
+
+    #[serde(default)]
     pub use_g_clear_handle_id: RuleConfig,
 
     #[serde(default)]

@@ -28,6 +28,8 @@ Rules that suggest more idiomatic ways to write code.
 - **use_explicit_default_flags** - Use explicit default flag constants (e.g., G_APPLICATION_DEFAULT_FLAGS) instead of 0
 - **strcmp_for_string_equal** - Suggest g_str_equal() instead of strcmp() == 0 for better readability
 - **use_g_string_free_and_steal** - Suggests g_string_free_and_steal instead of g_string_free (..., FALSE) for better readability
+- **suggest_g_source_once** - Suggest using g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE
+- **use_g_source_constants** - Use G_SOURCE_CONTINUE/G_SOURCE_REMOVE instead of TRUE/FALSE in GSourceFunc callbacks
 
 ## Complexity
 
