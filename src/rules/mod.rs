@@ -30,6 +30,7 @@ pub mod gtask_source_tag;
 pub mod matching_declare_define;
 pub mod missing_implementation;
 pub mod prefer_g_new;
+pub mod prefer_g_settings_typed;
 pub mod prefer_g_value_set_static_string;
 pub mod prefer_g_variant_new_typed;
 pub mod property_enum_zero;
