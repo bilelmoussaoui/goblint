@@ -79,6 +79,12 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Canonicalize directory path for consistent path handling
+    let project_root = args
+        .directory
+        .canonicalize()
+        .unwrap_or(args.directory.clone());
+
     // Build ignore matcher
     let ignore_matcher = config.build_ignore_matcher()?;
 
@@ -101,14 +107,14 @@ fn main() -> Result<()> {
         sp.set_message("Parsing files...");
     }
     let ast_context = ast_context::AstContext::build_with_ignore(
-        &args.directory,
+        &project_root,
         &ignore_matcher,
         spinner.as_ref(),
     )?;
 
     // Run AST-based rules
     let violations =
-        scanner::scan_with_ast(&ast_context, &config, &args.directory, spinner.as_ref())?;
+        scanner::scan_with_ast(&ast_context, &config, &project_root, spinner.as_ref())?;
 
     if let Some(sp) = spinner {
         sp.finish_and_clear();
@@ -150,7 +156,7 @@ fn main() -> Result<()> {
             reporter::report_violations(&violations, args.verbose, &config);
         }
         OutputFormat::Sarif => {
-            let sarif_output = output::sarif::generate_sarif(&violations, &config, &args.directory);
+            let sarif_output = output::sarif::generate_sarif(&violations, &config, &project_root);
             println!("{}", sarif_output);
         }
     }
