@@ -49,6 +49,58 @@ g_param_spec_null_nick_blurb = true
 
 See gobject-lint.toml for all the supported rules/configurations.
 
+## CI/CD Integration
+
+### GitHub Actions
+
+Integrate gobject-lint with GitHub Code Scanning using SARIF output:
+
+```yaml
+name: GObject Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write  # Required for uploading SARIF results
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install gobject-lint
+        run: |
+          cargo install --git https://github.com/bilelmoussaoui/gobject-lint gobject-lint
+
+      - name: Run gobject-lint
+        run: |
+          gobject-lint --format sarif > gobject-lint.sarif
+        continue-on-error: true  # Don't fail the workflow on lint errors
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gobject-lint.sarif
+          category: gobject-lint
+```
+
+The results will appear in the "Security" tab under "Code scanning alerts" for your repository, and as inline comments on pull requests.
+
+You can also filter by category:
+
+```bash
+# Run only correctness rules for critical checks
+gobject-lint --category correctness --format sarif > results.sarif
+
+# Run only performance rules
+gobject-lint --category perf --format sarif > results.sarif
+```
+
 ## LSP Server
 
 For real-time linting in your editor:
