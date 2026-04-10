@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::Deserialize;
 
+use crate::rules::*;
+
 /// Parse a GLib version string like "2.76" into (major, minor)
 fn parse_glib_version(version: &str) -> Option<(u32, u32)> {
     let parts: Vec<&str> = version.split('.').collect();
@@ -308,5 +310,21 @@ impl Config {
         }
 
         crate::for_each_rule!(impl_enable_only_rules);
+    }
+
+    /// Filter rules by category, disabling all others
+    pub fn filter_by_category(&mut self, category: crate::rules::Category) -> Result<()> {
+        macro_rules! impl_filter_by_category {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+                {
+                    $(
+                        self.rules.$config_field.enabled = $rule_type.category() == category;
+                    )*
+                }
+            };
+        }
+
+        crate::for_each_rule!(impl_filter_by_category);
+        Ok(())
     }
 }

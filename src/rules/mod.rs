@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::{ast_context::AstContext, config::Config};
 
 /// Rule category (similar to Clippy's lint categories)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Category {
     /// Code that is outright wrong or very useless
     Correctness,
@@ -86,6 +86,39 @@ pub mod use_g_object_notify_by_pspec;
 pub mod use_g_set_str;
 pub mod use_g_strcmp0;
 pub mod use_g_string_free_and_steal;
+
+pub use chainup::DisposeFinalizeChainsUp;
+pub use deprecated_add_private::DeprecatedAddPrivate;
+pub use g_param_spec_null_nick_blurb::GParamSpecNullNickBlurb;
+pub use g_param_spec_static_strings::GParamSpecStaticStrings;
+pub use gdeclare_semicolon::GDeclareSemicolon;
+pub use gerror_init::GErrorInit;
+pub use gtask_source_tag::GTaskSourceTag;
+pub use matching_declare_define::MatchingDeclareDefine;
+pub use missing_implementation::MissingImplementation;
+pub use prefer_g_new::PreferGNew;
+pub use prefer_g_object_class_install_properties::PreferGObjectClassInstallProperties;
+pub use prefer_g_settings_typed::PreferGSettingsTyped;
+pub use prefer_g_value_set_static_string::PreferGValueSetStaticString;
+pub use prefer_g_variant_new_typed::PreferGVariantNewTyped;
+pub use property_enum_zero::PropertyEnumZero;
+pub use strcmp_equal::StrcmpForStringEqual;
+pub use suggest_g_autofree::SuggestGAutofree;
+pub use suggest_g_autoptr_goto::SuggestGAutoptrGoto;
+pub use suggest_g_autoptr_inline::SuggestGAutoptrInline;
+pub use unnecessary_null_check::UnnecessaryNullCheck;
+pub use use_clear_functions::UseClearFunctions;
+pub use use_explicit_default_flags::UseExplicitDefaultFlags;
+pub use use_g_clear_error::SuggestGAutoptrError;
+pub use use_g_clear_handle_id::UseGClearHandleId;
+pub use use_g_clear_list::UseGClearList;
+pub use use_g_clear_weak_pointer::UseGClearWeakPointer;
+pub use use_g_file_load_bytes::UseGFileLoadBytes;
+pub use use_g_object_new_with_properties::UseGObjectNewWithProperties;
+pub use use_g_object_notify_by_pspec::UseGObjectNotifyByPspec;
+pub use use_g_set_str::UseGSetStr;
+pub use use_g_strcmp0::UseGStrcmp0;
+pub use use_g_string_free_and_steal::UseGStringFreeAndSteal;
 
 #[derive(Debug, Clone)]
 pub struct Violation {

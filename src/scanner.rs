@@ -7,30 +7,7 @@ use indicatif::ProgressBar;
 use crate::{
     ast_context::AstContext,
     config::{Config, RuleConfig},
-    rules::{
-        Rule, Violation, chainup::DisposeFinalizeChainsUp,
-        deprecated_add_private::DeprecatedAddPrivate,
-        g_param_spec_null_nick_blurb::GParamSpecNullNickBlurb,
-        g_param_spec_static_strings::GParamSpecStaticStrings,
-        gdeclare_semicolon::GDeclareSemicolon, gerror_init::GErrorInit,
-        gtask_source_tag::GTaskSourceTag, matching_declare_define::MatchingDeclareDefine,
-        missing_implementation::MissingImplementation, prefer_g_new::PreferGNew,
-        prefer_g_object_class_install_properties::PreferGObjectClassInstallProperties,
-        prefer_g_settings_typed::PreferGSettingsTyped,
-        prefer_g_value_set_static_string::PreferGValueSetStaticString,
-        prefer_g_variant_new_typed::PreferGVariantNewTyped, property_enum_zero::PropertyEnumZero,
-        strcmp_equal::StrcmpForStringEqual, suggest_g_autofree::SuggestGAutofree,
-        suggest_g_autoptr_goto::SuggestGAutoptrGoto,
-        suggest_g_autoptr_inline::SuggestGAutoptrInline,
-        unnecessary_null_check::UnnecessaryNullCheck, use_clear_functions::UseClearFunctions,
-        use_explicit_default_flags::UseExplicitDefaultFlags,
-        use_g_clear_error::SuggestGAutoptrError, use_g_clear_handle_id::UseGClearHandleId,
-        use_g_clear_list::UseGClearList, use_g_clear_weak_pointer::UseGClearWeakPointer,
-        use_g_file_load_bytes::UseGFileLoadBytes,
-        use_g_object_new_with_properties::UseGObjectNewWithProperties,
-        use_g_object_notify_by_pspec::UseGObjectNotifyByPspec, use_g_set_str::UseGSetStr,
-        use_g_strcmp0::UseGStrcmp0, use_g_string_free_and_steal::UseGStringFreeAndSteal,
-    },
+    rules::*,
 };
 
 /// Extract a source snippet from a file at the given line

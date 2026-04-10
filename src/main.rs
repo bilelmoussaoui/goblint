@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use gobject_lint::{ast_context, config, fixer, reporter, scanner};
+use gobject_lint::{ast_context, config, fixer, reporter, rules::Category, scanner};
 use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Parser, Debug)]
@@ -33,6 +33,10 @@ struct Args {
     #[arg(long, value_name = "RULE")]
     only: Vec<String>,
 
+    /// Filter rules by category
+    #[arg(long, value_name = "CATEGORY")]
+    category: Option<Category>,
+
     /// Automatically apply fixes for violations
     #[arg(long)]
     fix: bool,
@@ -50,6 +54,11 @@ fn main() -> Result<()> {
     // Apply --only filter if specified
     if !args.only.is_empty() {
         config.enable_only_rules(&args.only);
+    }
+
+    // Apply --category filter if specified
+    if let Some(category) = args.category {
+        config.filter_by_category(category)?;
     }
 
     // Handle --list-rules
