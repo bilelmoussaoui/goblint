@@ -33,6 +33,9 @@ ignore = [
 # Ensure g_param_spec_* functions have NULL for nick and blurb parameters
 g_param_spec_null_nick_blurb = true
 
+# Ensure g_param_spec_* calls use G_PARAM_STATIC_STRINGS flag for string literals (saves memory)
+g_param_spec_static_strings = true
+
 # Ensure dispose/finalize methods chain up to parent class
 dispose_finalize_chains_up = true
 
@@ -68,6 +71,9 @@ gdeclare_semicolon = true
 
 # Suggest g_new/g_new0 instead of g_malloc/g_malloc0 with sizeof for type safety
 prefer_g_new = true
+
+# Suggest g_object_class_install_properties for multiple g_object_class_install_property calls (requires GLib >= 2.26)
+prefer_g_object_class_install_properties = true
 
 # Prefer g_settings_get/set_string/boolean/etc over g_settings_get/set_value with g_variant (requires GLib >= 2.26)
 prefer_g_settings_typed = true

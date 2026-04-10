@@ -36,6 +36,7 @@ All rules are enabled by default. Run `gobject-lint --list-rules` to see their c
 - **deprecated_add_private** - Detect deprecated g_type_class_add_private (use G_DEFINE_TYPE_WITH_PRIVATE instead)
 - **matching_declare_define** - Ensure G_DECLARE_* and G_DEFINE_* macros are used consistently
 - **prefer_g_new** - Suggest g_new/g_new0 instead of g_malloc/g_malloc0 with sizeof for type safety
+- **prefer_g_object_class_install_properties** - Suggest g_object_class_install_properties for multiple g_object_class_install_property calls
 - **prefer_g_settings_typed** - Prefer g_settings_get/set_string/boolean/etc over g_settings_get/set_value with g_variant
 - **prefer_g_value_set_static_string** - Use g_value_set_static_string for string literals instead of g_value_set_string
 - **prefer_g_variant_new_typed** - Prefer g_variant_new_string/boolean/etc over g_variant_new with format strings
@@ -43,6 +44,7 @@ All rules are enabled by default. Run `gobject-lint --list-rules` to see their c
 - **use_clear_functions** - Suggest g_clear_object/g_clear_pointer instead of manual unref and NULL assignment
 - **use_explicit_default_flags** - Use explicit default flag constants (e.g., G_APPLICATION_DEFAULT_FLAGS) instead of 0
 - **g_param_spec_null_nick_blurb** - Ensure g_param_spec_* functions have NULL for nick and blurb parameters
+- **g_param_spec_static_strings** - Ensure g_param_spec_* calls use G_PARAM_STATIC_STRINGS flag for string literals
 - **gerror_init** - Ensure GError* variables are initialized to NULL
 - **property_enum_zero** - Ensure property enums start with PROP_0, not PROP_NAME = 0
 - **dispose_finalize_chains_up** - Ensure dispose/finalize methods chain up to parent class

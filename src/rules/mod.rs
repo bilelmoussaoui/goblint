@@ -24,12 +24,14 @@ pub struct CheckContext<'a> {
 pub mod chainup;
 pub mod deprecated_add_private;
 pub mod g_param_spec_null_nick_blurb;
+pub mod g_param_spec_static_strings;
 pub mod gdeclare_semicolon;
 pub mod gerror_init;
 pub mod gtask_source_tag;
 pub mod matching_declare_define;
 pub mod missing_implementation;
 pub mod prefer_g_new;
+pub mod prefer_g_object_class_install_properties;
 pub mod prefer_g_settings_typed;
 pub mod prefer_g_value_set_static_string;
 pub mod prefer_g_variant_new_typed;

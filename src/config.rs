@@ -136,6 +136,9 @@ pub struct RulesConfig {
     pub g_param_spec_null_nick_blurb: RuleConfig,
 
     #[serde(default)]
+    pub g_param_spec_static_strings: RuleConfig,
+
+    #[serde(default)]
     pub dispose_finalize_chains_up: RuleConfig,
 
     #[serde(default)]
@@ -173,6 +176,9 @@ pub struct RulesConfig {
 
     #[serde(default)]
     pub prefer_g_new: RuleConfig,
+
+    #[serde(default)]
+    pub prefer_g_object_class_install_properties: RuleConfig,
 
     #[serde(default)]
     pub prefer_g_settings_typed: RuleConfig,
