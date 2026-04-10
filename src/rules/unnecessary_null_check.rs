@@ -11,7 +11,7 @@ impl Rule for UnnecessaryNullCheck {
     }
 
     fn description(&self) -> &'static str {
-        "Detect unnecessary NULL checks before g_free/g_clear_pointer"
+        "Detect unnecessary NULL checks before g_free/g_clear_* functions"
     }
 
     fn fixable(&self) -> bool {
@@ -129,7 +129,7 @@ impl UnnecessaryNullCheck {
         source: &[u8],
     ) -> Option<String> {
         // For compound statements, check if it contains ONLY ONE statement total and
-        // it's a g_free
+        // it's a g_free or g_clear_*
         if body.kind() == "compound_statement" {
             let mut found_free = None;
             let mut total_statement_count = 0;
@@ -169,20 +169,21 @@ impl UnnecessaryNullCheck {
         var_name: &str,
         source: &[u8],
     ) -> Option<String> {
-        // Look for g_free(var_name) or g_clear_pointer(&var_name, ...)
+        // Look for g_free(var_name) or g_clear_*(&var_name, ...)
         if let Some(call) = ast_context.find_call_expression(node)
             && let Some(function) = call.child_by_field_name("function")
         {
             let func_name = ast_context.get_node_text(function, source);
 
-            if func_name == "g_free" || func_name == "g_clear_pointer" {
+            // Check for g_free or any g_clear_* function
+            if func_name == "g_free" || func_name.starts_with("g_clear_") {
                 // Check if the argument matches our variable
                 if let Some(arguments) = call.child_by_field_name("arguments") {
                     let args_text = ast_context.get_node_text(arguments, source);
 
                     // Simple check: does arguments contain the variable?
                     // For g_free: g_free(ptr)
-                    // For g_clear_pointer: g_clear_pointer(&ptr, ...)
+                    // For g_clear_*: g_clear_object(&ptr), g_clear_pointer(&ptr, ...), etc.
                     if args_text.contains(var_name) {
                         return Some(func_name);
                     }
@@ -203,14 +204,10 @@ impl UnnecessaryNullCheck {
         if let Some((_var_name, free_func, consequence)) =
             self.check_if_statement(ast_context, node, ctx.source)
         {
-            let suggestion = if free_func == "g_free" {
-                "Remove unnecessary NULL check before g_free (g_free handles NULL)".to_string()
-            } else {
-                format!(
-                    "Remove unnecessary NULL check before {} ({} handles NULL)",
-                    free_func, free_func
-                )
-            };
+            let suggestion = format!(
+                "Remove unnecessary NULL check before {} ({} handles NULL)",
+                free_func, free_func
+            );
 
             // Extract the free call statement content to replace the whole if statement
             let replacement = if consequence.kind() == "compound_statement" {

@@ -47,7 +47,7 @@ All rules are enabled by default. Run `gobject-lint --list-rules` to see their c
 - **property_enum_zero** - Ensure property enums start with PROP_0, not PROP_NAME = 0
 - **dispose_finalize_chains_up** - Ensure dispose/finalize methods chain up to parent class
 - **gtask_source_tag** - Ensure g_task_set_source_tag is called after g_task_new
-- **unnecessary_null_check** - Detect unnecessary NULL checks before g_free/g_clear_pointer
+- **unnecessary_null_check** - Detect unnecessary NULL checks before g_free/g_clear_* functions
 - **strcmp_for_string_equal** - Suggest g_str_equal() instead of strcmp() == 0 for better readability
 - **use_g_set_str** - Suggest g_set_str() instead of manual g_free and g_strdup
 - **suggest_g_autoptr_error** - Suggest g_autoptr(GError) instead of manual g_error_free
