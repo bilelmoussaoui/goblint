@@ -10,13 +10,43 @@ use crate::{
     rules::*,
 };
 
-/// Extract a source snippet from a file at the given line
+/// Extract a source snippet from a file at the given line with context
 fn get_source_snippet(file_path: &Path, line: usize) -> Option<String> {
     let content = fs::read_to_string(file_path).ok()?;
-    content
-        .lines()
-        .nth(line.saturating_sub(1))
-        .map(|s| s.trim().to_string())
+    let lines: Vec<&str> = content.lines().collect();
+
+    if line == 0 || line > lines.len() {
+        return None;
+    }
+
+    // Get 7 lines before and 3 lines after for context (11 lines total)
+    let start_line = line.saturating_sub(8); // -1 for 0-indexing, -7 for context
+    let end_line = (line + 3).min(lines.len());
+
+    let mut snippet_lines = Vec::new();
+    let mut last_was_collapsed = false;
+
+    for (i, line_text) in lines.iter().enumerate().take(end_line).skip(start_line) {
+        let trimmed = line_text.trim();
+        let is_target_line = i + 1 == line;
+
+        // Check if line is just braces/whitespace (but always show target line)
+        let is_noise = !is_target_line && matches!(trimmed, "" | "{" | "}" | "{}" | "};");
+
+        if is_noise {
+            // Collapse consecutive noise lines into ...
+            if !last_was_collapsed {
+                snippet_lines.push("...".to_string());
+                last_was_collapsed = true;
+            }
+        } else {
+            let prefix = if is_target_line { ">" } else { "" };
+            snippet_lines.push(format!("{}{}", prefix, line_text));
+            last_was_collapsed = false;
+        }
+    }
+
+    Some(snippet_lines.join("\n"))
 }
 
 /// Populate snippets for violations that don't have them

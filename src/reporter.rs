@@ -33,7 +33,10 @@ pub fn report_violations(violations: &[Violation], verbose: bool, config: &Confi
 
         // Show code snippet if available
         if let Some(ref snippet) = violation.snippet {
-            println!("  {}", snippet.dimmed());
+            // Add indentation to each line
+            for line in snippet.lines() {
+                println!("  {}", line.dimmed());
+            }
         }
 
         println!("  {} {}", "error:".red().bold(), violation.message);
