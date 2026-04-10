@@ -175,6 +175,9 @@ pub struct RulesConfig {
     pub prefer_g_new: RuleConfig,
 
     #[serde(default)]
+    pub prefer_g_value_set_static_string: RuleConfig,
+
+    #[serde(default)]
     pub prefer_g_variant_new_typed: RuleConfig,
 
     #[serde(default)]

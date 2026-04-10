@@ -36,6 +36,7 @@ All rules are enabled by default. Run `gobject-lint --list-rules` to see their c
 - **deprecated_add_private** - Detect deprecated g_type_class_add_private (use G_DEFINE_TYPE_WITH_PRIVATE instead)
 - **matching_declare_define** - Ensure G_DECLARE_* and G_DEFINE_* macros are used consistently
 - **prefer_g_new** - Suggest g_new/g_new0 instead of g_malloc/g_malloc0 with sizeof for type safety
+- **prefer_g_value_set_static_string** - Use g_value_set_static_string for string literals instead of g_value_set_string
 - **prefer_g_variant_new_typed** - Prefer g_variant_new_string/boolean/etc over g_variant_new with format strings
 - **use_g_strcmp0** - Use g_strcmp0 instead of strcmp (NULL-safe)
 - **use_clear_functions** - Suggest g_clear_object/g_clear_pointer instead of manual unref and NULL assignment

@@ -69,6 +69,9 @@ gdeclare_semicolon = true
 # Suggest g_new/g_new0 instead of g_malloc/g_malloc0 with sizeof for type safety
 prefer_g_new = true
 
+# Use g_value_set_static_string for string literals instead of g_value_set_string
+prefer_g_value_set_static_string = true
+
 # Prefer g_variant_new_string/boolean/etc over g_variant_new with format strings (requires GLib >= 2.24)
 prefer_g_variant_new_typed = true
 
