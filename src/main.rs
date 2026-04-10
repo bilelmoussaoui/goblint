@@ -143,8 +143,21 @@ fn main() -> Result<()> {
 
     // Apply fixes if --fix was passed
     if args.fix {
-        let fixed_count = fixer::apply_fixes(&violations)?;
-        println!("Fixed {} violation(s)", fixed_count);
+        // Check if any enabled rules are fixable
+        let rules = scanner::create_all_rules(&config);
+        let has_fixable_rules = rules
+            .iter()
+            .any(|entry| entry.enabled && entry.rule.fixable());
+
+        if !has_fixable_rules {
+            eprintln!(
+                "Warning: --fix was specified but no enabled rules are auto-fixable.\n\
+                 Run `gobject-lint --list-rules` to see which rules support auto-fix."
+            );
+        } else {
+            let fixed_count = fixer::apply_fixes(&violations)?;
+            println!("Fixed {} violation(s)", fixed_count);
+        }
 
         // Don't exit with error code when we fixed things
         return Ok(());
