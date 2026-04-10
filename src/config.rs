@@ -60,10 +60,19 @@ pub struct Config {
 }
 
 /// Per-rule configuration
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct RuleConfig {
     pub enabled: bool,
     pub ignore: Vec<String>,
+}
+
+impl Default for RuleConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            ignore: Vec::new(),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for RuleConfig {
