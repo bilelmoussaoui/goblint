@@ -14,6 +14,10 @@ impl Rule for StrcmpForStringEqual {
         "Suggest g_str_equal() instead of strcmp() == 0 for better readability"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Style
+    }
+
     fn fixable(&self) -> bool {
         true
     }

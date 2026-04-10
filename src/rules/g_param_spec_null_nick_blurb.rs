@@ -14,6 +14,10 @@ impl Rule for GParamSpecNullNickBlurb {
         "Ensure g_param_spec_* functions have NULL for nick and blurb parameters"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Pedantic
+    }
+
     fn fixable(&self) -> bool {
         true
     }

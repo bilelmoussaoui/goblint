@@ -14,6 +14,10 @@ impl Rule for GTaskSourceTag {
         "Ensure g_task_set_source_tag is called after g_task_new"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Suspicious
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

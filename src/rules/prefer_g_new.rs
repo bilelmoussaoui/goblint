@@ -14,6 +14,10 @@ impl Rule for PreferGNew {
         "Suggest g_new/g_new0 instead of g_malloc/g_malloc0 with sizeof for type safety"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn fixable(&self) -> bool {
         true
     }

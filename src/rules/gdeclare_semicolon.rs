@@ -16,6 +16,10 @@ impl Rule for GDeclareSemicolon {
         "Enforce semicolons after G_DECLARE_* macros"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Pedantic
+    }
+
     fn fixable(&self) -> bool {
         true
     }

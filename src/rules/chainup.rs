@@ -14,6 +14,10 @@ impl Rule for DisposeFinalizeChainsUp {
         "Ensure dispose/finalize methods chain up to parent class"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Correctness
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

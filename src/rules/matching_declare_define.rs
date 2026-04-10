@@ -14,6 +14,10 @@ impl Rule for MatchingDeclareDefine {
         "Ensure G_DECLARE_* and G_DEFINE_* macros are used consistently"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Pedantic
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

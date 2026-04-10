@@ -14,6 +14,10 @@ impl Rule for UseGStrcmp0 {
         "Use g_strcmp0 instead of strcmp (NULL-safe)"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Style
+    }
+
     fn fixable(&self) -> bool {
         true
     }

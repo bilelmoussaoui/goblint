@@ -16,6 +16,10 @@ impl Rule for SuggestGAutoptrInline {
         "Suggest g_autoptr instead of inline manual cleanup (g_object_unref/g_free)"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

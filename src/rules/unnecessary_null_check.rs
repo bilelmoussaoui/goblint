@@ -14,6 +14,10 @@ impl Rule for UnnecessaryNullCheck {
         "Detect unnecessary NULL checks before g_free/g_clear_* functions"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Suspicious
+    }
+
     fn fixable(&self) -> bool {
         true
     }

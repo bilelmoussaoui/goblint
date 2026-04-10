@@ -14,6 +14,10 @@ impl Rule for UseGClearWeakPointer {
         "Suggest g_clear_weak_pointer instead of manual g_object_remove_weak_pointer and NULL assignment"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn fixable(&self) -> bool {
         true
     }

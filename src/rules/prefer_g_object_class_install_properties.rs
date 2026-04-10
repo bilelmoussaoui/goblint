@@ -14,6 +14,10 @@ impl Rule for PreferGObjectClassInstallProperties {
         "Suggest g_object_class_install_properties for multiple g_object_class_install_property calls"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Pedantic
+    }
+
     fn fixable(&self) -> bool {
         false // Complex refactoring, needs manual intervention
     }

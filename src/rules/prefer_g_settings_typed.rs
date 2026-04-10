@@ -14,6 +14,10 @@ impl Rule for PreferGSettingsTyped {
         "Prefer g_settings_get/set_string/boolean/etc over g_settings_get/set_value with g_variant"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Style
+    }
+
     fn fixable(&self) -> bool {
         true
     }

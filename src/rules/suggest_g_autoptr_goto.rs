@@ -16,6 +16,10 @@ impl Rule for SuggestGAutoptrGoto {
         "Suggest g_autoptr instead of goto error cleanup pattern"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

@@ -14,6 +14,10 @@ impl Rule for PropertyEnumZero {
         "Ensure property enums start with PROP_0, not PROP_NAME = 0"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Correctness
+    }
+
     fn fixable(&self) -> bool {
         true
     }

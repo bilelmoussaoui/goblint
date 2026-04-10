@@ -14,6 +14,10 @@ impl Rule for GParamSpecStaticStrings {
         "Ensure g_param_spec_* calls use G_PARAM_STATIC_STRINGS flag for string literals"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Perf
+    }
+
     fn fixable(&self) -> bool {
         true
     }

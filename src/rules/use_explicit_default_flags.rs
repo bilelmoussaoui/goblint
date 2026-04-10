@@ -72,6 +72,10 @@ impl Rule for UseExplicitDefaultFlags {
         "Use explicit default flag constants (e.g., G_APPLICATION_DEFAULT_FLAGS) instead of 0"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Style
+    }
+
     fn fixable(&self) -> bool {
         true
     }

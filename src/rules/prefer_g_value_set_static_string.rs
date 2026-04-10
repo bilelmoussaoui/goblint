@@ -14,6 +14,10 @@ impl Rule for PreferGValueSetStaticString {
         "Use g_value_set_static_string for string literals instead of g_value_set_string"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Perf
+    }
+
     fn fixable(&self) -> bool {
         true
     }

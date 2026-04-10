@@ -14,6 +14,10 @@ impl Rule for PreferGVariantNewTyped {
         "Prefer g_variant_new_string/boolean/etc over g_variant_new with format strings"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Style
+    }
+
     fn fixable(&self) -> bool {
         true
     }

@@ -16,6 +16,10 @@ impl Rule for UseGFileLoadBytes {
         "Suggest g_file_load_bytes/g_file_load_bytes_async instead of g_file_load_contents + g_bytes_new_take"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn fixable(&self) -> bool {
         false // Complex pattern, needs manual review
     }

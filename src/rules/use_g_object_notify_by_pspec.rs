@@ -14,6 +14,10 @@ impl Rule for UseGObjectNotifyByPspec {
         "Suggest g_object_notify_by_pspec instead of g_object_notify for better performance"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Perf
+    }
+
     fn fixable(&self) -> bool {
         true
     }

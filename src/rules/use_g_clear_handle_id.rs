@@ -14,6 +14,10 @@ impl Rule for UseGClearHandleId {
         "Suggest g_clear_handle_id instead of manual cleanup and zero assignment"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn fixable(&self) -> bool {
         true
     }

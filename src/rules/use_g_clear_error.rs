@@ -14,6 +14,10 @@ impl Rule for SuggestGAutoptrError {
         "Suggest g_autoptr(GError) instead of manual g_error_free"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

@@ -14,6 +14,10 @@ impl Rule for GErrorInit {
         "Ensure GError* variables are initialized to NULL"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Correctness
+    }
+
     fn fixable(&self) -> bool {
         true
     }

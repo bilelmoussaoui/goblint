@@ -14,6 +14,10 @@ impl Rule for UseGObjectNewWithProperties {
         "Suggest setting properties in g_object_new instead of separate g_object_set calls"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

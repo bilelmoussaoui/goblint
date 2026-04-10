@@ -225,13 +225,14 @@ pub fn list_all_rules(config: &Config) {
             "✗".red()
         };
         let name = entry.rule.name().cyan().bold();
+        let category = format!("[{}]", entry.rule.category().as_str()).magenta();
         let desc = entry.rule.description().dimmed();
         let fixable = if entry.rule.fixable() {
             format!(" {}", "[auto-fix]".yellow())
         } else {
             "".to_string()
         };
-        println!("  {} {}{} - {}", status, name, fixable, desc);
+        println!("  {} {} {}{} - {}", status, name, category, fixable, desc);
     }
 }
 

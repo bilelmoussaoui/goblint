@@ -14,6 +14,10 @@ impl Rule for UseGSetStr {
         "Suggest g_set_str() instead of manual g_free and g_strdup"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn fixable(&self) -> bool {
         true
     }

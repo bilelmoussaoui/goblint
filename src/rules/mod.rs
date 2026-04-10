@@ -2,6 +2,39 @@ use std::path::{Path, PathBuf};
 
 use crate::{ast_context::AstContext, config::Config};
 
+/// Rule category (similar to Clippy's lint categories)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Category {
+    /// Code that is outright wrong or very useless
+    Correctness,
+    /// Code that is most likely wrong or useless
+    Suspicious,
+    /// Code that should be written in a more idiomatic way
+    Style,
+    /// Code that does something simple but in a complex way
+    Complexity,
+    /// Code that can be written to run faster
+    Perf,
+    /// Lints which are rather strict or have occasional false positives
+    Pedantic,
+    /// Lints which prevent the use of language/library features
+    Restriction,
+}
+
+impl Category {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Category::Correctness => "correctness",
+            Category::Suspicious => "suspicious",
+            Category::Style => "style",
+            Category::Complexity => "complexity",
+            Category::Perf => "perf",
+            Category::Pedantic => "pedantic",
+            Category::Restriction => "restriction",
+        }
+    }
+}
+
 /// Represents an automated fix for a violation
 #[derive(Debug, Clone)]
 pub struct Fix {
@@ -61,6 +94,7 @@ pub struct Violation {
     pub column: usize,
     pub message: String,
     pub rule: &'static str,
+    pub category: Category,
     pub snippet: Option<String>,
     /// Rule execution order - higher means more specific/later rules take
     /// precedence
@@ -76,6 +110,9 @@ pub trait Rule {
 
     /// Human-readable description of what this rule checks
     fn description(&self) -> &'static str;
+
+    /// Rule category
+    fn category(&self) -> Category;
 
     /// Whether this rule supports automated fixes via --fix
     fn fixable(&self) -> bool {
@@ -99,6 +136,7 @@ pub trait Rule {
             column,
             message,
             rule: self.name(),
+            category: self.category(),
             snippet: None,
             rule_index: 0, // Will be set by scanner based on execution order
             fix: None,
@@ -120,6 +158,7 @@ pub trait Rule {
             column,
             message,
             rule: self.name(),
+            category: self.category(),
             snippet: None,
             rule_index: 0,
             fix: Some(fix),

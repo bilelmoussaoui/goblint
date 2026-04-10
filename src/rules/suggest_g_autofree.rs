@@ -16,6 +16,10 @@ impl Rule for SuggestGAutofree {
         "Suggest g_autofree for string/buffer types instead of manual g_free"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Complexity
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

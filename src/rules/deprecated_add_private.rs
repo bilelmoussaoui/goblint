@@ -14,6 +14,10 @@ impl Rule for DeprecatedAddPrivate {
         "Detect deprecated g_type_class_add_private (use G_DEFINE_TYPE_WITH_PRIVATE instead)"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Restriction
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,

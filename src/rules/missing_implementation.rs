@@ -13,6 +13,10 @@ impl Rule for MissingImplementation {
         "Report functions declared in headers but not implemented"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Suspicious
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,
