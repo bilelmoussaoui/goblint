@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{CheckContext, Fix, Rule};
+use super::{CheckContext, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct UseGObjectNotifyByPspec;
@@ -19,7 +19,7 @@ impl Rule for UseGObjectNotifyByPspec {
     }
 
     fn fixable(&self) -> bool {
-        true
+        false
     }
 
     fn check_all(
@@ -60,7 +60,7 @@ impl UseGObjectNotifyByPspec {
     ) {
         // Look for g_object_notify calls
         if node.kind() == "call_expression"
-            && let Some((property_name, obj_arg, function_node, args_node)) =
+            && let Some((property_name, _obj_arg, _function_node, _args_node)) =
                 self.extract_g_object_notify_with_string(ast_context, node, ctx.source)
         {
             let position = node.start_position();
@@ -68,37 +68,15 @@ impl UseGObjectNotifyByPspec {
             // Convert property-name to PROP_NAME for the suggestion
             let property_constant = self.property_name_to_constant(&property_name);
 
-            // Get object argument text (preserve spacing)
-            let obj_text = ast_context.get_node_text(obj_arg, ctx.source);
-
-            // Calculate spacing between function name and opening paren
-            let spacing_start = function_node.end_byte();
-            let spacing_end = args_node.start_byte();
-            let spacing =
-                std::str::from_utf8(&ctx.source[spacing_start..spacing_end]).unwrap_or("");
-
-            // Build replacement
-            let replacement = format!(
-                "g_object_notify_by_pspec{}({}, properties[{}])",
-                spacing, obj_text, property_constant
-            );
-
-            let fix = Fix {
-                start_byte: ctx.base_byte + function_node.start_byte(),
-                end_byte: ctx.base_byte + args_node.end_byte(),
-                replacement,
-            };
-
-            violations.push(self.violation_with_fix(
-                    ctx.file_path,
-                    ctx.base_line + position.row,
-                    position.column + 1,
-                    format!(
-                        "Use g_object_notify_by_pspec(obj, properties[{}]) instead of g_object_notify(obj, \"{}\") for better performance",
-                        property_constant, property_name
-                    ),
-                    fix,
-                ));
+            violations.push(self.violation(
+                ctx.file_path,
+                ctx.base_line + position.row,
+                position.column + 1,
+                format!(
+                    "Use g_object_notify_by_pspec(obj, properties[{}]) instead of g_object_notify(obj, \"{}\") for better performance",
+                    property_constant, property_name
+                ),
+            ));
         }
 
         // Recurse
