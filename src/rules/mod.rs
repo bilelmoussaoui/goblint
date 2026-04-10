@@ -132,6 +132,7 @@ pub struct Violation {
     pub message: String,
     pub rule: &'static str,
     pub category: Category,
+    pub level: crate::config::RuleLevel,
     pub snippet: Option<String>,
     /// Rule execution order - higher means more specific/later rules take
     /// precedence
@@ -174,6 +175,7 @@ pub trait Rule {
             message,
             rule: self.name(),
             category: self.category(),
+            level: crate::config::RuleLevel::Error, // Will be overridden by scanner
             snippet: None,
             rule_index: 0, // Will be set by scanner based on execution order
             fix: None,
@@ -196,6 +198,7 @@ pub trait Rule {
             message,
             rule: self.name(),
             category: self.category(),
+            level: crate::config::RuleLevel::Error, // Will be overridden by scanner
             snippet: None,
             rule_index: 0,
             fix: Some(fix),

@@ -30,106 +30,120 @@ ignore = [
 ]
 
 [rules]
+# Rules can be set to:
+#   "error" - Report as error and fail CI (default)
+#   "warn"  - Report as warning but don't fail CI
+#   "ignore" - Disable the rule
+#   true/false - Shorthand for "error"/"ignore"
+#
+# Examples:
+#   my_rule = "warn"           # Warning only
+#   my_rule = "error"          # Error (default)
+#   my_rule = "ignore"         # Disabled
+#   my_rule = true             # Same as "error"
+#   my_rule = false            # Same as "ignore"
+#   my_rule = { level = "warn", ignore = ["tests/**"] }  # Advanced: warning + per-rule ignores
+
 # Ensure g_param_spec_* functions have NULL for nick and blurb parameters
-g_param_spec_null_nick_blurb = true
+g_param_spec_null_nick_blurb = "error"
 
 # Ensure g_param_spec_* calls use G_PARAM_STATIC_STRINGS flag for string literals (saves memory)
-g_param_spec_static_strings = true
+g_param_spec_static_strings = "error"
 
 # Ensure dispose/finalize/constructed methods chain up to parent class
-gobject_virtual_methods_chain_up = true
+gobject_virtual_methods_chain_up = "error"
 
 # Suggest g_clear_object/g_clear_pointer instead of manual unref and NULL assignment (requires GLib >= 2.28)
-use_clear_functions = true
+use_clear_functions = "error"
 
 # Use explicit default flag constants (e.g., G_APPLICATION_DEFAULT_FLAGS) instead of 0
-use_explicit_default_flags = true
+use_explicit_default_flags = "error"
 
 # Use g_strcmp0 instead of strcmp (NULL-safe) (requires GLib >= 2.16)
-use_g_strcmp0 = true
+use_g_strcmp0 = "error"
 
 # Ensure property enums start with PROP_0, not PROP_NAME = 0
-property_enum_zero = true
+property_enum_zero = "error"
 
 # Detect deprecated g_type_class_add_private (use G_DEFINE_TYPE_WITH_PRIVATE instead)
-deprecated_add_private = true
+deprecated_add_private = "error"
 
 # Ensure G_DECLARE_* and G_DEFINE_* macros are used consistently (requires GLib >= 2.70 for G_DEFINE_FINAL_TYPE)
-matching_declare_define = true
+matching_declare_define = "error"
 
 # Ensure GError* variables are initialized to NULL
-gerror_init = true
+gerror_init = "error"
 
 # Ensure g_task_set_source_tag is called after g_task_new (requires GLib >= 2.36)
-gtask_source_tag = true
+gtask_source_tag = "error"
 
 # Detect unnecessary NULL checks before g_free/g_clear_pointer
-unnecessary_null_check = true
+unnecessary_null_check = "error"
 
 # Enforce semicolons after G_DECLARE_* macros
-gdeclare_semicolon = true
+gdeclare_semicolon = "error"
 
 # Suggest g_new/g_new0 instead of g_malloc/g_malloc0 with sizeof for type safety
-prefer_g_new = true
+prefer_g_new = "error"
 
 # Suggest g_object_class_install_properties for multiple g_object_class_install_property calls (requires GLib >= 2.26)
-prefer_g_object_class_install_properties = true
+prefer_g_object_class_install_properties = "error"
 
 # Prefer g_settings_get/set_string/boolean/etc over g_settings_get/set_value with g_variant (requires GLib >= 2.26)
-prefer_g_settings_typed = true
+prefer_g_settings_typed = "error"
 
 # Use g_value_set_static_string for string literals instead of g_value_set_string
-prefer_g_value_set_static_string = true
+prefer_g_value_set_static_string = "error"
 
 # Prefer g_variant_new_string/boolean/etc over g_variant_new with format strings (requires GLib >= 2.24)
-prefer_g_variant_new_typed = true
+prefer_g_variant_new_typed = "error"
 
 # Report functions declared in headers but not implemented
 # Can also be configured with per-rule ignore patterns:
-# missing_implementation = { enabled = true, ignore = ["src/backends/**"] }
-missing_implementation = { enabled = true, ignore = ["src/backends/meta-egl-ext.h"] }
+# missing_implementation = { level = "error", ignore = ["src/backends/**"] }
+missing_implementation = { level = "error", ignore = ["src/backends/meta-egl-ext.h"] }
 
 # Suggest g_str_equal() instead of strcmp() == 0 for better readability
-strcmp_for_string_equal = true
+strcmp_for_string_equal = "error"
 
 # Suggest g_set_str() instead of manual strcmp, g_free, and g_strdup (requires GLib >= 2.76)
-use_g_set_str = true
+use_g_set_str = "error"
 
 # Suggest g_autoptr(GError) instead of manual g_error_free (requires GLib >= 2.44)
-suggest_g_autoptr_error = true
+suggest_g_autoptr_error = "error"
 
 # Suggest g_autoptr instead of goto error cleanup pattern (requires GLib >= 2.44)
-suggest_g_autoptr_goto_cleanup = true
+suggest_g_autoptr_goto_cleanup = "error"
 
 # Suggest g_autoptr instead of inline manual cleanup (g_object_unref/g_free) (requires GLib >= 2.44)
-suggest_g_autoptr_inline_cleanup = true
+suggest_g_autoptr_inline_cleanup = "error"
 
 # Suggest g_autofree for string/buffer types instead of manual g_free (requires GLib >= 2.44)
-suggest_g_autofree = true
+suggest_g_autofree = "error"
 
 # Suggest g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE (requires GLib >= 2.74)
-suggest_g_source_once = true
+suggest_g_source_once = "error"
 
 # Use G_SOURCE_CONTINUE/G_SOURCE_REMOVE instead of TRUE/FALSE in GSourceFunc callbacks
-use_g_source_constants = true
+use_g_source_constants = "error"
 
 # Suggest g_clear_handle_id instead of manual cleanup and zero assignment (requires GLib >= 2.56)
-use_g_clear_handle_id = true
+use_g_clear_handle_id = "error"
 
 # Suggest g_clear_list/g_clear_slist instead of manual g_list_free/g_slist_free and NULL assignment (requires GLib >= 2.64)
-use_g_clear_list = true
+use_g_clear_list = "error"
 
 # Suggest g_clear_weak_pointer instead of manual g_object_remove_weak_pointer and NULL assignment (requires GLib >= 2.56)
-use_g_clear_weak_pointer = true
+use_g_clear_weak_pointer = "error"
 
 # Suggest g_file_load_bytes instead of g_file_load_contents + g_bytes_new_take (requires GLib >= 2.56)
-use_g_file_load_bytes = true
+use_g_file_load_bytes = "error"
 
 # Suggest setting properties in g_object_new instead of separate g_object_set calls
-use_g_object_new_with_properties = true
+use_g_object_new_with_properties = "error"
 
 # Suggest g_object_notify_by_pspec instead of g_object_notify for better performance (requires GLib >= 2.26)
-use_g_object_notify_by_pspec = true
+use_g_object_notify_by_pspec = "error"
 
 # Suggest use_g_string_free_and_steal instead of g_string_free with FALSE as a parameter (requires GLib >= 2.76)
-use_g_string_free_and_steal = true
+use_g_string_free_and_steal = "error"

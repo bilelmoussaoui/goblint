@@ -2,10 +2,7 @@ use std::path::Path;
 
 use serde_json::json;
 
-use crate::{
-    config::Config,
-    rules::{Category, Violation},
-};
+use crate::{config::Config, rules::Violation};
 
 /// Generate SARIF 2.1.0 output for violations
 pub fn generate_sarif(violations: &[Violation], config: &Config, project_root: &Path) -> String {
@@ -41,7 +38,7 @@ fn generate_rules_metadata(config: &Config) -> Vec<serde_json::Value> {
     let rules = create_all_rules(config);
     rules
         .iter()
-        .filter(|entry| entry.enabled)
+        .filter(|entry| entry.level.is_enabled())
         .map(|entry| {
             json!({
                 "id": entry.rule.name(),
@@ -52,7 +49,7 @@ fn generate_rules_metadata(config: &Config) -> Vec<serde_json::Value> {
                     "text": entry.rule.description(),
                 },
                 "defaultConfiguration": {
-                    "level": category_to_level(entry.rule.category()),
+                    "level": rule_level_to_sarif_level(entry.level),
                 },
                 "properties": {
                     "category": entry.rule.category().as_str(),
@@ -79,7 +76,7 @@ fn generate_result(
 
     let mut result = json!({
         "ruleId": violation.rule,
-        "level": category_to_level(violation.category),
+        "level": rule_level_to_sarif_level(violation.level),
         "message": {
             "text": violation.message,
         },
@@ -146,16 +143,12 @@ fn generate_result(
     result
 }
 
-/// Map category to SARIF level
-fn category_to_level(category: Category) -> &'static str {
-    match category {
-        Category::Correctness => "error",
-        Category::Suspicious => "warning",
-        Category::Style => "note",
-        Category::Complexity => "note",
-        Category::Perf => "warning",
-        Category::Pedantic => "note",
-        Category::Restriction => "warning",
+/// Map rule level to SARIF level
+fn rule_level_to_sarif_level(level: crate::config::RuleLevel) -> &'static str {
+    match level {
+        crate::config::RuleLevel::Error => "error",
+        crate::config::RuleLevel::Warn => "warning",
+        crate::config::RuleLevel::Ignore => "none", // Should never happen
     }
 }
 

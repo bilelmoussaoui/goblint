@@ -59,17 +59,42 @@ pub struct Config {
     pub editor_url: Option<String>,
 }
 
+/// Rule severity level
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleLevel {
+    /// Report as error and exit with failure code
+    Error,
+    /// Report as warning but don't fail
+    Warn,
+    /// Disabled/ignored
+    Ignore,
+}
+
+impl RuleLevel {
+    pub fn is_enabled(&self) -> bool {
+        !matches!(self, RuleLevel::Ignore)
+    }
+
+    pub fn is_error(&self) -> bool {
+        matches!(self, RuleLevel::Error)
+    }
+
+    pub fn is_warn(&self) -> bool {
+        matches!(self, RuleLevel::Warn)
+    }
+}
+
 /// Per-rule configuration
 #[derive(Debug, Clone)]
 pub struct RuleConfig {
-    pub enabled: bool,
+    pub level: RuleLevel,
     pub ignore: Vec<String>,
 }
 
 impl Default for RuleConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
+            level: RuleLevel::Error,
             ignore: Vec::new(),
         }
     }
@@ -90,7 +115,8 @@ impl<'de> Deserialize<'de> for RuleConfig {
             type Value = RuleConfig;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a boolean or a RuleConfig struct")
+                formatter
+                    .write_str("a boolean, \"error\"/\"warn\"/\"ignore\", or a RuleConfig struct")
             }
 
             fn visit_bool<E>(self, value: bool) -> Result<RuleConfig, E>
@@ -98,7 +124,32 @@ impl<'de> Deserialize<'de> for RuleConfig {
                 E: de::Error,
             {
                 Ok(RuleConfig {
-                    enabled: value,
+                    level: if value {
+                        RuleLevel::Error
+                    } else {
+                        RuleLevel::Ignore
+                    },
+                    ignore: Vec::new(),
+                })
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<RuleConfig, E>
+            where
+                E: de::Error,
+            {
+                let level = match value {
+                    "error" => RuleLevel::Error,
+                    "warn" => RuleLevel::Warn,
+                    "ignore" => RuleLevel::Ignore,
+                    _ => {
+                        return Err(de::Error::unknown_variant(
+                            value,
+                            &["error", "warn", "ignore"],
+                        ));
+                    }
+                };
+                Ok(RuleConfig {
+                    level,
                     ignore: Vec::new(),
                 })
             }
@@ -107,16 +158,27 @@ impl<'de> Deserialize<'de> for RuleConfig {
             where
                 M: MapAccess<'de>,
             {
-                let mut enabled = None;
+                let mut level = None;
                 let mut ignore = None;
 
                 while let Some(key) = map.next_key::<String>()? {
                     match key.as_str() {
-                        "enabled" => {
-                            if enabled.is_some() {
-                                return Err(de::Error::duplicate_field("enabled"));
+                        "level" => {
+                            if level.is_some() {
+                                return Err(de::Error::duplicate_field("level"));
                             }
-                            enabled = Some(map.next_value()?);
+                            let level_str: String = map.next_value()?;
+                            level = Some(match level_str.as_str() {
+                                "error" => RuleLevel::Error,
+                                "warn" => RuleLevel::Warn,
+                                "ignore" => RuleLevel::Ignore,
+                                _ => {
+                                    return Err(de::Error::unknown_variant(
+                                        &level_str,
+                                        &["error", "warn", "ignore"],
+                                    ));
+                                }
+                            });
                         }
                         "ignore" => {
                             if ignore.is_some() {
@@ -131,7 +193,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
                 }
 
                 Ok(RuleConfig {
-                    enabled: enabled.unwrap_or(true),
+                    level: level.unwrap_or(RuleLevel::Error),
                     ignore: ignore.unwrap_or_default(),
                 })
             }
@@ -318,7 +380,11 @@ impl Config {
             ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
                 {
                     $(
-                        self.rules.$config_field.enabled = rule_names.iter().any(|r| r == stringify!($config_field));
+                        self.rules.$config_field.level = if rule_names.iter().any(|r| r == stringify!($config_field)) {
+                            RuleLevel::Error
+                        } else {
+                            RuleLevel::Ignore
+                        };
                     )*
                 }
             };
@@ -333,7 +399,11 @@ impl Config {
             ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
                 {
                     $(
-                        self.rules.$config_field.enabled = $rule_type.category() == category;
+                        self.rules.$config_field.level = if $rule_type.category() == category {
+                            RuleLevel::Error
+                        } else {
+                            RuleLevel::Ignore
+                        };
                     )*
                 }
             };

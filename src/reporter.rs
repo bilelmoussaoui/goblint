@@ -39,7 +39,14 @@ pub fn report_violations(violations: &[Violation], verbose: bool, config: &Confi
             }
         }
 
-        println!("  {} {}", "error:".red().bold(), violation.message);
+        let level_label = match violation.level {
+            crate::config::RuleLevel::Error => "error:".red().bold(),
+            crate::config::RuleLevel::Warn => "warning:".yellow().bold(),
+            crate::config::RuleLevel::Ignore => {
+                unreachable!("Ignored violations should not be reported")
+            }
+        };
+        println!("  {} {}", level_label, violation.message);
         println!("  {} {}", "rule:".blue(), violation.rule);
         println!();
     }

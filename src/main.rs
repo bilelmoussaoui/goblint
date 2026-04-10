@@ -147,7 +147,7 @@ fn main() -> Result<()> {
         let rules = scanner::create_all_rules(&config);
         let has_fixable_rules = rules
             .iter()
-            .any(|entry| entry.enabled && entry.rule.fixable());
+            .any(|entry| entry.level.is_enabled() && entry.rule.fixable());
 
         if !has_fixable_rules {
             eprintln!(
@@ -174,8 +174,9 @@ fn main() -> Result<()> {
         }
     }
 
-    // Exit with error code if violations found
-    if !violations.is_empty() {
+    // Exit with error code only if there are error-level violations (not warnings)
+    let has_errors = violations.iter().any(|v| v.level.is_error());
+    if has_errors {
         std::process::exit(1);
     }
 

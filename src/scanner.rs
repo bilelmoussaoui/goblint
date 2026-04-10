@@ -90,7 +90,7 @@ fn filter_violations_in_place(
 
 pub struct RuleEntry {
     pub rule: Box<dyn Rule>,
-    pub enabled: bool,
+    pub level: crate::config::RuleLevel,
     pub rule_config: RuleConfig,
 }
 
@@ -146,7 +146,11 @@ macro_rules! impl_create_all_rules {
                 $(
                     RuleEntry {
                         rule: Box::new($rule_type),
-                        enabled: config.rules.$config_field.enabled && is_rule_compatible(config, $major, $minor),
+                        level: if is_rule_compatible(config, $major, $minor) {
+                            config.rules.$config_field.level
+                        } else {
+                            crate::config::RuleLevel::Ignore
+                        },
                         rule_config: config.rules.$config_field.clone(),
                     },
                 )*
@@ -186,16 +190,17 @@ pub fn scan_with_ast(
 
     // Run all registered rules
     for (rule_index, entry) in rules.iter().enumerate() {
-        if !entry.enabled {
+        if !entry.level.is_enabled() {
             continue;
         }
 
         let start = violations.len();
         entry.rule.check_all(ast_context, config, &mut violations);
 
-        // Set rule index for precedence
+        // Set rule index and level for new violations
         for violation in violations.iter_mut().skip(start) {
             violation.rule_index = rule_index;
+            violation.level = entry.level;
         }
 
         populate_snippets(&mut violations, start);
@@ -228,10 +233,10 @@ pub fn list_all_rules(config: &Config) {
     );
 
     for entry in &rules {
-        let status = if entry.enabled {
-            "✓".green()
-        } else {
-            "✗".red()
+        let status = match entry.level {
+            crate::config::RuleLevel::Error => "E".red().bold(),
+            crate::config::RuleLevel::Warn => "W".yellow().bold(),
+            crate::config::RuleLevel::Ignore => "-".dimmed(),
         };
         let name = entry.rule.name().cyan().bold();
         let category = format!("[{}]", entry.rule.category().as_str()).magenta();
