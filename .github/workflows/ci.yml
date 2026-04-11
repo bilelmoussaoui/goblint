@@ -73,10 +73,10 @@ jobs:
           key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build CLI
-        run: cargo build --release --bin gobject-lint
+        run: cargo build --release --bin goblin
 
       - name: Build LSP
-        run: cargo build --release --bin gobject-lsp
+        run: cargo build --release --bin goblin-lsp
 
       - name: Run tests
         run: cargo test --all

@@ -1,41 +1,43 @@
-# gobject-lint
+# goblin
 
 A tree-sitter-based linter for GObject/C applications.
+
+**goblin** = **G**Object **L**inter
 
 ## Usage
 
 ```bash
 # Lint current directory with default config
-gobject-lint
+goblin
 
 # Lint specific directory
-gobject-lint /path/to/project
+goblin /path/to/project
 
 # Use custom config file
-gobject-lint --config my-lint.toml /path/to/project
+goblin --config my-lint.toml /path/to/project
 
 # Verbose output
-gobject-lint -v
+goblin -v
 
 # List all available rules with their enabled/disabled status
-gobject-lint --list-rules
+goblin --list-rules
 
 # Run only specific rules (overrides config)
-gobject-lint --only use_g_strcmp0 --only use_clear_functions
+goblin --only use_g_strcmp0 --only use_clear_functions
 
 # Add custom ignore patterns
-gobject-lint --ignore "build/**" --ignore "tests/**"
+goblin --ignore "build/**" --ignore "tests/**"
 ```
 
 ## Available Rules
 
 See [RULES.md](RULES.md) for a complete list of all available rules organized by category.
 
-Run `gobject-lint --list-rules` to see the current status of all rules.
+Run `goblin --list-rules` to see the current status of all rules.
 
 ## Configuration
 
-Create a `gobject-lint.toml` file in your project root:
+Create a `goblin.toml` file in your project root:
 
 ```toml
 # Minimum supported GLib version (optional)
@@ -47,13 +49,13 @@ min_glib_version = "2.40"
 g_param_spec_null_nick_blurb = true
 ```
 
-See gobject-lint.toml for all the supported rules/configurations.
+See goblin.toml for all the supported rules/configurations.
 
 ## CI/CD Integration
 
 ### GitHub Actions
 
-Integrate gobject-lint with GitHub Code Scanning using SARIF output:
+Integrate goblin with GitHub Code Scanning using SARIF output:
 
 ```yaml
 name: GObject Lint
@@ -73,64 +75,54 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install gobject-lint
+      - name: Install goblin
         run: |
-          cargo install --git https://github.com/bilelmoussaoui/gobject-lint gobject-lint
+          cargo install --git https://github.com/bilelmoussaoui/goblin goblin
 
-      - name: Run gobject-lint
+      - name: Run goblin
         run: |
-          gobject-lint --format sarif > gobject-lint.sarif
+          goblin --format sarif > goblin.sarif
         continue-on-error: true  # Don't fail the workflow on lint errors
 
       - name: Upload SARIF results
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: gobject-lint.sarif
-          category: gobject-lint
+          sarif_file: goblin.sarif
+          category: goblin
 ```
 
 The results will appear in the "Security" tab under "Code scanning alerts" for your repository, and as inline comments on pull requests.
-
-You can also filter by category:
-
-```bash
-# Run only correctness rules for critical checks
-gobject-lint --category correctness --format sarif > results.sarif
-
-# Run only performance rules
-gobject-lint --category perf --format sarif > results.sarif
-```
 
 ## LSP Server
 
 For real-time linting in your editor:
 
 ```bash
-cargo build --release --bin gobject-lsp
+cargo build --release --bin goblin-lsp
 ```
 
 **Neovim** (nvim-lspconfig):
 ```lua
 require('lspconfig.configs').gobject_lsp = {
   default_config = {
-    cmd = {'gobject-lsp'},
+    cmd = {'goblin-lsp'},
     filetypes = {'c', 'h'},
-    root_dir = require('lspconfig.util').root_pattern('gobject-lint.toml', '.git'),
+    root_dir = require('lspconfig.util').root_pattern('goblin.toml', '.git'),
   },
 }
 require('lspconfig').gobject_lsp.setup{}
 ```
 
-**VS Code**: Use a generic LSP client extension pointing to `gobject-lsp`
+**VS Code**: Use a generic LSP client extension pointing to `goblin-lsp`
 
 **Helix** (`~/.config/helix/languages.toml`):
 ```toml
 [[language]]
 name = "c"
-language-servers = ["clangd", "gobject-lsp"]
+language-servers = ["clangd", "goblin-lsp"]
 
-[language-server.gobject-lsp]
-command = "gobject-lsp"
+[language-server.goblin-lsp]
+command = "goblin-lsp"
 ```
 
 Co-Authored by Claude Code.

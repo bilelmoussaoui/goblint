@@ -1,14 +1,14 @@
 [package]
-name = "gobject-lint"
+name = "goblin"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "gobject-lint"
+name = "goblin"
 path = "src/main.rs"
 
 [[bin]]
-name = "gobject-lsp"
+name = "goblin-lsp"
 path = "src/lsp/main.rs"
 
 [dependencies]

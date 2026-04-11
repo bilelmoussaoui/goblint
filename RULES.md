@@ -1,6 +1,6 @@
 # Available Rules
 
-All rules are enabled by default. Run `gobject-lint --list-rules` to see their current status.
+All rules are enabled by default. Run `goblin --list-rules` to see their current status.
 
 ## Correctness
 
@@ -77,13 +77,13 @@ You can filter rules by category using the `--category` flag:
 
 ```bash
 # Run only correctness rules
-gobject-lint --category correctness
+goblin --category correctness
 
 # Run only performance rules
-gobject-lint --category perf
+goblin --category perf
 
 # List only style rules
-gobject-lint --list-rules --category style
+goblin --list-rules --category style
 ```
 
 Available categories: `correctness`, `suspicious`, `style`, `complexity`, `perf`, `pedantic`, `restriction`

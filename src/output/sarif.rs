@@ -18,9 +18,9 @@ pub fn generate_sarif(violations: &[Violation], config: &Config, project_root: &
         "runs": [{
             "tool": {
                 "driver": {
-                    "name": "gobject-lint",
+                    "name": "goblin",
                     "version": env!("CARGO_PKG_VERSION"),
-                    "informationUri": "https://github.com/bilelmoussaoui/gobject-lint",
+                    "informationUri": "https://github.com/bilelmoussaoui/goblin",
                     "rules": rules,
                 }
             },

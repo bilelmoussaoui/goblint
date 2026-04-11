@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use gobject_lint::{ast_context, config, fixer, output, reporter, rules::Category, scanner};
+use goblin::{ast_context, config, fixer, output, reporter, rules::Category, scanner};
 use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -14,7 +14,7 @@ enum OutputFormat {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "gobject-lint")]
+#[command(name = "goblin")]
 #[command(about = "A fast linter for GObject/C code", long_about = None)]
 struct Args {
     /// Directory to scan for C files
@@ -22,7 +22,7 @@ struct Args {
     directory: PathBuf,
 
     /// Path to configuration file
-    #[arg(short, long, value_name = "FILE", default_value = "gobject-lint.toml")]
+    #[arg(short, long, value_name = "FILE", default_value = "goblin.toml")]
     config: PathBuf,
 
     /// Additional ignore patterns (can be specified multiple times)
@@ -152,7 +152,7 @@ fn main() -> Result<()> {
         if !has_fixable_rules {
             eprintln!(
                 "Warning: --fix was specified but no enabled rules are auto-fixable.\n\
-                 Run `gobject-lint --list-rules` to see which rules support auto-fix."
+                 Run `goblin --list-rules` to see which rules support auto-fix."
             );
         } else {
             let fixed_count = fixer::apply_fixes(&violations)?;
