@@ -8,6 +8,7 @@ Rules that detect code that is outright wrong or very useless.
 
 - **gerror_init** - Ensure GError* variables are initialized to NULL
 - **property_enum_zero** - Ensure property enums start with PROP_0, not PROP_NAME = 0
+- **g_param_spec_static_name_canonical** - Ensure property names are canonical (use dashes, not underscores). Critical with G_PARAM_STATIC_NAME
 - **gobject_virtual_methods_chain_up** - Ensure dispose/finalize/constructed methods chain up to parent class
 
 ## Suspicious

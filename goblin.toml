@@ -50,6 +50,10 @@ g_param_spec_null_nick_blurb = "error"
 # Ensure g_param_spec_* calls use G_PARAM_STATIC_STRINGS flag for string literals (saves memory)
 g_param_spec_static_strings = "error"
 
+# Ensure property names are canonical (use dashes, not underscores)
+# Critical with G_PARAM_STATIC_NAME: causes assertion failure
+g_param_spec_static_name_canonical = "error"
+
 # Ensure dispose/finalize/constructed methods chain up to parent class
 gobject_virtual_methods_chain_up = "error"
 

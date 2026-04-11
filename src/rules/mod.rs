@@ -94,6 +94,7 @@ pub struct CheckContext<'a> {
 
 pub mod deprecated_add_private;
 pub mod g_param_spec_null_nick_blurb;
+pub mod g_param_spec_static_name_canonical;
 pub mod g_param_spec_static_strings;
 pub mod gdeclare_semicolon;
 pub mod gerror_init;
@@ -129,6 +130,7 @@ pub mod use_g_string_free_and_steal;
 
 pub use deprecated_add_private::DeprecatedAddPrivate;
 pub use g_param_spec_null_nick_blurb::GParamSpecNullNickBlurb;
+pub use g_param_spec_static_name_canonical::GParamSpecStaticNameCanonical;
 pub use g_param_spec_static_strings::GParamSpecStaticStrings;
 pub use gdeclare_semicolon::GDeclareSemicolon;
 pub use gerror_init::GErrorInit;

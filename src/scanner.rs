@@ -114,6 +114,7 @@ macro_rules! for_each_rule {
             (use_explicit_default_flags, UseExplicitDefaultFlags, 2, 0),
             (g_param_spec_null_nick_blurb, GParamSpecNullNickBlurb, 2, 0),
             (g_param_spec_static_strings, GParamSpecStaticStrings, 2, 0),
+            (g_param_spec_static_name_canonical, GParamSpecStaticNameCanonical, 2, 0),
             (gerror_init, GErrorInit, 2, 0),
             (property_enum_zero, PropertyEnumZero, 2, 0),
             (gobject_virtual_methods_chain_up, GObjectVirtualMethodsChainUp, 2, 0),

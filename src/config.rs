@@ -211,6 +211,9 @@ pub struct RulesConfig {
     #[serde(default)]
     pub g_param_spec_static_strings: RuleConfig,
 
+    #[serde(default)]
+    pub g_param_spec_static_name_canonical: RuleConfig,
+
     #[serde(default, alias = "dispose_finalize_chains_up")]
     pub gobject_virtual_methods_chain_up: RuleConfig,
 
