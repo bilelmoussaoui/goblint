@@ -121,11 +121,7 @@ impl GParamSpecNullNickBlurb {
                             )
                         };
 
-                        let fix = Fix {
-                            start_byte: start,
-                            end_byte: end,
-                            replacement,
-                        };
+                        let fix = Fix::new(start, end, replacement);
 
                         violations.push(self.violation_with_fix(
                             file_path,

@@ -74,11 +74,7 @@ impl PreferGNew {
             let clean_type = type_name.trim_matches(|c| c == '(' || c == ')');
             let replacement = format!("{} ({}, 1)", suggested_func, clean_type);
 
-            let fix = Fix {
-                start_byte: ctx.base_byte + call_node.start_byte(),
-                end_byte: ctx.base_byte + call_node.end_byte(),
-                replacement: replacement.clone(),
-            };
+            let fix = Fix::from_node(call_node, ctx, &replacement);
 
             violations.push(self.violation_with_fix(
                 ctx.file_path,

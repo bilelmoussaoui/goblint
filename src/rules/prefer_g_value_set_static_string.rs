@@ -73,11 +73,7 @@ impl PreferGValueSetStaticString {
 
                         // Check if it's a string literal
                         if second_arg.kind() == "string_literal" {
-                            let fix = Fix {
-                                start_byte: ctx.base_byte + function.start_byte(),
-                                end_byte: ctx.base_byte + function.end_byte(),
-                                replacement: "g_value_set_static_string".to_string(),
-                            };
+                            let fix = Fix::from_node(function, ctx, "g_value_set_static_string");
 
                             let string_value = ast_context.get_node_text(second_arg, ctx.source);
 

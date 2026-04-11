@@ -154,11 +154,7 @@ impl UseGSourceConstants {
                             "G_SOURCE_REMOVE"
                         };
 
-                        let fix = Fix {
-                            start_byte: child.start_byte(),
-                            end_byte: child.end_byte(),
-                            replacement: replacement.to_string(),
-                        };
+                        let fix = Fix::new(child.start_byte(), child.end_byte(), replacement);
 
                         violations.push(self.violation_with_fix(
                             file_path,

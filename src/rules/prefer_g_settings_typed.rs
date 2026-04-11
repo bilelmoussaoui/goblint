@@ -85,11 +85,12 @@ impl PreferGSettingsTyped {
                             )
                         };
 
-                        let fix = Fix {
-                            start_byte: ctx.base_byte + function.start_byte(),
-                            end_byte: ctx.base_byte + args_node.end_byte(),
-                            replacement: replacement.clone(),
-                        };
+                        let fix = Fix::from_range(
+                            function.start_byte(),
+                            args_node.end_byte(),
+                            ctx,
+                            &replacement,
+                        );
 
                         violations.push(self.violation_with_fix(
                             ctx.file_path,
@@ -120,11 +121,12 @@ impl PreferGSettingsTyped {
                     let replacement =
                         format!("{}{}({}, {})", typed_func, spacing, settings_arg, key_arg);
 
-                    let fix = Fix {
-                        start_byte: ctx.base_byte + function.start_byte(),
-                        end_byte: ctx.base_byte + args_node.end_byte(),
-                        replacement: replacement.clone(),
-                    };
+                    let fix = Fix::from_range(
+                        function.start_byte(),
+                        args_node.end_byte(),
+                        ctx,
+                        &replacement,
+                    );
 
                     violations.push(self.violation_with_fix(
                             ctx.file_path,

@@ -151,11 +151,7 @@ impl StrcmpForStringEqual {
                 format!("!g_str_equal{}{}", spacing, args_text)
             };
 
-            let fix = Fix {
-                start_byte: ctx.base_byte + parent_node.start_byte(),
-                end_byte: ctx.base_byte + parent_node.end_byte(),
-                replacement: replacement.clone(),
-            };
+            let fix = Fix::from_node(parent_node, ctx, &replacement);
 
             violations.push(self.violation_with_fix(
                 ctx.file_path,

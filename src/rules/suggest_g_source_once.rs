@@ -90,11 +90,7 @@ impl SuggestGSourceOnce {
                             };
 
                             // Fix 1: Replace g_idle_add → g_idle_add_once
-                            let mut fixes = vec![Fix {
-                                start_byte: ctx.base_byte + function.start_byte(),
-                                end_byte: ctx.base_byte + function.end_byte(),
-                                replacement: replacement.to_string(),
-                            }];
+                            let mut fixes = vec![Fix::from_node(function, ctx, replacement)];
 
                             // Add callback fixes (return type + return statements)
                             fixes.append(&mut callback_fixes);
@@ -180,11 +176,11 @@ impl SuggestGSourceOnce {
                         if let Some(return_type_node) =
                             self.find_return_type(root, func_source, ast_context)
                         {
-                            fixes.push(Fix {
-                                start_byte: func_start_byte + return_type_node.start_byte(),
-                                end_byte: func_start_byte + return_type_node.end_byte(),
-                                replacement: "void".to_string(),
-                            });
+                            fixes.push(Fix::new(
+                                func_start_byte + return_type_node.start_byte(),
+                                func_start_byte + return_type_node.end_byte(),
+                                "void",
+                            ));
                         }
 
                         // Fix: Remove all return statements (entire lines)
@@ -192,11 +188,11 @@ impl SuggestGSourceOnce {
                         for return_stmt in return_statements {
                             let (line_start, line_end) =
                                 self.find_line_bounds(return_stmt, func_source);
-                            fixes.push(Fix {
-                                start_byte: func_start_byte + line_start,
-                                end_byte: func_start_byte + line_end,
-                                replacement: String::new(),
-                            });
+                            fixes.push(Fix::new(
+                                func_start_byte + line_start,
+                                func_start_byte + line_end,
+                                "",
+                            ));
                         }
 
                         found_definition = true;
@@ -342,11 +338,7 @@ impl SuggestGSourceOnce {
                     // Preserve alignment by padding "void" to match "gboolean" length
                     let replacement = format!("{:8}", "void"); // "gboolean" is 8 chars
 
-                    return Some(Fix {
-                        start_byte: gboolean_start,
-                        end_byte: gboolean_end,
-                        replacement,
-                    });
+                    return Some(Fix::new(gboolean_start, gboolean_end, replacement));
                 }
 
                 return None;

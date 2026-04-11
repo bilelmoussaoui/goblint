@@ -310,11 +310,7 @@ impl UseClearFunctions {
                 format!("g_clear_pointer (&{}, {});", var_name, unref_function)
             };
 
-            let fix = Fix {
-                start_byte: ctx.base_byte + if_node.start_byte(),
-                end_byte: ctx.base_byte + if_node.end_byte(),
-                replacement: replacement.clone(),
-            };
+            let fix = Fix::from_node(if_node, ctx, &replacement);
 
             violations.push(self.violation_with_fix(
                 ctx.file_path,

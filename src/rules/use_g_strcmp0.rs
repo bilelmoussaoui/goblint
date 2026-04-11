@@ -59,11 +59,7 @@ impl UseGStrcmp0 {
             if let Ok(func_name) = std::str::from_utf8(func_text) {
                 if func_name == "strcmp" {
                     // Only auto-fix strcmp, not strncmp (strncmp needs manual review)
-                    let fix = Fix {
-                        start_byte: ctx.base_byte + function.start_byte(),
-                        end_byte: ctx.base_byte + function.end_byte(),
-                        replacement: "g_strcmp0".to_string(),
-                    };
+                    let fix = Fix::from_node(function, ctx, "g_strcmp0");
 
                     violations.push(self.violation_with_fix(
                         ctx.file_path,

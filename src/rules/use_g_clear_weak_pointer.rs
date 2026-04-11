@@ -78,11 +78,12 @@ impl UseGClearWeakPointer {
                         // Found the pattern! Create a fix
                         let replacement = format!("g_clear_weak_pointer (&{});", var_name);
 
-                        let fix = Fix {
-                            start_byte: ctx.base_byte + node.start_byte(),
-                            end_byte: ctx.base_byte + next_sibling.end_byte(),
-                            replacement: replacement.clone(),
-                        };
+                        let fix = Fix::from_range(
+                            node.start_byte(),
+                            next_sibling.end_byte(),
+                            ctx,
+                            &replacement,
+                        );
 
                         violations.push(self.violation_with_fix(
                             ctx.file_path,

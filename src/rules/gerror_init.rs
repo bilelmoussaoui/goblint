@@ -63,11 +63,12 @@ impl GErrorInit {
             && !is_initialized_to_null
         {
             // Add = NULL right after the declarator (before the semicolon)
-            let fix = Fix {
-                start_byte: ctx.base_byte + declarator_node.end_byte(),
-                end_byte: ctx.base_byte + declarator_node.end_byte(),
-                replacement: " = NULL".to_string(),
-            };
+            let fix = Fix::from_range(
+                declarator_node.end_byte(),
+                declarator_node.end_byte(),
+                ctx,
+                " = NULL",
+            );
 
             violations.push(self.violation_with_fix(
                 ctx.file_path,

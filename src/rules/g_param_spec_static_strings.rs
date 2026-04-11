@@ -81,11 +81,7 @@ impl GParamSpecStaticStrings {
                         format!("{} | G_PARAM_STATIC_STRINGS", flags_arg_text)
                     };
 
-                    let fix = Fix {
-                        start_byte: ctx.base_byte + flags_arg.start_byte(),
-                        end_byte: ctx.base_byte + flags_arg.end_byte(),
-                        replacement: new_flags.clone(),
-                    };
+                    let fix = Fix::from_node(flags_arg, ctx, &new_flags);
 
                     violations.push(self.violation_with_fix(
                             ctx.file_path,

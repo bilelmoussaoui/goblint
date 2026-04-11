@@ -77,11 +77,12 @@ impl UseGSetStr {
 
                 let replacement = format!("g_set_str (&{}, {});", var_name, args_clean);
 
-                let fix = Fix {
-                    start_byte: ctx.base_byte + first_stmt.start_byte(),
-                    end_byte: ctx.base_byte + second_stmt.end_byte(),
-                    replacement: replacement.clone(),
-                };
+                let fix = Fix::from_range(
+                    first_stmt.start_byte(),
+                    second_stmt.end_byte(),
+                    ctx,
+                    &replacement,
+                );
 
                 violations.push(self.violation_with_fix(
                     ctx.file_path,

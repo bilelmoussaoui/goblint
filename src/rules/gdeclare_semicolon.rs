@@ -60,11 +60,7 @@ impl Rule for GDeclareSemicolon {
                                     line_num + 1,
                                     paren_pos + 1,
                                     "G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.".to_string(),
-                                    Fix {
-                                        start_byte: fix_byte_pos,
-                                        end_byte: fix_byte_pos,
-                                        replacement: ";".to_string(),
-                                    },
+                                    Fix::new(fix_byte_pos, fix_byte_pos, ";"),
                                 );
                                 v.snippet = Some(format!("{}; // Add semicolon here", trimmed));
                                 violations.push(v);

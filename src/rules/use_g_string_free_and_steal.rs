@@ -75,11 +75,7 @@ impl UseGStringFreeAndSteal {
                     // Build replacement with proper spacing
                     let replacement = format!("g_string_free_and_steal ({})", first_text);
 
-                    let fix = Fix {
-                        start_byte: ctx.base_byte + call.start_byte(),
-                        end_byte: ctx.base_byte + call.end_byte(),
-                        replacement: replacement.clone(),
-                    };
+                    let fix = Fix::from_node(call, ctx, &replacement);
 
                     let position = call.start_position();
                     violations.push(self.violation_with_fix(

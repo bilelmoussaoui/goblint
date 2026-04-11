@@ -87,18 +87,20 @@ impl UseGClearHandleId {
                     let fix = if stmt_count == 2 {
                         // Replace the entire compound_statement (including braces) with
                         // just the call
-                        Fix {
-                            start_byte: ctx.base_byte + consequence.start_byte(),
-                            end_byte: ctx.base_byte + consequence.end_byte(),
-                            replacement: replacement.clone(),
-                        }
+                        Fix::from_range(
+                            consequence.start_byte(),
+                            consequence.end_byte(),
+                            ctx,
+                            &replacement,
+                        )
                     } else {
                         // Just replace the two statements
-                        Fix {
-                            start_byte: ctx.base_byte + first_stmt.start_byte(),
-                            end_byte: ctx.base_byte + second_stmt.end_byte(),
-                            replacement: replacement.clone(),
-                        }
+                        Fix::from_range(
+                            first_stmt.start_byte(),
+                            second_stmt.end_byte(),
+                            ctx,
+                            &replacement,
+                        )
                     };
 
                     violations.push(self.violation_with_fix(
@@ -139,13 +141,12 @@ impl UseGClearHandleId {
                     && let Some(call_stmt) = clear_handle_call
                 {
                     let position = node.start_position();
-                    let fix = Fix {
-                        start_byte: ctx.base_byte + consequence.start_byte(),
-                        end_byte: ctx.base_byte + consequence.end_byte(),
-                        replacement: std::str::from_utf8(&ctx.source[call_stmt.byte_range()])
-                            .unwrap_or("")
-                            .to_string(),
-                    };
+                    let fix = Fix::from_range(
+                        consequence.start_byte(),
+                        consequence.end_byte(),
+                        ctx,
+                        std::str::from_utf8(&ctx.source[call_stmt.byte_range()]).unwrap_or(""),
+                    );
 
                     violations.push(
                         self.violation_with_fix(
@@ -170,11 +171,12 @@ impl UseGClearHandleId {
                 let position = first_stmt.start_position();
                 let replacement = format!("g_clear_handle_id (&{}, {});", var_name, cleanup_func);
 
-                let fix = Fix {
-                    start_byte: ctx.base_byte + first_stmt.start_byte(),
-                    end_byte: ctx.base_byte + second_stmt.end_byte(),
-                    replacement: replacement.clone(),
-                };
+                let fix = Fix::from_range(
+                    first_stmt.start_byte(),
+                    second_stmt.end_byte(),
+                    ctx,
+                    &replacement,
+                );
 
                 violations.push(self.violation_with_fix(
                     ctx.file_path,

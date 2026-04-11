@@ -50,14 +50,15 @@ impl Rule for GTaskSourceTag {
                                 func_source,
                             ) {
                                 // Create fix: insert g_task_set_source_tag after the statement
-                                let fix = Fix {
-                                    start_byte: func.start_byte.unwrap() + insert_byte,
-                                    end_byte: func.start_byte.unwrap() + insert_byte,
-                                    replacement: format!(
+                                let insert_pos = func.start_byte.unwrap() + insert_byte;
+                                let fix = Fix::new(
+                                    insert_pos,
+                                    insert_pos,
+                                    format!(
                                         "\n{}g_task_set_source_tag ({}, {});",
                                         indentation, var_name, func.name
                                     ),
-                                };
+                                );
 
                                 violations.push(self.violation_with_fix(
                                     path,

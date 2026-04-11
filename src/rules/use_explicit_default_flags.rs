@@ -133,11 +133,7 @@ impl UseExplicitDefaultFlags {
 
                             // Check if the argument is literally "0"
                             if arg_text == "0" {
-                                let fix = Fix {
-                                    start_byte: ctx.base_byte + arg_node.start_byte(),
-                                    end_byte: ctx.base_byte + arg_node.end_byte(),
-                                    replacement: replacement_const.to_string(),
-                                };
+                                let fix = Fix::from_node(arg_node, ctx, replacement_const);
 
                                 violations.push(self.violation_with_fix(
                                     ctx.file_path,

@@ -59,11 +59,7 @@ impl PropertyEnumZero {
             && let Some((prop_name, name_node)) =
                 self.check_first_enumerator(ast_context, node, source)
         {
-            let fix = Fix {
-                start_byte: name_node.start_byte(),
-                end_byte: name_node.end_byte(),
-                replacement: "PROP_0".to_string(),
-            };
+            let fix = Fix::new(name_node.start_byte(), name_node.end_byte(), "PROP_0");
 
             violations.push(self.violation_with_fix(
                     file_path,

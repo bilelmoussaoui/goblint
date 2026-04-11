@@ -234,11 +234,7 @@ impl UnnecessaryNullCheck {
                     .to_string()
             };
 
-            let fix = Fix {
-                start_byte: ctx.base_byte + node.start_byte(),
-                end_byte: ctx.base_byte + node.end_byte(),
-                replacement,
-            };
+            let fix = Fix::from_node(node, ctx, replacement);
 
             violations.push(self.violation_with_fix(
                 ctx.file_path,

@@ -46,6 +46,44 @@ pub struct Fix {
     pub replacement: String,
 }
 
+impl Fix {
+    /// Create a fix from absolute byte offsets
+    pub fn new(start_byte: usize, end_byte: usize, replacement: impl Into<String>) -> Self {
+        Self {
+            start_byte,
+            end_byte,
+            replacement: replacement.into(),
+        }
+    }
+
+    /// Create a fix from a tree-sitter node and context
+    pub fn from_node(
+        node: tree_sitter::Node,
+        ctx: &CheckContext,
+        replacement: impl Into<String>,
+    ) -> Self {
+        Self {
+            start_byte: ctx.base_byte + node.start_byte(),
+            end_byte: ctx.base_byte + node.end_byte(),
+            replacement: replacement.into(),
+        }
+    }
+
+    /// Create a fix from a byte range and context
+    pub fn from_range(
+        start: usize,
+        end: usize,
+        ctx: &CheckContext,
+        replacement: impl Into<String>,
+    ) -> Self {
+        Self {
+            start_byte: ctx.base_byte + start,
+            end_byte: ctx.base_byte + end,
+            replacement: replacement.into(),
+        }
+    }
+}
+
 /// Context passed to check_node functions to avoid too many arguments
 pub struct CheckContext<'a> {
     pub source: &'a [u8],
