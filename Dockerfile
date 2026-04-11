@@ -1,4 +1,4 @@
-FROM rust:1.83-slim AS builder
+FROM rust:1.92-slim AS builder
 
 WORKDIR /build
 
@@ -10,7 +10,7 @@ COPY gobject-ast/Cargo.toml gobject-ast/
 RUN mkdir -p src gobject-ast/src && \
     echo "fn main() {}" > src/main.rs && \
     echo "fn main() {}" > gobject-ast/src/main.rs && \
-    cargo build --release && \
+    cargo build --release --bin goblin && \
     rm -rf src gobject-ast/src
 
 # Copy actual source code
