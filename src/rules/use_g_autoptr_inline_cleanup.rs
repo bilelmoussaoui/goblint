@@ -123,6 +123,11 @@ impl UseGAutoptrInlineCleanup {
                 {
                     let type_text = ast_context.get_node_text(type_node, source);
 
+                    // Skip variables already using g_autoptr/g_autofree
+                    if type_text.contains("g_autoptr") || type_text.contains("g_autofree") {
+                        continue;
+                    }
+
                     // Find declarators
                     let mut decl_cursor = child.walk();
                     for decl_child in child.children(&mut decl_cursor) {
