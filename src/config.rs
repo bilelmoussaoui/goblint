@@ -203,113 +203,19 @@ impl<'de> Deserialize<'de> for RuleConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct RulesConfig {
-    #[serde(default)]
-    pub g_param_spec_null_nick_blurb: RuleConfig,
-
-    #[serde(default)]
-    pub g_param_spec_static_strings: RuleConfig,
-
-    #[serde(default)]
-    pub g_param_spec_static_name_canonical: RuleConfig,
-
-    #[serde(default, alias = "dispose_finalize_chains_up")]
-    pub g_object_virtual_methods_chain_up: RuleConfig,
-
-    #[serde(default)]
-    pub use_clear_functions: RuleConfig,
-
-    #[serde(default)]
-    pub use_explicit_default_flags: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_strcmp0: RuleConfig,
-
-    #[serde(default)]
-    pub property_enum_zero: RuleConfig,
-
-    #[serde(default)]
-    pub deprecated_add_private: RuleConfig,
-
-    #[serde(default)]
-    pub g_error_init: RuleConfig,
-
-    #[serde(default)]
-    pub g_task_source_tag: RuleConfig,
-
-    #[serde(default)]
-    pub unnecessary_null_check: RuleConfig,
-
-    #[serde(default)]
-    pub missing_implementation: RuleConfig,
-
-    #[serde(default)]
-    pub g_declare_semicolon: RuleConfig,
-
-    #[serde(default)]
-    pub matching_declare_define: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_new: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_object_class_install_properties: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_settings_typed: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_value_set_static_string: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_variant_new_typed: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_str_equal: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_set_str: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_autoptr_error: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_autoptr_goto_cleanup: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_autoptr_inline_cleanup: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_autofree: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_source_once: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_source_constants: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_clear_handle_id: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_clear_list: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_clear_weak_pointer: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_file_load_bytes: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_object_new_with_properties: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_object_notify_by_pspec: RuleConfig,
-
-    #[serde(default)]
-    pub use_g_string_free_and_steal: RuleConfig,
+macro_rules! impl_rules_config {
+    ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+        #[derive(Debug, Clone, Deserialize, Default)]
+        pub struct RulesConfig {
+            $(
+                #[serde(default)]
+                pub $config_field: RuleConfig,
+            )*
+        }
+    };
 }
+
+crate::for_each_rule!(impl_rules_config);
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
