@@ -44,7 +44,7 @@ impl Rule for UseGSourceOnce {
                             source: func_source,
                             file_path: path,
                             base_line: func.line,
-                            base_byte: func.start_byte.unwrap(),
+                            base_byte: func.start_byte.unwrap_or(0),
                         };
                         self.check_source_add_calls(ast_context, body, &ctx, violations);
                     }
@@ -153,7 +153,7 @@ impl UseGSourceOnce {
                         continue;
                     };
                     let root = tree.root_node();
-                    let func_start_byte = func.start_byte.unwrap();
+                    let func_start_byte = func.start_byte.unwrap_or(0);
                     // Check if all returns are FALSE/G_SOURCE_REMOVE
                     if let Some(body) = ast_context.find_body(root) {
                         let returns = self.collect_all_returns(body, func_source, ast_context);
