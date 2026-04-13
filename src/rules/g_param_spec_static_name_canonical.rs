@@ -120,8 +120,8 @@ impl GParamSpecStaticNameCanonical {
         &self,
         ast_context: &AstContext,
         arg_node: Node<'a>,
-        source: &[u8],
-    ) -> (String, Node<'a>) {
+        source: &'a [u8],
+    ) -> (&'a str, Node<'a>) {
         // Check if it's a macro call like I_("name") or N_("name")
         if arg_node.kind() == "call_expression" {
             // Get the arguments of the macro
@@ -132,7 +132,7 @@ impl GParamSpecStaticNameCanonical {
                     if child.kind() == "string_literal" {
                         let text = ast_context.get_node_text(child, source);
                         let value = text.trim_matches('"');
-                        return (value.to_string(), child);
+                        return (value, child);
                     }
                 }
             }
@@ -141,7 +141,7 @@ impl GParamSpecStaticNameCanonical {
         // Otherwise, it should be a direct string literal
         let name_text = ast_context.get_node_text(arg_node, source);
         let name_value = name_text.trim_matches('"');
-        (name_value.to_string(), arg_node)
+        (name_value, arg_node)
     }
 
     /// Check a g_param_spec_* call and return (name_arg, flags_arg,

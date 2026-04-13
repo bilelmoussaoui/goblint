@@ -74,7 +74,7 @@ impl UseGStrEqual {
                         ast_context,
                         left,
                         right,
-                        &op_text,
+                        op_text,
                         ctx,
                         node,
                         violations,
@@ -84,7 +84,7 @@ impl UseGStrEqual {
                         ast_context,
                         right,
                         left,
-                        &op_text,
+                        op_text,
                         ctx,
                         node,
                         violations,
@@ -126,10 +126,7 @@ impl UseGStrEqual {
         }
 
         // Check if value_side is 0
-        let value_text = ast_context
-            .get_node_text(value_side, ctx.source)
-            .trim()
-            .to_string();
+        let value_text = ast_context.get_node_text(value_side, ctx.source).trim();
         if value_text != "0" {
             return;
         }

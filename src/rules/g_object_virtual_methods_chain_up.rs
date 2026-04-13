@@ -125,13 +125,13 @@ impl GObjectVirtualMethodsChainUp {
                         let arg_text = ast_context.get_node_text(argument, source);
 
                         // Pattern 1: Direct parent class cast
-                        if self.looks_like_parent_class_cast(&arg_text) {
+                        if self.looks_like_parent_class_cast(arg_text) {
                             return true;
                         }
 
                         // Pattern 2: Variable that looks like it holds a parent class
                         // Examples: parent_object_class, parent_class, klass, object_class
-                        if self.looks_like_parent_class_variable(&arg_text) {
+                        if self.looks_like_parent_class_variable(arg_text) {
                             return true;
                         }
                     }

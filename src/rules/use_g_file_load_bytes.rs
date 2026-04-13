@@ -75,23 +75,23 @@ impl UseGFileLoadBytes {
 
     /// Find all g_file_load_contents calls and return (contents_var,
     /// length_var, file_arg, cancellable_arg, error_arg)
-    fn find_load_contents_calls(
+    fn find_load_contents_calls<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> HashMap<String, (String, String, String, String)> {
+        source: &'a [u8],
+    ) -> HashMap<&'a str, (&'a str, &'a str, &'a str, &'a str)> {
         let mut result = HashMap::new();
         self.collect_load_contents_calls(ast_context, node, source, &mut result);
         result
     }
 
-    fn collect_load_contents_calls(
+    fn collect_load_contents_calls<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        result: &mut HashMap<String, (String, String, String, String)>,
+        source: &'a [u8],
+        result: &mut HashMap<&'a str, (&'a str, &'a str, &'a str, &'a str)>,
     ) {
         if node.kind() == "call_expression"
             && let Some(function) = node.child_by_field_name("function")
@@ -107,25 +107,25 @@ impl UseGFileLoadBytes {
                 // g_file_load_contents_finish(file, res, &contents, &length, &etag, &error)
                 //                             0     1    2          3         4       5
                 if arguments.len() >= 6 {
-                    let contents_var = arguments[2].trim_start_matches('&').to_string();
-                    let length_var = arguments[3].trim_start_matches('&').to_string();
+                    let contents_var = arguments[2].trim_start_matches('&');
+                    let length_var = arguments[3].trim_start_matches('&');
 
                     let (file_or_res_arg, cancellable_or_res_arg) =
                         if func_name == "g_file_load_contents" {
-                            (arguments[0].clone(), arguments[1].clone())
+                            (arguments[0], arguments[1])
                         } else {
                             // For _finish, use file (arg 0) and "NULL" for cancellable (not
                             // used in async version)
-                            (arguments[0].clone(), "NULL".to_string())
+                            (arguments[0], "NULL")
                         };
 
                     result.insert(
-                        contents_var.clone(),
+                        contents_var,
                         (
                             length_var,
                             file_or_res_arg,
                             cancellable_or_res_arg,
-                            arguments[5].clone(),
+                            arguments[5],
                         ),
                     );
                 }
@@ -139,12 +139,12 @@ impl UseGFileLoadBytes {
         }
     }
 
-    fn find_bytes_new_take_violations(
+    fn find_bytes_new_take_violations<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
         ctx: &CheckContext,
-        load_contents_calls: &HashMap<String, (String, String, String, String)>,
+        load_contents_calls: &HashMap<&'a str, (&'a str, &'a str, &'a str, &'a str)>,
         violations: &mut Vec<Violation>,
     ) {
         if node.kind() == "call_expression"
@@ -159,7 +159,7 @@ impl UseGFileLoadBytes {
                 // g_bytes_new_take(contents, length) or
                 // g_bytes_new_take(g_steal_pointer(&contents), length)
                 if arguments.len() >= 2 {
-                    let first_arg = arguments[0].clone();
+                    let first_arg = arguments[0];
 
                     // Extract variable name from first arg (handle g_steal_pointer)
                     let contents_var = if first_arg.contains("g_steal_pointer") {
@@ -170,9 +170,8 @@ impl UseGFileLoadBytes {
                             .trim_end_matches(')')
                             .trim()
                             .trim_start_matches('&')
-                            .to_string()
                     } else {
-                        first_arg.clone()
+                        first_arg
                     };
 
                     // Check if this contents variable came from g_file_load_contents
@@ -203,12 +202,12 @@ impl UseGFileLoadBytes {
         }
     }
 
-    fn collect_arguments(
+    fn collect_arguments<'a>(
         &self,
         ast_context: &AstContext,
         args_node: Node,
-        source: &[u8],
-    ) -> Vec<String> {
+        source: &'a [u8],
+    ) -> Vec<&'a str> {
         let mut cursor = args_node.walk();
         let mut arguments = Vec::new();
         for child in args_node.children(&mut cursor) {

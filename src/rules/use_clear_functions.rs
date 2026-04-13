@@ -52,11 +52,11 @@ impl Rule for UseClearFunctions {
 
 impl UseClearFunctions {
     fn is_manual_clear_pattern<'a>(
-        &self,
+        &'a self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-    ) -> Option<(String, String, String, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, &'a str, &'a str, Node<'a>)> {
         // Look for pattern:
         // if (obj->field) {
         //   g_object_unref (obj->field);
@@ -86,31 +86,26 @@ impl UseClearFunctions {
 
         // Look for unref/free call and NULL assignment as DIRECT children only
         let (has_unref_call, unref_function) =
-            self.has_unref_call_direct(ast_context, consequence, &checked_var, source);
+            self.has_unref_call_direct(ast_context, consequence, checked_var, source);
         let has_null_assignment =
-            self.has_null_assignment_direct(ast_context, consequence, &checked_var, source);
+            self.has_null_assignment_direct(ast_context, consequence, checked_var, source);
 
         // Only suggest if there are EXACTLY 2 statements: the free and the NULL
         // assignment
         if statement_count == 2 && has_unref_call && has_null_assignment {
-            let suggested_function = self.suggest_clear_function(&unref_function);
-            return Some((
-                checked_var,
-                suggested_function.to_string(),
-                unref_function,
-                node,
-            ));
+            let suggested_function = self.suggest_clear_function(unref_function);
+            return Some((checked_var, suggested_function, unref_function, node));
         }
 
         None
     }
 
-    fn find_variable_in_condition(
+    fn find_variable_in_condition<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         // For field_expression (obj->field), return the full expression
         if node.kind() == "field_expression" {
             return Some(ast_context.get_node_text(node, source));
@@ -189,13 +184,13 @@ impl UseClearFunctions {
         }
     }
 
-    fn has_unref_call_direct(
+    fn has_unref_call_direct<'a>(
         &self,
         ast_context: &AstContext,
         body: Node,
         var_name: &str,
-        source: &[u8],
-    ) -> (bool, String) {
+        source: &'a [u8],
+    ) -> (bool, &'a str) {
         // Look for g_object_unref, g_free, etc. in DIRECT children only, not
         // recursively
         let unref_functions = [
@@ -234,7 +229,7 @@ impl UseClearFunctions {
             }
         }
 
-        (false, String::new())
+        (false, "")
     }
 
     fn has_null_assignment_direct(

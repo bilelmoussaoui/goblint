@@ -115,8 +115,8 @@ impl UseGClearList {
         &self,
         ast_context: &AstContext,
         compound: Node<'a>,
-        source: &[u8],
-    ) -> Vec<(String, &'static str, Node<'a>, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Vec<(&'a str, &'static str, Node<'a>, Node<'a>)> {
         let mut cursor = compound.walk();
         let statements: Vec<_> = compound
             .children(&mut cursor)
@@ -145,18 +145,18 @@ impl UseGClearList {
         results
     }
 
-    fn extract_list_free(
+    fn extract_list_free<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<(String, &'static str)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, &'static str)> {
         if let Some(call) = ast_context.find_call_expression(node)
             && let Some(function) = call.child_by_field_name("function")
         {
             let func_name = ast_context.get_node_text(function, source);
 
-            let list_type = match func_name.as_str() {
+            let list_type = match func_name {
                 "g_list_free" => "GList",
                 "g_slist_free" => "GSList",
                 _ => return None,
@@ -167,10 +167,7 @@ impl UseGClearList {
                 let mut cursor = args.walk();
                 for child in args.children(&mut cursor) {
                     if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
-                        return Some((
-                            ast_context.get_node_text(child, source).trim().to_string(),
-                            list_type,
-                        ));
+                        return Some((ast_context.get_node_text(child, source).trim(), list_type));
                     }
                 }
             }
@@ -178,19 +175,19 @@ impl UseGClearList {
         None
     }
 
-    fn extract_null_assignment(
+    fn extract_null_assignment<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         if let Some(assignment) = self.find_assignment(node)
             && let Some(left) = assignment.child_by_field_name("left")
             && let Some(right) = assignment.child_by_field_name("right")
         {
             let right_text = ast_context.get_node_text(right, source);
             if right_text.trim() == "NULL" {
-                return Some(ast_context.get_node_text(left, source).trim().to_string());
+                return Some(ast_context.get_node_text(left, source).trim());
             }
         }
         None

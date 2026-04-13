@@ -55,18 +55,18 @@ impl Rule for UseGSourceConstants {
 
         // Check each callback function for TRUE/FALSE returns
         for callback_name in callbacks_to_check {
-            self.check_callback_returns(ast_context, &callback_name, violations);
+            self.check_callback_returns(ast_context, callback_name, violations);
         }
     }
 }
 
 impl UseGSourceConstants {
-    fn collect_source_add_callbacks(
+    fn collect_source_add_callbacks<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        callbacks: &mut Vec<String>,
+        source: &'a [u8],
+        callbacks: &mut Vec<&'a str>,
     ) {
         // Map of source-add function name → zero-based index of the GSourceFunc
         // argument. g_idle_add(func, data)                              → 0
@@ -82,7 +82,7 @@ impl UseGSourceConstants {
         {
             let func_text = ast_context.get_node_text(function, source);
 
-            let callback_arg_index: Option<usize> = match func_text.as_str() {
+            let callback_arg_index: Option<usize> = match func_text {
                 "g_idle_add" | "g_idle_add_once" => Some(0),
                 "g_idle_add_full"
                 | "g_timeout_add"

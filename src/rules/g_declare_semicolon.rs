@@ -32,7 +32,7 @@ impl Rule for GDeclareSemicolon {
     ) {
         for (path, file) in ast_context.iter_header_files() {
             // Use the already-loaded source from the file model
-            let source = String::from_utf8_lossy(&file.source);
+            let source = std::str::from_utf8(&file.source).unwrap_or("");
 
             // Track byte offset as we go through lines
             let mut byte_offset = 0;

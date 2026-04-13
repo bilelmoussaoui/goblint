@@ -76,11 +76,10 @@ impl UseGSourceOnce {
                     let callback_name = ast_context.get_node_text(first_arg, ctx.source);
 
                     // Only proceed if callback is NOT used elsewhere
-                    if !self.is_callback_used_elsewhere(ast_context, &callback_name, ctx.file_path)
-                    {
+                    if !self.is_callback_used_elsewhere(ast_context, callback_name, ctx.file_path) {
                         // Find the callback function definition (only in the same file)
                         if let Some(mut callback_fixes) =
-                            self.get_callback_fixes(ast_context, &callback_name, ctx.file_path)
+                            self.get_callback_fixes(ast_context, callback_name, ctx.file_path)
                         {
                             let position = node.start_position();
                             let replacement = if func_text == "g_idle_add" {
@@ -167,7 +166,7 @@ impl UseGSourceOnce {
                         // All returns must be FALSE or G_SOURCE_REMOVE
                         if !returns
                             .iter()
-                            .all(|r| r == "FALSE" || r == "G_SOURCE_REMOVE" || r == "0")
+                            .all(|r| *r == "FALSE" || *r == "G_SOURCE_REMOVE" || *r == "0")
                         {
                             return None;
                         }
@@ -213,12 +212,12 @@ impl UseGSourceOnce {
         }
     }
 
-    fn collect_all_returns(
+    fn collect_all_returns<'a>(
         &self,
         node: Node,
-        source: &[u8],
+        source: &'a [u8],
         ast_context: &AstContext,
-    ) -> Vec<String> {
+    ) -> Vec<&'a str> {
         let mut returns = Vec::new();
 
         if node.kind() == "return_statement" {
@@ -227,7 +226,7 @@ impl UseGSourceOnce {
             for child in node.children(&mut cursor) {
                 if child.kind() != "return" && child.kind() != ";" {
                     let return_value = ast_context.get_node_text(child, source);
-                    returns.push(return_value.trim().to_string());
+                    returns.push(return_value.trim());
                 }
             }
         }
@@ -328,7 +327,7 @@ impl UseGSourceOnce {
                 }
 
                 let line_bytes = &source[line_start..line_end];
-                let line_str = String::from_utf8_lossy(line_bytes);
+                let line_str = std::str::from_utf8(line_bytes).unwrap_or("");
 
                 // Search for "gboolean" in the line
                 if let Some(offset) = line_str.find("gboolean") {

@@ -147,7 +147,7 @@ impl UseGClearHandleId {
                         consequence.start_byte(),
                         consequence.end_byte(),
                         ctx,
-                        &ast_context.get_node_text(call_stmt, ctx.source),
+                        ast_context.get_node_text(call_stmt, ctx.source),
                     );
 
                     violations.push(
@@ -217,8 +217,8 @@ impl UseGClearHandleId {
         &self,
         ast_context: &AstContext,
         compound: Node<'a>,
-        source: &[u8],
-    ) -> Vec<(String, String, Node<'a>, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Vec<(&'a str, &'a str, Node<'a>, Node<'a>)> {
         let mut cursor = compound.walk();
         let statements: Vec<_> = compound
             .children(&mut cursor)
@@ -248,12 +248,12 @@ impl UseGClearHandleId {
         results
     }
 
-    fn extract_handle_cleanup(
+    fn extract_handle_cleanup<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<(String, String)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, &'a str)> {
         if let Some(call) = ast_context.find_call_expression(node)
             && let Some(function) = call.child_by_field_name("function")
         {
@@ -261,7 +261,7 @@ impl UseGClearHandleId {
 
             // Check if this is a known handle cleanup function
             let is_handle_cleanup = matches!(
-                func_name.as_str(),
+                func_name,
                 "g_source_remove"
                     | "g_source_destroy"
                     | "g_signal_handler_disconnect"
@@ -278,10 +278,7 @@ impl UseGClearHandleId {
                 let mut cursor = args.walk();
                 for child in args.children(&mut cursor) {
                     if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
-                        return Some((
-                            ast_context.get_node_text(child, source).trim().to_string(),
-                            func_name,
-                        ));
+                        return Some((ast_context.get_node_text(child, source).trim(), func_name));
                     }
                 }
             }
@@ -289,19 +286,19 @@ impl UseGClearHandleId {
         None
     }
 
-    fn extract_zero_assignment(
+    fn extract_zero_assignment<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         if let Some(assignment) = self.find_assignment(node)
             && let Some(left) = assignment.child_by_field_name("left")
             && let Some(right) = assignment.child_by_field_name("right")
         {
             let right_text = ast_context.get_node_text(right, source);
             if right_text.trim() == "0" {
-                return Some(ast_context.get_node_text(left, source).trim().to_string());
+                return Some(ast_context.get_node_text(left, source).trim());
             }
         }
         None

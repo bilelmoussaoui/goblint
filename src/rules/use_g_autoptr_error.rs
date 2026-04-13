@@ -65,7 +65,7 @@ impl UseGAutoptrError {
             // Check if this variable is manually freed with g_error_free in the function
             // We need to search the parent scope (function body)
             if let Some(function_body) = self.find_parent_function_body(node)
-                && self.has_error_free_call(ast_context, function_body, &var_name, source)
+                && self.has_error_free_call(ast_context, function_body, var_name, source)
             {
                 let position = decl_node.start_position();
                 violations.push(self.violation(
@@ -91,8 +91,8 @@ impl UseGAutoptrError {
         &self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-    ) -> Option<(String, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, Node<'a>)> {
         // Look for: GError *var_name = NULL;
         // Tree structure: declaration -> type: pointer_declarator -> declarator:
         // identifier
@@ -114,12 +114,12 @@ impl UseGAutoptrError {
         None
     }
 
-    fn extract_pointer_var_name(
+    fn extract_pointer_var_name<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         // Handle pointer_declarator and init_declarator
         match node.kind() {
             "pointer_declarator" => {

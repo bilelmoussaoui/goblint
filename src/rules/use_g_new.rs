@@ -101,12 +101,12 @@ impl UseGNew {
         &self,
         ast_context: &AstContext,
         call_node: Node<'a>,
-        source: &[u8],
-    ) -> Option<(&'static str, String, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Option<(&'static str, &'a str, Node<'a>)> {
         let function = call_node.child_by_field_name("function")?;
         let func_name = ast_context.get_node_text(function, source);
 
-        let malloc_func = match func_name.as_str() {
+        let malloc_func = match func_name {
             "g_malloc" => "g_malloc",
             "g_malloc0" => "g_malloc0",
             _ => return None,
@@ -129,12 +129,12 @@ impl UseGNew {
     }
 
     /// Extract the type from sizeof(Type) or sizeof (Type)
-    fn extract_sizeof_type(
+    fn extract_sizeof_type<'a>(
         &self,
         ast_context: &AstContext,
         sizeof_node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         // sizeof can have different children depending on whether it's sizeof(type) or
         // sizeof(expr) We want to extract the type
         let mut cursor = sizeof_node.walk();
@@ -148,7 +148,7 @@ impl UseGNew {
             let text = ast_context.get_node_text(child, source);
 
             // Clean up the type name (remove spaces, handle pointer types)
-            let cleaned = text.trim().to_string();
+            let cleaned = text.trim();
 
             // Don't suggest for complex expressions, only simple types
             if !cleaned.contains('+')

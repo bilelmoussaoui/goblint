@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-use super::{Fix, Rule};
+use super::{CheckContext, Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
 pub struct GParamSpecNullNickBlurb;
@@ -37,16 +37,13 @@ impl Rule for GParamSpecNullNickBlurb {
                 if let Some(func_source) = ast_context.get_function_source(path, func)
                     && let Some(tree) = ast_context.parse_c_source(func_source)
                 {
-                    let base_byte = func.start_byte.unwrap_or(0);
-                    self.check_node(
-                        ast_context,
-                        tree.root_node(),
-                        func_source,
-                        path,
-                        func.line,
-                        base_byte,
-                        violations,
-                    );
+                    let ctx = CheckContext {
+                        source: func_source,
+                        file_path: path,
+                        base_line: func.line,
+                        base_byte: func.start_byte.unwrap_or(0),
+                    };
+                    self.check_node(ast_context, tree.root_node(), &ctx, violations);
                 }
             }
         }
@@ -58,16 +55,13 @@ impl GParamSpecNullNickBlurb {
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        file_path: &std::path::Path,
-        base_line: usize,
-        base_byte: usize,
+        ctx: &CheckContext,
         violations: &mut Vec<Violation>,
     ) {
         if node.kind() == "call_expression"
             && let Some(function_node) = node.child_by_field_name("function")
         {
-            let function_str = ast_context.get_node_text(function_node, source);
+            let function_str = ast_context.get_node_text(function_node, ctx.source);
 
             if function_str.starts_with("g_param_spec_")
                 && function_str != "g_param_spec_internal"
@@ -85,8 +79,10 @@ impl GParamSpecNullNickBlurb {
                     let nick_arg = args[1];
                     let blurb_arg = args[2];
 
-                    let nick_is_null = self.check_argument_is_null(ast_context, nick_arg, source);
-                    let blurb_is_null = self.check_argument_is_null(ast_context, blurb_arg, source);
+                    let nick_is_null =
+                        self.check_argument_is_null(ast_context, nick_arg, ctx.source);
+                    let blurb_is_null =
+                        self.check_argument_is_null(ast_context, blurb_arg, ctx.source);
 
                     let mut issues = Vec::new();
                     if !nick_is_null {
@@ -97,36 +93,27 @@ impl GParamSpecNullNickBlurb {
                     }
 
                     if !issues.is_empty() {
-                        // If both need fixing, replace both in a single fix
-                        // If only one needs fixing, replace just that one
-                        let (start, end, replacement) = if !nick_is_null && !blurb_is_null {
-                            // Replace both: from start of nick to end of blurb
-                            (
-                                base_byte + nick_arg.start_byte(),
-                                base_byte + blurb_arg.end_byte(),
-                                "NULL, NULL".to_string(),
+                        let fix = if !nick_is_null && !blurb_is_null {
+                            Fix::from_range(
+                                nick_arg.start_byte(),
+                                blurb_arg.end_byte(),
+                                ctx,
+                                "NULL, NULL",
                             )
                         } else if !nick_is_null {
-                            // Replace only nick
-                            (
-                                base_byte + nick_arg.start_byte(),
-                                base_byte + nick_arg.end_byte(),
-                                "NULL".to_string(),
-                            )
+                            Fix::from_range(nick_arg.start_byte(), nick_arg.end_byte(), ctx, "NULL")
                         } else {
-                            // Replace only blurb
-                            (
-                                base_byte + blurb_arg.start_byte(),
-                                base_byte + blurb_arg.end_byte(),
-                                "NULL".to_string(),
+                            Fix::from_range(
+                                blurb_arg.start_byte(),
+                                blurb_arg.end_byte(),
+                                ctx,
+                                "NULL",
                             )
                         };
 
-                        let fix = Fix::new(start, end, replacement);
-
                         violations.push(self.violation_with_fix(
-                            file_path,
-                            base_line + node.start_position().row,
+                            ctx.file_path,
+                            ctx.base_line + node.start_position().row,
                             node.start_position().column + 1,
                             format!(
                                 "{} should have NULL for {}",
@@ -142,15 +129,7 @@ impl GParamSpecNullNickBlurb {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(
-                ast_context,
-                child,
-                source,
-                file_path,
-                base_line,
-                base_byte,
-                violations,
-            );
+            self.check_node(ast_context, child, ctx, violations);
         }
     }
 

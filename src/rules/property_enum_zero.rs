@@ -107,8 +107,8 @@ impl PropertyEnumZero {
         &self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-    ) -> Option<(String, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, Node<'a>)> {
         let body = node.child_by_field_name("body")?;
 
         let mut cursor = body.walk();
@@ -119,7 +119,7 @@ impl PropertyEnumZero {
                 let name_text = ast_context.get_node_text(name, source);
 
                 if let Some(value) = child.child_by_field_name("value") {
-                    let value_text = ast_context.get_node_text(value, source).trim().to_string();
+                    let value_text = ast_context.get_node_text(value, source).trim();
 
                     if name_text.starts_with("PROP_")
                         && !name_text.ends_with("_0")

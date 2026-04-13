@@ -80,7 +80,7 @@ impl UseGAutoptrInlineCleanup {
                 // 2. Variable is manually freed at least once
                 // 3. Variable is not returned directly (would need g_steal_pointer)
                 if is_allocated && is_manually_freed && !is_returned {
-                    let base_type = self.extract_base_type(var_type);
+                    let base_type = AstContext::extract_base_type(var_type);
                     let position = decl_node.start_position();
                     violations.push(self.violation(
                         file_path,
@@ -100,8 +100,8 @@ impl UseGAutoptrInlineCleanup {
         &self,
         ast_context: &AstContext,
         body: Node<'a>,
-        source: &[u8],
-    ) -> HashMap<String, (String, Node<'a>)> {
+        source: &'a [u8],
+    ) -> HashMap<&'a str, (&'a str, Node<'a>)> {
         let mut result = HashMap::new();
         self.collect_local_vars(ast_context, body, source, &mut result);
         result
@@ -111,8 +111,8 @@ impl UseGAutoptrInlineCleanup {
         &self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-        result: &mut HashMap<String, (String, Node<'a>)>,
+        source: &'a [u8],
+        result: &mut HashMap<&'a str, (&'a str, Node<'a>)>,
     ) {
         // Only look at top-level declarations in the function body
         if node.kind() == "compound_statement" {
@@ -138,7 +138,7 @@ impl UseGAutoptrInlineCleanup {
                         {
                             // Only simple identifiers
                             if !var_name.contains("->") && !var_name.contains(".") {
-                                result.insert(var_name, (type_text.clone(), child));
+                                result.insert(var_name, (type_text, child));
                             }
                         }
                     }
@@ -147,12 +147,12 @@ impl UseGAutoptrInlineCleanup {
         }
     }
 
-    fn extract_var_name(
+    fn extract_var_name<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         match node.kind() {
             "init_declarator" => {
                 if let Some(declarator) = node.child_by_field_name("declarator") {
@@ -298,14 +298,5 @@ impl UseGAutoptrInlineCleanup {
         }
 
         false
-    }
-
-    fn extract_base_type(&self, type_text: &str) -> String {
-        type_text
-            .trim()
-            .replace("const ", "")
-            .replace("*", "")
-            .trim()
-            .to_string()
     }
 }

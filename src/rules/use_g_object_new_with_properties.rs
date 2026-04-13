@@ -89,8 +89,8 @@ impl UseGObjectNewWithProperties {
         &self,
         ast_context: &AstContext,
         compound: Node<'a>,
-        source: &[u8],
-    ) -> Vec<(String, usize, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Vec<(&'a str, usize, Node<'a>)> {
         let mut cursor = compound.walk();
         let children: Vec<_> = compound.children(&mut cursor).collect();
 
@@ -134,8 +134,8 @@ impl UseGObjectNewWithProperties {
         &self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-    ) -> Option<(String, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, Node<'a>)> {
         // Look for assignment or declaration
         match node.kind() {
             "expression_statement" => {
@@ -146,7 +146,7 @@ impl UseGObjectNewWithProperties {
                     if let Some(call) = self.find_call_in_node(right)
                         && self.is_g_object_new_empty(ast_context, call, source)
                     {
-                        let var_name = ast_context.get_node_text(left, source).trim().to_string();
+                        let var_name = ast_context.get_node_text(left, source).trim();
                         return Some((var_name, node));
                     }
                 }
@@ -223,12 +223,12 @@ impl UseGObjectNewWithProperties {
     }
 
     /// Extract g_object_set call, return the object variable
-    fn extract_g_object_set(
+    fn extract_g_object_set<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         if let Some(call) = self.find_call_in_node(node) {
             let function = call.child_by_field_name("function")?;
             let func_name = ast_context.get_node_text(function, source);
@@ -242,7 +242,7 @@ impl UseGObjectNewWithProperties {
             let mut cursor = args.walk();
             for child in args.children(&mut cursor) {
                 if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
-                    return Some(ast_context.get_node_text(child, source).trim().to_string());
+                    return Some(ast_context.get_node_text(child, source).trim());
                 }
             }
         }
@@ -250,19 +250,14 @@ impl UseGObjectNewWithProperties {
         None
     }
 
-    fn extract_declarator_name(
+    fn extract_declarator_name<'a>(
         &self,
         ast_context: &AstContext,
         declarator: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         match declarator.kind() {
-            "identifier" => Some(
-                ast_context
-                    .get_node_text(declarator, source)
-                    .trim()
-                    .to_string(),
-            ),
+            "identifier" => Some(ast_context.get_node_text(declarator, source).trim()),
             "pointer_declarator" => {
                 let inner = declarator.child_by_field_name("declarator")?;
                 self.extract_declarator_name(ast_context, inner, source)

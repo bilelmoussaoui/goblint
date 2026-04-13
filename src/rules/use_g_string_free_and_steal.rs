@@ -69,7 +69,7 @@ impl UseGStringFreeAndSteal {
             if let (Some(first), Some(second)) = (children.next(), children.next()) {
                 let second = ast_context.get_node_text(second, ctx.source);
 
-                if matches!(second.as_str(), "FALSE" | "false" | "0") {
+                if matches!(second, "FALSE" | "false" | "0") {
                     let first_text = ast_context.get_node_text(first, ctx.source);
 
                     // Build replacement with proper spacing

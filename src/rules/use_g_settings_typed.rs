@@ -107,7 +107,7 @@ impl UseGSettingsTyped {
             // Look for g_variant_get_* calls with g_settings_get_value
             else if func_name.starts_with("g_variant_get_")
                 && let Some((settings_arg, key_arg, typed_func)) =
-                    self.extract_settings_get_pattern(ast_context, node, ctx.source, &func_name)
+                    self.extract_settings_get_pattern(ast_context, node, ctx.source, func_name)
             {
                 // Calculate spacing
                 if let Some(args_node) = node.child_by_field_name("arguments") {
@@ -149,12 +149,12 @@ impl UseGSettingsTyped {
 
     /// Extract g_settings_set_value pattern and return (settings, key,
     /// typed_function_name, value_args)
-    fn extract_settings_set_pattern(
+    fn extract_settings_set_pattern<'a>(
         &self,
         ast_context: &AstContext,
         call_node: Node,
-        source: &[u8],
-    ) -> Option<(String, String, &'static str, String)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, &'a str, &'static str, String)> {
         let args = call_node.child_by_field_name("arguments")?;
 
         // Collect all arguments
@@ -195,12 +195,12 @@ impl UseGSettingsTyped {
 
     /// Extract g_variant_new pattern and return (format_string,
     /// typed_function_name, rest_of_args)
-    fn extract_variant_pattern(
+    fn extract_variant_pattern<'a>(
         &self,
         ast_context: &AstContext,
         call_node: Node,
-        source: &[u8],
-    ) -> Option<(String, &'static str, String)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, &'static str, String)> {
         let args = call_node.child_by_field_name("arguments")?;
 
         // Collect all arguments
@@ -244,7 +244,7 @@ impl UseGSettingsTyped {
 
         // Collect remaining arguments (after format string)
         let rest_args = if arguments.len() > 1 {
-            let rest: Vec<String> = arguments[1..]
+            let rest: Vec<&str> = arguments[1..]
                 .iter()
                 .map(|arg| ast_context.get_node_text(*arg, source))
                 .collect();
@@ -253,18 +253,18 @@ impl UseGSettingsTyped {
             String::new()
         };
 
-        Some((format_str.to_string(), typed_func, rest_args))
+        Some((format_str, typed_func, rest_args))
     }
 
     /// Extract g_variant_get_* pattern with g_settings_get_value and return
     /// (settings, key, typed_function_name)
-    fn extract_settings_get_pattern(
+    fn extract_settings_get_pattern<'a>(
         &self,
         ast_context: &AstContext,
         call_node: Node,
-        source: &[u8],
+        source: &'a [u8],
         variant_get_func: &str,
-    ) -> Option<(String, String, &'static str)> {
+    ) -> Option<(&'a str, &'a str, &'static str)> {
         let args = call_node.child_by_field_name("arguments")?;
 
         // Collect all arguments

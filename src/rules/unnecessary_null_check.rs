@@ -55,8 +55,8 @@ impl UnnecessaryNullCheck {
         &self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-    ) -> Option<(String, String, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, &'a str, Node<'a>)> {
         if node.kind() != "if_statement" {
             return None;
         }
@@ -72,7 +72,7 @@ impl UnnecessaryNullCheck {
 
         // Check if the body contains only a g_free/g_clear_pointer call
         if let Some(free_func) =
-            self.is_only_gfree_call(ast_context, consequence, &checked_var, source)
+            self.is_only_gfree_call(ast_context, consequence, checked_var, source)
         {
             return Some((checked_var, free_func, consequence));
         }
@@ -80,19 +80,19 @@ impl UnnecessaryNullCheck {
         None
     }
 
-    fn extract_null_check_variable(
+    fn extract_null_check_variable<'a>(
         &self,
         ast_context: &AstContext,
         condition: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         // Look for patterns: ptr != NULL, NULL != ptr, ptr != 0, ptr
 
         // Handle binary expressions (ptr != NULL)
         if condition.kind() == "binary_expression" {
             if let Some(left) = condition.child_by_field_name("left") {
                 let left_text = ast_context.get_node_text(left, source);
-                if !ast_context.is_null_literal(&left_text) {
+                if !ast_context.is_null_literal(left_text) {
                     // Check operator is != or ==
                     if let Some(operator) = condition.child_by_field_name("operator") {
                         let op = ast_context.get_node_text(operator, source);
@@ -106,7 +106,7 @@ impl UnnecessaryNullCheck {
             // Try right side for "NULL != ptr" pattern
             if let Some(right) = condition.child_by_field_name("right") {
                 let right_text = ast_context.get_node_text(right, source);
-                if !ast_context.is_null_literal(&right_text) {
+                if !ast_context.is_null_literal(right_text) {
                     return Some(right_text);
                 }
             }
@@ -124,24 +124,19 @@ impl UnnecessaryNullCheck {
 
         // Handle simple identifier condition (just "ptr")
         if condition.kind() == "identifier" {
-            return Some(
-                ast_context
-                    .get_node_text(condition, source)
-                    .trim()
-                    .to_string(),
-            );
+            return Some(ast_context.get_node_text(condition, source).trim());
         }
 
         None
     }
 
-    fn is_only_gfree_call(
+    fn is_only_gfree_call<'a>(
         &self,
         ast_context: &AstContext,
         body: Node,
         var_name: &str,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         // For compound statements, check if it contains ONLY ONE statement total and
         // it's a g_free or g_clear_*
         if body.kind() == "compound_statement" {
@@ -176,13 +171,13 @@ impl UnnecessaryNullCheck {
         None
     }
 
-    fn check_gfree_call(
+    fn check_gfree_call<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
         var_name: &str,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         // Look for g_free(var_name) or g_clear_*(&var_name, ...)
         if let Some(call) = ast_context.find_call_expression(node)
             && let Some(function) = call.child_by_field_name("function")
@@ -227,7 +222,7 @@ impl UnnecessaryNullCheck {
             let replacement = if consequence.kind() == "compound_statement" {
                 // Get the statement inside the compound block
                 let mut cursor = consequence.walk();
-                let mut stmt_text = String::new();
+                let mut stmt_text = "";
                 for child in consequence.children(&mut cursor) {
                     if child.kind() == "expression_statement" {
                         stmt_text = ast_context.get_node_text(child, ctx.source);

@@ -150,8 +150,8 @@ impl UseGAutofree {
         &self,
         ast_context: &AstContext,
         body: Node<'a>,
-        source: &[u8],
-    ) -> HashMap<String, (String, Node<'a>)> {
+        source: &'a [u8],
+    ) -> HashMap<&'a str, (&'a str, Node<'a>)> {
         let mut result = HashMap::new();
         self.collect_local_vars(ast_context, body, source, &mut result);
         result
@@ -161,8 +161,8 @@ impl UseGAutofree {
         &self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-        result: &mut HashMap<String, (String, Node<'a>)>,
+        source: &'a [u8],
+        result: &mut HashMap<&'a str, (&'a str, Node<'a>)>,
     ) {
         if node.kind() == "compound_statement" {
             let mut cursor = node.walk();
@@ -181,7 +181,7 @@ impl UseGAutofree {
                             && !var_name.contains("->")
                             && !var_name.contains(".")
                         {
-                            result.insert(var_name, (type_text.clone(), child));
+                            result.insert(var_name, (type_text, child));
                         }
                     }
                 }
@@ -189,12 +189,12 @@ impl UseGAutofree {
         }
     }
 
-    fn extract_var_name(
+    fn extract_var_name<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         match node.kind() {
             "init_declarator" => {
                 if let Some(declarator) = node.child_by_field_name("declarator") {

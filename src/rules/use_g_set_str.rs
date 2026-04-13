@@ -107,8 +107,8 @@ impl UseGSetStr {
         &self,
         ast_context: &AstContext,
         compound: Node<'a>,
-        source: &[u8],
-    ) -> Option<((String, String), Node<'a>, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Option<((&'a str, &'a str), Node<'a>, Node<'a>)> {
         let mut cursor = compound.walk();
         let statements: Vec<_> = compound
             .children(&mut cursor)
@@ -135,12 +135,12 @@ impl UseGSetStr {
         None
     }
 
-    fn extract_gfree_var(
+    fn extract_gfree_var<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         if let Some(call) = ast_context.find_call_expression(node)
             && let Some(function) = call.child_by_field_name("function")
         {
@@ -153,9 +153,7 @@ impl UseGSetStr {
                     let mut cursor = args.walk();
                     for child in args.children(&mut cursor) {
                         if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
-                            return Some(
-                                ast_context.get_node_text(child, source).trim().to_string(),
-                            );
+                            return Some(ast_context.get_node_text(child, source).trim());
                         }
                     }
                 }
@@ -178,7 +176,7 @@ impl UseGSetStr {
                         // First arg should be &var, strip the &
                         let first_arg = ast_context.get_node_text(args_list[0], source);
                         let var_name = first_arg.trim().trim_start_matches('&');
-                        return Some(var_name.to_string());
+                        return Some(var_name);
                     }
                 }
             }
@@ -186,12 +184,12 @@ impl UseGSetStr {
         None
     }
 
-    fn extract_strdup_assignment(
+    fn extract_strdup_assignment<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<(String, String)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, &'a str)> {
         if let Some(assignment) = self.find_assignment(node)
             && let Some(left) = assignment.child_by_field_name("left")
         {
@@ -205,10 +203,7 @@ impl UseGSetStr {
                             && let Some(args) = right.child_by_field_name("arguments")
                         {
                             let args_text = ast_context.get_node_text(args, source);
-                            return Some((
-                                left_text.trim().to_string(),
-                                args_text.trim().to_string(),
-                            ));
+                            return Some((left_text.trim(), args_text.trim()));
                         }
                     }
                 }
@@ -223,10 +218,7 @@ impl UseGSetStr {
                         // For ternary, suggest the condition variable
                         if let Some(condition) = right.child_by_field_name("condition") {
                             let cond_text = ast_context.get_node_text(condition, source);
-                            return Some((
-                                left_text.trim().to_string(),
-                                cond_text.trim().to_string(),
-                            ));
+                            return Some((left_text.trim(), cond_text.trim()));
                         }
                     }
                 }

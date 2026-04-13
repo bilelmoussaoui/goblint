@@ -66,7 +66,7 @@ impl UseGObjectNotifyByPspec {
             let position = node.start_position();
 
             // Convert property-name to PROP_NAME for the suggestion
-            let property_constant = self.property_name_to_constant(&property_name);
+            let property_constant = self.property_name_to_constant(property_name);
 
             violations.push(self.violation(
                 ctx.file_path,
@@ -92,8 +92,8 @@ impl UseGObjectNotifyByPspec {
         &self,
         ast_context: &AstContext,
         call_node: Node<'a>,
-        source: &[u8],
-    ) -> Option<(String, Node<'a>, Node<'a>, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, Node<'a>, Node<'a>, Node<'a>)> {
         let function = call_node.child_by_field_name("function")?;
         let func_name = ast_context.get_node_text(function, source);
 
@@ -125,8 +125,7 @@ impl UseGObjectNotifyByPspec {
         if property_arg.kind() == "string_literal" {
             let property_text = ast_context.get_node_text(property_arg, source);
             // Remove quotes
-            let property_name = property_text.trim_matches('"').to_string();
-            return Some((property_name, obj_arg, function, args));
+            return Some((property_text.trim_matches('"'), obj_arg, function, args));
         }
 
         None

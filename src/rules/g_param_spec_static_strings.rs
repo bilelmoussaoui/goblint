@@ -74,14 +74,15 @@ impl GParamSpecStaticStrings {
                     self.check_param_spec_flags(ast_context, node, ctx.source)
                     && !has_static_strings
                 {
-                    // Build the fix
-                    let new_flags = if flags_arg_text.is_empty() || flags_arg_text == "0" {
-                        "G_PARAM_STATIC_STRINGS".to_string()
+                    let fix = if flags_arg_text.is_empty() || flags_arg_text == "0" {
+                        Fix::from_node(flags_arg, ctx, "G_PARAM_STATIC_STRINGS")
                     } else {
-                        format!("{} | G_PARAM_STATIC_STRINGS", flags_arg_text)
+                        Fix::from_node(
+                            flags_arg,
+                            ctx,
+                            format!("{} | G_PARAM_STATIC_STRINGS", flags_arg_text),
+                        )
                     };
-
-                    let fix = Fix::from_node(flags_arg, ctx, &new_flags);
 
                     violations.push(self.violation_with_fix(
                             ctx.file_path,
@@ -111,8 +112,8 @@ impl GParamSpecStaticStrings {
         &self,
         ast_context: &AstContext,
         call_node: Node<'a>,
-        source: &[u8],
-    ) -> Option<(Node<'a>, String, bool)> {
+        source: &'a [u8],
+    ) -> Option<(Node<'a>, &'a str, bool)> {
         let args = call_node.child_by_field_name("arguments")?;
 
         // Collect all arguments
@@ -140,9 +141,9 @@ impl GParamSpecStaticStrings {
         // Check if they're string literals (or NULL for nick/blurb which is fine)
         let name_is_literal = arguments[0].kind() == "string_literal";
         let nick_is_literal_or_null =
-            arguments[1].kind() == "string_literal" || ast_context.is_null_literal(&nick);
+            arguments[1].kind() == "string_literal" || ast_context.is_null_literal(nick);
         let blurb_is_literal_or_null =
-            arguments[2].kind() == "string_literal" || ast_context.is_null_literal(&blurb);
+            arguments[2].kind() == "string_literal" || ast_context.is_null_literal(blurb);
 
         // Only suggest if they're all literals/NULL
         if !name_is_literal || !nick_is_literal_or_null || !blurb_is_literal_or_null {

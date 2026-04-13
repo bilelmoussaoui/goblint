@@ -46,7 +46,7 @@ impl Rule for GTaskSourceTag {
                             if !self.has_set_source_tag_call(
                                 ast_context,
                                 body,
-                                &var_name,
+                                var_name,
                                 func_source,
                             ) {
                                 // Create fix: insert g_task_set_source_tag after the statement
@@ -80,12 +80,12 @@ impl Rule for GTaskSourceTag {
 }
 
 impl GTaskSourceTag {
-    fn find_gtask_new_calls(
+    fn find_gtask_new_calls<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Vec<(String, usize, usize, usize, String)> {
+        source: &'a [u8],
+    ) -> Vec<(&'a str, usize, usize, usize, String)> {
         let mut results = Vec::new();
 
         // Look for assignments like: task = g_task_new(...)

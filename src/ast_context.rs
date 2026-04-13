@@ -166,9 +166,19 @@ impl AstContext {
     // Common AST helper methods for rules
 
     /// Extract text from a tree-sitter node
-    pub fn get_node_text(&self, node: tree_sitter::Node, source: &[u8]) -> String {
+    pub fn get_node_text<'a>(&self, node: tree_sitter::Node, source: &'a [u8]) -> &'a str {
         let text = &source[node.byte_range()];
-        std::str::from_utf8(text).unwrap_or("").to_string()
+        std::str::from_utf8(text).unwrap_or("")
+    }
+
+    /// Strip C type qualifiers and pointer sigils to get the bare type name.
+    /// e.g. `const GError *` → `GError`
+    pub fn extract_base_type(type_text: &str) -> &str {
+        type_text
+            .trim()
+            .trim_start_matches("const ")
+            .trim_end_matches('*')
+            .trim()
     }
 
     /// Find the compound_statement (function body) in an AST
@@ -189,11 +199,11 @@ impl AstContext {
 
     /// Extract variable name from a declarator (handles pointer_declarator ->
     /// identifier)
-    pub fn extract_variable_name(
+    pub fn extract_variable_name<'a>(
         &self,
         declarator: tree_sitter::Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         // Handle pointer_declarator -> identifier
         if let Some(inner) = declarator.child_by_field_name("declarator") {
             if inner.kind() == "identifier" {
@@ -269,7 +279,11 @@ impl AstContext {
 
     /// Check if a call expression is a cleanup/free function
     /// Returns (is_cleanup, function_name)
-    pub fn is_cleanup_call(&self, node: tree_sitter::Node, source: &[u8]) -> (bool, String) {
+    pub fn is_cleanup_call<'a>(
+        &self,
+        node: tree_sitter::Node,
+        source: &'a [u8],
+    ) -> (bool, &'a str) {
         if node.kind() == "call_expression"
             && let Some(function) = node.child_by_field_name("function")
         {
@@ -288,7 +302,7 @@ impl AstContext {
                 return (true, func_name);
             }
         }
-        (false, String::new())
+        (false, "")
     }
 
     /// Find a function call by name(s)
@@ -302,7 +316,7 @@ impl AstContext {
             && let Some(function) = node.child_by_field_name("function")
         {
             let func_name = self.get_node_text(function, source);
-            if function_names.contains(&func_name.as_str()) {
+            if function_names.contains(&func_name) {
                 return Some(node);
             }
         }

@@ -25,7 +25,7 @@ impl Rule for MatchingDeclareDefine {
         violations: &mut Vec<Violation>,
     ) {
         // Build a map of type_name -> declaration_type from all files
-        let mut declared_types: HashMap<String, String> = HashMap::new();
+        let mut declared_types: HashMap<String, &'static str> = HashMap::new();
 
         // Scan all files for G_DECLARE_* macros (can be in headers or C files)
         for (_path, file) in ast_context.iter_all_files() {
@@ -40,8 +40,12 @@ impl Rule for MatchingDeclareDefine {
 }
 
 impl MatchingDeclareDefine {
-    fn collect_declare_macros(&self, source: &[u8], declared_types: &mut HashMap<String, String>) {
-        let source_str = String::from_utf8_lossy(source);
+    fn collect_declare_macros(
+        &self,
+        source: &[u8],
+        declared_types: &mut HashMap<String, &'static str>,
+    ) {
+        let source_str = std::str::from_utf8(source).unwrap_or("");
 
         for line in source_str.lines() {
             let trimmed = line.trim();
@@ -49,20 +53,20 @@ impl MatchingDeclareDefine {
             // G_DECLARE_FINAL_TYPE (TypeName, type_name, ...)
             if trimmed.starts_with("G_DECLARE_FINAL_TYPE") {
                 if let Some(type_name) = self.extract_type_name_from_declare(trimmed) {
-                    declared_types.insert(type_name, "G_DECLARE_FINAL_TYPE".to_string());
+                    declared_types.insert(type_name, "G_DECLARE_FINAL_TYPE");
                 }
             }
             // G_DECLARE_DERIVABLE_TYPE (TypeName, type_name, ...)
             else if trimmed.starts_with("G_DECLARE_DERIVABLE_TYPE") {
                 if let Some(type_name) = self.extract_type_name_from_declare(trimmed) {
-                    declared_types.insert(type_name, "G_DECLARE_DERIVABLE_TYPE".to_string());
+                    declared_types.insert(type_name, "G_DECLARE_DERIVABLE_TYPE");
                 }
             }
             // G_DECLARE_INTERFACE (TypeName, type_name, ...)
             else if trimmed.starts_with("G_DECLARE_INTERFACE")
                 && let Some(type_name) = self.extract_type_name_from_declare(trimmed)
             {
-                declared_types.insert(type_name, "G_DECLARE_INTERFACE".to_string());
+                declared_types.insert(type_name, "G_DECLARE_INTERFACE");
             }
         }
     }
@@ -88,10 +92,10 @@ impl MatchingDeclareDefine {
         &self,
         source: &[u8],
         path: &std::path::Path,
-        declared_types: &HashMap<String, String>,
+        declared_types: &HashMap<String, &'static str>,
         violations: &mut Vec<Violation>,
     ) {
-        let source_str = String::from_utf8_lossy(source);
+        let source_str = std::str::from_utf8(source).unwrap_or("");
 
         for (line_num, line) in source_str.lines().enumerate() {
             let trimmed = line.trim();
@@ -160,7 +164,7 @@ impl MatchingDeclareDefine {
             if let Some(type_name) = type_name {
                 // Check for mismatches
                 if let Some(declare_macro) = declared_types.get(&type_name) {
-                    let is_compatible = match declare_macro.as_str() {
+                    let is_compatible = match *declare_macro {
                         // G_DECLARE_FINAL_TYPE requires a final define so that
                         // G_TYPE_FLAG_FINAL is registered at runtime.
                         "G_DECLARE_FINAL_TYPE" => matches!(

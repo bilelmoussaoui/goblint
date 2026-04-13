@@ -185,7 +185,7 @@ impl UseGClearWeakPointer {
                         && let Some(right) = child.child_by_field_name("right")
                     {
                         let right_text = ast_context.get_node_text(right, source);
-                        if ast_context.is_null_literal(&right_text) {
+                        if ast_context.is_null_literal(right_text) {
                             return true;
                         }
                     }

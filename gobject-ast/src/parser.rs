@@ -87,18 +87,22 @@ impl Parser {
         Ok(())
     }
 
-    fn extract_file_content(
+    fn extract_file_content<'a>(
         &self,
         node: Node,
-        source: &[u8],
+        source: &'a [u8],
         file_model: &mut FileModel,
-        macro_map: &HashMap<usize, Vec<String>>,
-        static_forwards: &HashSet<String>,
+        macro_map: &HashMap<usize, Vec<&'a str>>,
+        static_forwards: &HashSet<&'a str>,
     ) {
         self.visit_node(node, source, file_model, macro_map, static_forwards);
     }
 
-    fn find_export_macros_in_declaration(&self, decl_node: Node, source: &[u8]) -> Vec<String> {
+    fn find_export_macros_in_declaration<'a>(
+        &self,
+        decl_node: Node,
+        source: &'a [u8],
+    ) -> Vec<&'a str> {
         let mut result = Vec::new();
 
         // The declaration node includes export macros when they're on the line before
@@ -118,7 +122,7 @@ impl Parser {
                     || word == "G_GNUC_DEPRECATED"
                     || word == "G_GNUC_WARN_UNUSED_RESULT"
                 {
-                    result.push(word.to_string());
+                    result.push(word);
                     break; // Only take the first one
                 }
             }
@@ -127,17 +131,17 @@ impl Parser {
         result
     }
 
-    fn build_macro_map(&self, root: Node, source: &[u8]) -> HashMap<usize, Vec<String>> {
+    fn build_macro_map<'a>(&self, root: Node, source: &'a [u8]) -> HashMap<usize, Vec<&'a str>> {
         let mut map = HashMap::new();
         self.build_macro_map_recursive(root, source, &mut map);
         map
     }
 
-    fn build_macro_map_recursive(
+    fn build_macro_map_recursive<'a>(
         &self,
         node: Node,
-        source: &[u8],
-        map: &mut HashMap<usize, Vec<String>>,
+        source: &'a [u8],
+        map: &mut HashMap<usize, Vec<&'a str>>,
     ) {
         // Check for preprocessor directives like #define
         if node.kind() == "preproc_call" {
@@ -153,7 +157,7 @@ impl Parser {
                         // Add to next line (the declaration)
                         map.entry(node.end_position().row + 1)
                             .or_insert_with(Vec::new)
-                            .push(s.to_string());
+                            .push(s);
                     }
                 }
             }
@@ -179,13 +183,13 @@ impl Parser {
         }
     }
 
-    fn visit_node(
+    fn visit_node<'a>(
         &self,
         node: Node,
-        source: &[u8],
+        source: &'a [u8],
         file_model: &mut FileModel,
-        macro_map: &HashMap<usize, Vec<String>>,
-        static_forwards: &HashSet<String>,
+        macro_map: &HashMap<usize, Vec<&'a str>>,
+        static_forwards: &HashSet<&'a str>,
     ) {
         // Extract GObject type declarations (G_DECLARE_* macros) before skipping
         // preproc
@@ -241,7 +245,7 @@ impl Parser {
                 if let Ok(name) = std::str::from_utf8(&source[name_node.byte_range()]) {
                     let has_body = node.child_by_field_name("body").is_some();
                     file_model.structs.push(StructInfo {
-                        name: name.to_string(),
+                        name: name.to_owned(),
                         line: node.start_position().row + 1,
                         fields: Vec::new(),
                         is_opaque: !has_body,
@@ -278,11 +282,11 @@ impl Parser {
             for func_name in func_names {
                 if !is_macro_identifier(&func_name) && !is_gobject_type_macro(&func_name) {
                     file_model.functions.push(FunctionInfo {
-                        name: func_name.clone(),
+                        name: func_name.to_owned(),
                         line: node.start_position().row + 1,
                         is_static,
-                        export_macros: export_macros.clone(),
-                        has_static_forward_decl: static_forwards.contains(&func_name),
+                        export_macros: export_macros.iter().map(|s| s.to_string()).collect(),
+                        has_static_forward_decl: static_forwards.contains(func_name),
                         is_definition: false,
                         return_type: None,
                         parameters: Vec::new(),
@@ -325,11 +329,11 @@ impl Parser {
                             .unwrap_or((None, None));
 
                         file_model.functions.push(FunctionInfo {
-                            name: name.clone(),
+                            name: name.to_owned(),
                             line: node.start_position().row + 1,
-                            is_static: is_static || static_forwards.contains(&name),
+                            is_static: is_static || static_forwards.contains(name),
                             export_macros: Vec::new(),
-                            has_static_forward_decl: static_forwards.contains(&name),
+                            has_static_forward_decl: static_forwards.contains(name),
                             is_definition: true,
                             return_type: None,
                             parameters: Vec::new(),
@@ -358,19 +362,19 @@ impl Parser {
 
         // Check if system include (<>) or local ("")
         let is_system = path_text.starts_with('<');
-        let path = path_text.trim_matches(&['<', '>', '"'][..]).to_string();
+        let path = path_text.trim_matches(&['<', '>', '"'][..]);
 
         Some(Include {
-            path,
+            path: path.to_owned(),
             is_system,
             line: node.start_position().row + 1,
         })
     }
 
-    fn collect_identifiers(&self, node: Node, source: &[u8], result: &mut Vec<String>) {
+    fn collect_identifiers<'a>(&self, node: Node, source: &'a [u8], result: &mut Vec<&'a str>) {
         if node.kind() == "identifier" || node.kind() == "type_identifier" {
             if let Ok(text) = std::str::from_utf8(&source[node.byte_range()]) {
-                result.push(text.to_string());
+                result.push(text);
             }
         }
 
@@ -392,42 +396,42 @@ impl Parser {
         self.collect_identifiers(parent, source, &mut arg_values);
 
         // Remove the macro name itself from the list
-        arg_values.retain(|name| name != macro_name);
+        arg_values.retain(|name| *name != macro_name);
 
         // G_DECLARE_*_TYPE needs 5 args
         if macro_name.starts_with("G_DECLARE_") && arg_values.len() >= 5 {
-            let type_name = arg_values[0].clone();
-            let function_prefix = arg_values[1].clone();
-            let module_prefix = arg_values[2].clone();
-            let type_prefix = arg_values[3].clone();
-            let parent_type = arg_values[4].clone();
+            let type_name = arg_values[0];
+            let function_prefix = arg_values[1];
+            let module_prefix = arg_values[2];
+            let type_prefix = arg_values[3];
+            let parent_type = arg_values[4];
 
             let type_macro = format!("{}_TYPE_{}", module_prefix, type_prefix);
 
             let kind = match macro_name {
                 "G_DECLARE_FINAL_TYPE" => GObjectTypeKind::DeclareFinal {
-                    function_prefix,
-                    module_prefix,
-                    type_prefix,
-                    parent_type,
+                    function_prefix: function_prefix.to_owned(),
+                    module_prefix: module_prefix.to_owned(),
+                    type_prefix: type_prefix.to_owned(),
+                    parent_type: parent_type.to_owned(),
                 },
                 "G_DECLARE_DERIVABLE_TYPE" => GObjectTypeKind::DeclareDerivable {
-                    function_prefix,
-                    module_prefix,
-                    type_prefix,
-                    parent_type,
+                    function_prefix: function_prefix.to_owned(),
+                    module_prefix: module_prefix.to_owned(),
+                    type_prefix: type_prefix.to_owned(),
+                    parent_type: parent_type.to_owned(),
                 },
                 "G_DECLARE_INTERFACE" => GObjectTypeKind::DeclareInterface {
-                    function_prefix,
-                    module_prefix,
-                    type_prefix,
-                    prerequisite_type: parent_type,
+                    function_prefix: function_prefix.to_owned(),
+                    module_prefix: module_prefix.to_owned(),
+                    type_prefix: type_prefix.to_owned(),
+                    prerequisite_type: parent_type.to_owned(),
                 },
                 _ => return None,
             };
 
             return Some(GObjectType {
-                type_name,
+                type_name: type_name.to_owned(),
                 type_macro,
                 kind,
                 class_struct: None,
@@ -437,30 +441,30 @@ impl Parser {
 
         // G_DEFINE_* needs 3 args
         if macro_name.starts_with("G_DEFINE_") && arg_values.len() >= 3 {
-            let type_name = arg_values[0].clone();
-            let function_prefix = arg_values[1].clone();
-            let parent_type = arg_values[2].clone();
+            let type_name = arg_values[0];
+            let function_prefix = arg_values[1];
+            let parent_type = arg_values[2];
 
             let type_macro = format!("TYPE_{}", type_name.to_uppercase());
 
             let kind = match macro_name {
                 "G_DEFINE_TYPE" => GObjectTypeKind::DefineType {
-                    function_prefix,
-                    parent_type,
+                    function_prefix: function_prefix.to_owned(),
+                    parent_type: parent_type.to_owned(),
                 },
                 "G_DEFINE_TYPE_WITH_PRIVATE" => GObjectTypeKind::DefineTypeWithPrivate {
-                    function_prefix,
-                    parent_type,
+                    function_prefix: function_prefix.to_owned(),
+                    parent_type: parent_type.to_owned(),
                 },
                 "G_DEFINE_ABSTRACT_TYPE" => GObjectTypeKind::DefineAbstractType {
-                    function_prefix,
-                    parent_type,
+                    function_prefix: function_prefix.to_owned(),
+                    parent_type: parent_type.to_owned(),
                 },
                 _ => return None,
             };
 
             return Some(GObjectType {
-                type_name,
+                type_name: type_name.to_owned(),
                 type_macro,
                 kind,
                 class_struct: None,
@@ -501,7 +505,7 @@ impl Parser {
         for child in args.children(&mut cursor) {
             if child.kind() == "identifier" || child.kind() == "type_identifier" {
                 let text = std::str::from_utf8(&source[child.byte_range()]).ok()?;
-                arg_values.push(text.to_string());
+                arg_values.push(text);
             }
         }
 
@@ -509,38 +513,38 @@ impl Parser {
             return None;
         }
 
-        let type_name = arg_values[0].clone();
-        let function_prefix = arg_values[1].clone();
-        let module_prefix = arg_values[2].clone();
-        let type_prefix = arg_values[3].clone();
-        let parent_type = arg_values[4].clone();
+        let type_name = arg_values[0];
+        let function_prefix = arg_values[1];
+        let module_prefix = arg_values[2];
+        let type_prefix = arg_values[3];
+        let parent_type = arg_values[4];
 
         let type_macro = format!("{}_TYPE_{}", module_prefix, type_prefix);
 
         let kind = match macro_name {
             "G_DECLARE_FINAL_TYPE" => GObjectTypeKind::DeclareFinal {
-                function_prefix,
-                module_prefix,
-                type_prefix,
-                parent_type,
+                function_prefix: function_prefix.to_owned(),
+                module_prefix: module_prefix.to_owned(),
+                type_prefix: type_prefix.to_owned(),
+                parent_type: parent_type.to_owned(),
             },
             "G_DECLARE_DERIVABLE_TYPE" => GObjectTypeKind::DeclareDerivable {
-                function_prefix,
-                module_prefix,
-                type_prefix,
-                parent_type,
+                function_prefix: function_prefix.to_owned(),
+                module_prefix: module_prefix.to_owned(),
+                type_prefix: type_prefix.to_owned(),
+                parent_type: parent_type.to_owned(),
             },
             "G_DECLARE_INTERFACE" => GObjectTypeKind::DeclareInterface {
-                function_prefix,
-                module_prefix,
-                type_prefix,
-                prerequisite_type: parent_type,
+                function_prefix: function_prefix.to_owned(),
+                module_prefix: module_prefix.to_owned(),
+                type_prefix: type_prefix.to_owned(),
+                prerequisite_type: parent_type.to_owned(),
             },
             _ => return None,
         };
 
         Some(GObjectType {
-            type_name,
+            type_name: type_name.to_owned(),
             type_macro,
             kind,
             class_struct: None,
@@ -557,7 +561,7 @@ impl Parser {
         for child in args.children(&mut cursor) {
             if child.kind() == "identifier" || child.kind() == "type_identifier" {
                 let text = std::str::from_utf8(&source[child.byte_range()]).ok()?;
-                arg_values.push(text.to_string());
+                arg_values.push(text);
             }
         }
 
@@ -565,31 +569,31 @@ impl Parser {
             return None;
         }
 
-        let type_name = arg_values[0].clone();
-        let function_prefix = arg_values[1].clone();
-        let parent_type = arg_values[2].clone();
+        let type_name = arg_values[0];
+        let function_prefix = arg_values[1];
+        let parent_type = arg_values[2];
 
         // Generate type macro from type name
         let type_macro = format!("TYPE_{}", type_name.to_uppercase());
 
         let kind = match macro_name {
             "G_DEFINE_TYPE" => GObjectTypeKind::DefineType {
-                function_prefix,
-                parent_type,
+                function_prefix: function_prefix.to_owned(),
+                parent_type: parent_type.to_owned(),
             },
             "G_DEFINE_TYPE_WITH_PRIVATE" => GObjectTypeKind::DefineTypeWithPrivate {
-                function_prefix,
-                parent_type,
+                function_prefix: function_prefix.to_owned(),
+                parent_type: parent_type.to_owned(),
             },
             "G_DEFINE_ABSTRACT_TYPE" => GObjectTypeKind::DefineAbstractType {
-                function_prefix,
-                parent_type,
+                function_prefix: function_prefix.to_owned(),
+                parent_type: parent_type.to_owned(),
             },
             _ => return None,
         };
 
         Some(GObjectType {
-            type_name,
+            type_name: type_name.to_owned(),
             type_macro,
             kind,
             class_struct: None,
@@ -605,19 +609,15 @@ impl Parser {
         // type_definition has "declarator" for the typedef name and "type" for what
         // it's typedef'ing
         let declarator_node = node.child_by_field_name("declarator")?;
-        let name = std::str::from_utf8(&source[declarator_node.byte_range()])
-            .ok()?
-            .to_string();
+        let name = std::str::from_utf8(&source[declarator_node.byte_range()]).ok()?;
 
         let type_node = node.child_by_field_name("type")?;
-        let target_type = std::str::from_utf8(&source[type_node.byte_range()])
-            .ok()?
-            .to_string();
+        let target_type = std::str::from_utf8(&source[type_node.byte_range()]).ok()?;
 
         Some(TypedefInfo {
-            name,
+            name: name.to_owned(),
             line: node.start_position().row + 1,
-            target_type,
+            target_type: target_type.to_owned(),
         })
     }
 
@@ -630,7 +630,7 @@ impl Parser {
                     let name = std::str::from_utf8(&source[name_node.byte_range()]).ok()?;
                     let has_body = child.child_by_field_name("body").is_some();
                     return Some(StructInfo {
-                        name: name.to_string(),
+                        name: name.to_owned(),
                         line: child.start_position().row + 1,
                         fields: Vec::new(), // TODO: extract fields
                         is_opaque: !has_body,
@@ -649,7 +649,7 @@ impl Parser {
                 if let Some(name_node) = child.child_by_field_name("name") {
                     let name = std::str::from_utf8(&source[name_node.byte_range()]).ok()?;
                     return Some(EnumInfo {
-                        name: name.to_string(),
+                        name: name.to_owned(),
                         line: child.start_position().row + 1,
                         values: Vec::new(), // TODO: extract values
                     });
@@ -659,17 +659,21 @@ impl Parser {
         None
     }
 
-    fn find_static_forward_declarations(&self, node: Node, source: &[u8]) -> HashSet<String> {
+    fn find_static_forward_declarations<'a>(
+        &self,
+        node: Node,
+        source: &'a [u8],
+    ) -> HashSet<&'a str> {
         let mut static_decls = HashSet::new();
         self.visit_for_static_decls(node, source, &mut static_decls);
         static_decls
     }
 
-    fn visit_for_static_decls(
+    fn visit_for_static_decls<'a>(
         &self,
         node: Node,
-        source: &[u8],
-        static_decls: &mut HashSet<String>,
+        source: &'a [u8],
+        static_decls: &mut HashSet<&'a str>,
     ) {
         if node.kind() == "declaration" {
             let mut is_static = false;
@@ -699,11 +703,11 @@ impl Parser {
         }
     }
 
-    fn extract_function_from_definition(
+    fn extract_function_from_definition<'a>(
         &self,
         node: Node,
-        source: &[u8],
-    ) -> Option<(String, bool)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, bool)> {
         let mut is_static = false;
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
@@ -734,7 +738,7 @@ impl Parser {
         false
     }
 
-    fn find_all_function_names(&self, node: Node, source: &[u8], result: &mut Vec<String>) {
+    fn find_all_function_names<'a>(&self, node: Node, source: &'a [u8], result: &mut Vec<&'a str>) {
         if node.kind() == "function_declarator" {
             if let Some(name) = self.extract_declarator_name(node, source) {
                 result.push(name);
@@ -752,18 +756,18 @@ impl Parser {
         }
     }
 
-    fn extract_declarator_name(&self, declarator: Node, source: &[u8]) -> Option<String> {
+    fn extract_declarator_name<'a>(&self, declarator: Node, source: &'a [u8]) -> Option<&'a str> {
         if let Some(inner) = declarator.child_by_field_name("declarator") {
             if inner.kind() == "identifier" {
                 let name = &source[inner.byte_range()];
-                return Some(std::str::from_utf8(name).ok()?.to_string());
+                return Some(std::str::from_utf8(name).ok()?);
             }
             return self.extract_declarator_name(inner, source);
         }
 
         if declarator.kind() == "identifier" {
             let name = &source[declarator.byte_range()];
-            return Some(std::str::from_utf8(name).ok()?.to_string());
+            return Some(std::str::from_utf8(name).ok()?);
         }
 
         // Handle parenthesized declarators like (function_name) used to prevent macro
@@ -773,7 +777,7 @@ impl Parser {
             for child in declarator.children(&mut cursor) {
                 if child.kind() == "identifier" {
                     let name = &source[child.byte_range()];
-                    return Some(std::str::from_utf8(name).ok()?.to_string());
+                    return Some(std::str::from_utf8(name).ok()?);
                 }
             }
         }
@@ -781,12 +785,12 @@ impl Parser {
         None
     }
 
-    fn extract_from_call_expression(&self, node: Node, source: &[u8]) -> Option<String> {
+    fn extract_from_call_expression<'a>(&self, node: Node, source: &'a [u8]) -> Option<&'a str> {
         let call_expr = self.find_call_expression(node)?;
         let func_node = call_expr.child_by_field_name("function")?;
         if func_node.kind() == "identifier" {
             let name = &source[func_node.byte_range()];
-            return Some(std::str::from_utf8(name).ok()?.to_string());
+            return Some(std::str::from_utf8(name).ok()?);
         }
         None
     }
@@ -831,7 +835,7 @@ impl Parser {
                                 let vfuncs = self.extract_vfuncs(body, source);
 
                                 let class_struct = ClassStruct {
-                                    name: struct_name.to_string(),
+                                    name: struct_name.to_owned(),
                                     vfuncs,
                                 };
 
@@ -897,8 +901,7 @@ impl Parser {
         // Get return type from the field_declaration type
         let return_type = field_node
             .child_by_field_name("type")
-            .and_then(|t| std::str::from_utf8(&source[t.byte_range()]).ok())
-            .map(|s| s.to_string());
+            .and_then(|t| std::str::from_utf8(&source[t.byte_range()]).ok());
 
         // Extract parameters
         let mut parameters = Vec::new();
@@ -907,13 +910,17 @@ impl Parser {
         }
 
         Some(VirtualFunction {
-            name,
-            return_type,
+            name: name.to_owned(),
+            return_type: return_type.map(ToOwned::to_owned),
             parameters,
         })
     }
 
-    fn extract_pointer_declarator_name(&self, declarator: Node, source: &[u8]) -> Option<String> {
+    fn extract_pointer_declarator_name<'a>(
+        &self,
+        declarator: Node,
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         // For function pointers, the declarator can be:
         // - parenthesized_declarator containing pointer_declarator
         // - pointer_declarator containing identifier or field_identifier
@@ -925,24 +932,18 @@ impl Parser {
                 if child.kind() == "pointer_declarator" {
                     return self.extract_pointer_declarator_name(child, source);
                 } else if child.kind() == "identifier" || child.kind() == "field_identifier" {
-                    return std::str::from_utf8(&source[child.byte_range()])
-                        .ok()
-                        .map(|s| s.to_string());
+                    return std::str::from_utf8(&source[child.byte_range()]).ok();
                 }
             }
         } else if declarator.kind() == "pointer_declarator" {
             if let Some(inner) = declarator.child_by_field_name("declarator") {
                 if inner.kind() == "identifier" || inner.kind() == "field_identifier" {
-                    return std::str::from_utf8(&source[inner.byte_range()])
-                        .ok()
-                        .map(|s| s.to_string());
+                    return std::str::from_utf8(&source[inner.byte_range()]).ok();
                 }
                 return self.extract_pointer_declarator_name(inner, source);
             }
         } else if declarator.kind() == "identifier" || declarator.kind() == "field_identifier" {
-            return std::str::from_utf8(&source[declarator.byte_range()])
-                .ok()
-                .map(|s| s.to_string());
+            return std::str::from_utf8(&source[declarator.byte_range()]).ok();
         }
 
         None
@@ -957,13 +958,15 @@ impl Parser {
                 let type_node = child.child_by_field_name("type");
                 let type_name = type_node
                     .and_then(|t| std::str::from_utf8(&source[t.byte_range()]).ok())
-                    .map(|s| s.to_string())
                     .unwrap_or_default();
 
                 let declarator = child.child_by_field_name("declarator");
                 let name = declarator.and_then(|d| self.extract_declarator_name(d, source));
 
-                parameters.push(Parameter { name, type_name });
+                parameters.push(Parameter {
+                    name: name.map(ToOwned::to_owned),
+                    type_name: type_name.to_owned(),
+                });
             }
         }
 

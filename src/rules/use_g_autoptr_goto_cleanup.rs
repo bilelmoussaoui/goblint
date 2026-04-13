@@ -77,7 +77,7 @@ impl UseGAutoptrGotoCleanup {
                         && cleanup_vars.contains(var_name)
                     {
                         // Extract base type name (strip pointer and qualifiers)
-                        let base_type = self.extract_base_type(var_type);
+                        let base_type = AstContext::extract_base_type(var_type);
                         let position = decl_node.start_position();
                         violations.push(self.violation(
                                 file_path,
@@ -94,26 +94,14 @@ impl UseGAutoptrGotoCleanup {
         }
     }
 
-    fn extract_base_type(&self, type_text: &str) -> String {
-        // Remove const, pointer, etc. to get base type
-        // "const CoglOffscreen *" -> "CoglOffscreen"
-        // "CoglDisplay *" -> "CoglDisplay"
-        type_text
-            .trim()
-            .replace("const ", "")
-            .replace("*", "")
-            .trim()
-            .to_string()
-    }
-
     /// Find variables allocated with g_object_new, g_new, etc.
     /// Returns map of var_name -> (type_name, decl_node)
     fn find_allocated_variables<'a>(
         &self,
         ast_context: &AstContext,
         body: Node<'a>,
-        source: &[u8],
-    ) -> HashMap<String, (String, Node<'a>)> {
+        source: &'a [u8],
+    ) -> HashMap<&'a str, (&'a str, Node<'a>)> {
         let mut result = HashMap::new();
 
         // First pass: find all local pointer declarations
@@ -130,8 +118,8 @@ impl UseGAutoptrGotoCleanup {
         &self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-        result: &mut HashMap<String, (String, Node<'a>)>,
+        source: &'a [u8],
+        result: &mut HashMap<&'a str, (&'a str, Node<'a>)>,
     ) {
         if node.kind() == "declaration" {
             // Look for: Type *var = NULL; or Type *var = some_function();
@@ -149,7 +137,7 @@ impl UseGAutoptrGotoCleanup {
                     {
                         // Only track simple identifiers, not field expressions
                         if !var_name.contains("->") && !var_name.contains(".") {
-                            result.insert(var_name, (type_text.clone(), node));
+                            result.insert(var_name, (type_text, node));
                         }
                     }
                 }
@@ -167,12 +155,12 @@ impl UseGAutoptrGotoCleanup {
         }
     }
 
-    fn extract_var_name_from_declarator(
+    fn extract_var_name_from_declarator<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         match node.kind() {
             "init_declarator" => {
                 if let Some(declarator) = node.child_by_field_name("declarator") {
@@ -196,9 +184,9 @@ impl UseGAutoptrGotoCleanup {
         &self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-        local_vars: &HashMap<String, (String, Node<'a>)>,
-        result: &mut HashMap<String, (String, Node<'a>)>,
+        source: &'a [u8],
+        local_vars: &HashMap<&'a str, (&'a str, Node<'a>)>,
+        result: &mut HashMap<&'a str, (&'a str, Node<'a>)>,
     ) {
         // Look for assignments or initializations of local vars with allocation calls
 
@@ -211,7 +199,7 @@ impl UseGAutoptrGotoCleanup {
             && let Some(var_name) = self.extract_var_name(ast_context, declarator, source)
             && let Some((type_text, decl_node)) = local_vars.get(&var_name)
         {
-            result.insert(var_name.clone(), (type_text.clone(), *decl_node));
+            result.insert(var_name, (type_text, *decl_node));
         }
 
         // Pattern 2: var = allocation_call();
@@ -226,7 +214,7 @@ impl UseGAutoptrGotoCleanup {
                 && ast_context.is_allocation_call(right, source)
                 && let Some((type_text, decl_node)) = local_vars.get(&var_name)
             {
-                result.insert(var_name.clone(), (type_text.clone(), *decl_node));
+                result.insert(var_name, (type_text, *decl_node));
             }
         }
 
@@ -248,12 +236,12 @@ impl UseGAutoptrGotoCleanup {
         None
     }
 
-    fn extract_var_name(
+    fn extract_var_name<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-    ) -> Option<String> {
+        source: &'a [u8],
+    ) -> Option<&'a str> {
         match node.kind() {
             "pointer_declarator" => {
                 if let Some(declarator) = node.child_by_field_name("declarator") {
@@ -269,18 +257,23 @@ impl UseGAutoptrGotoCleanup {
     }
 
     /// Find all goto statements and collect the labels they target
-    fn find_goto_labels(&self, ast_context: &AstContext, body: Node, source: &[u8]) -> Vec<String> {
+    fn find_goto_labels<'a>(
+        &self,
+        ast_context: &AstContext,
+        body: Node,
+        source: &'a [u8],
+    ) -> Vec<&'a str> {
         let mut labels = Vec::new();
         self.collect_goto_labels(ast_context, body, source, &mut labels);
         labels
     }
 
-    fn collect_goto_labels(
+    fn collect_goto_labels<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        labels: &mut Vec<String>,
+        source: &'a [u8],
+        labels: &mut Vec<&'a str>,
     ) {
         if node.kind() == "goto_statement" {
             // goto has a label child
@@ -302,23 +295,23 @@ impl UseGAutoptrGotoCleanup {
 
     /// Find all labels and what variables they cleanup (unref/free)
     /// Returns map of label_name -> set of variable names
-    fn find_cleanup_labels(
+    fn find_cleanup_labels<'a>(
         &self,
         ast_context: &AstContext,
         body: Node,
-        source: &[u8],
-    ) -> HashMap<String, Vec<String>> {
+        source: &'a [u8],
+    ) -> HashMap<&'a str, Vec<&'a str>> {
         let mut result = HashMap::new();
         self.collect_cleanup_labels(ast_context, body, source, &mut result);
         result
     }
 
-    fn collect_cleanup_labels(
+    fn collect_cleanup_labels<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        result: &mut HashMap<String, Vec<String>>,
+        source: &'a [u8],
+        result: &mut HashMap<&'a str, Vec<&'a str>>,
     ) {
         if node.kind() == "labeled_statement"
             && let Some(label) = node.child_by_field_name("label")
@@ -341,12 +334,12 @@ impl UseGAutoptrGotoCleanup {
         }
     }
 
-    fn find_cleanup_calls(
+    fn find_cleanup_calls<'a>(
         &self,
         ast_context: &AstContext,
         node: Node,
-        source: &[u8],
-        cleanup_vars: &mut Vec<String>,
+        source: &'a [u8],
+        cleanup_vars: &mut Vec<&'a str>,
     ) {
         let (is_cleanup, _) = ast_context.is_cleanup_call(node, source);
         if is_cleanup {
@@ -358,7 +351,7 @@ impl UseGAutoptrGotoCleanup {
                         let var_text = ast_context.get_node_text(child, source);
                         // For g_clear_object(&var), extract var from &var
                         let var_name = var_text.trim_start_matches('&');
-                        cleanup_vars.push(var_name.to_string());
+                        cleanup_vars.push(var_name);
                     }
                 }
             }

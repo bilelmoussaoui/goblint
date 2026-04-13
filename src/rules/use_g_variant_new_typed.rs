@@ -110,12 +110,12 @@ impl UseGVariantNewTyped {
 
     /// Extract g_variant_new pattern and return (format_string,
     /// typed_function_name, rest_of_args)
-    fn extract_variant_new_pattern(
+    fn extract_variant_new_pattern<'a>(
         &self,
         ast_context: &AstContext,
         call_node: Node,
-        source: &[u8],
-    ) -> Option<(String, &'static str, String)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, &'static str, String)> {
         let args = call_node.child_by_field_name("arguments")?;
 
         // Collect all arguments (skip parentheses and commas)
@@ -163,7 +163,7 @@ impl UseGVariantNewTyped {
 
         // Collect remaining arguments (after format string)
         let rest_args = if arguments.len() > 1 {
-            let rest: Vec<String> = arguments[1..]
+            let rest: Vec<&str> = arguments[1..]
                 .iter()
                 .map(|arg| ast_context.get_node_text(*arg, source))
                 .collect();
@@ -172,6 +172,6 @@ impl UseGVariantNewTyped {
             String::new()
         };
 
-        Some((format_str.to_string(), typed_func, rest_args))
+        Some((format_str, typed_func, rest_args))
     }
 }

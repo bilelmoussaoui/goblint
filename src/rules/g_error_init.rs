@@ -89,8 +89,8 @@ impl GErrorInit {
         &self,
         ast_context: &AstContext,
         node: Node<'a>,
-        source: &[u8],
-    ) -> Option<(String, bool, Node<'a>)> {
+        source: &'a [u8],
+    ) -> Option<(&'a str, bool, Node<'a>)> {
         if node.kind() != "declaration" {
             return None;
         }
