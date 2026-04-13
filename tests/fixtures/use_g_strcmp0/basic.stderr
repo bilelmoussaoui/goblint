@@ -1,2 +1,2 @@
-basic.c:7:7: use_g_strcmp0: Use g_strcmp0 instead of strcmp (NULL-safe)
-basic.c:10:7: use_g_strcmp0: Use g_strcmp0 or check for NULL first instead of strncmp (NULL-safe)
+basic.c:12:7: use_g_strcmp0: Use g_strcmp0 instead of strcmp (NULL-safe)
+basic.c:16:7: use_g_strcmp0: Use g_strcmp0 or check for NULL first instead of strncmp (NULL-safe)

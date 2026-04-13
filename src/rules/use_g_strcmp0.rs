@@ -43,7 +43,7 @@ impl Rule for UseGStrcmp0 {
                         base_line: func.line,
                         base_byte: func.start_byte.unwrap_or(0),
                     };
-                    self.check_node(tree.root_node(), &ctx, violations);
+                    self.check_node(tree.root_node(), None, &ctx, violations);
                 }
             }
         }
@@ -51,25 +51,44 @@ impl Rule for UseGStrcmp0 {
 }
 
 impl UseGStrcmp0 {
-    fn check_node(&self, node: Node, ctx: &CheckContext, violations: &mut Vec<Violation>) {
+    fn check_node(
+        &self,
+        node: Node,
+        parent: Option<Node>,
+        ctx: &CheckContext,
+        violations: &mut Vec<Violation>,
+    ) {
         if node.kind() == "call_expression"
             && let Some(function) = node.child_by_field_name("function")
         {
             let func_text = &ctx.source[function.byte_range()];
             if let Ok(func_name) = std::str::from_utf8(func_text) {
                 if func_name == "strcmp" {
-                    // Only auto-fix strcmp, not strncmp (strncmp needs manual review)
-                    let fix = Fix::from_node(function, ctx, "g_strcmp0");
+                    // Skip equality comparisons (== 0 / != 0): use_g_str_equal handles
+                    // those with a more semantically precise suggestion (g_str_equal).
+                    let in_equality_cmp = parent.is_some_and(|p| {
+                        if p.kind() == "binary_expression"
+                            && let Some(op) = p.child_by_field_name("operator")
+                        {
+                            let op =
+                                std::str::from_utf8(&ctx.source[op.byte_range()]).unwrap_or("");
+                            return op == "==" || op == "!=";
+                        }
+                        false
+                    });
 
-                    violations.push(self.violation_with_fix(
-                        ctx.file_path,
-                        ctx.base_line + node.start_position().row,
-                        node.start_position().column + 1,
-                        "Use g_strcmp0 instead of strcmp (NULL-safe)".to_string(),
-                        fix,
-                    ));
+                    if !in_equality_cmp {
+                        let fix = Fix::from_node(function, ctx, "g_strcmp0");
+                        violations.push(self.violation_with_fix(
+                            ctx.file_path,
+                            ctx.base_line + node.start_position().row,
+                            node.start_position().column + 1,
+                            "Use g_strcmp0 instead of strcmp (NULL-safe)".to_string(),
+                            fix,
+                        ));
+                    }
                 } else if func_name == "strncmp" {
-                    // strncmp is trickier - don't auto-fix
+                    // strncmp is trickier — don't auto-fix
                     violations.push(
                         self.violation(
                             ctx.file_path,
@@ -85,7 +104,7 @@ impl UseGStrcmp0 {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(child, ctx, violations);
+            self.check_node(child, Some(node), ctx, violations);
         }
     }
 }
