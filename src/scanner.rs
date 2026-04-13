@@ -136,6 +136,7 @@ macro_rules! for_each_rule {
             (use_g_string_free_and_steal, UseGStringFreeAndSteal, 2, 76),
             (use_g_source_once, UseGSourceOnce, 2, 74),
             (use_g_source_constants, UseGSourceConstants, 2, 0),
+            (use_g_steal_pointer, UseGStealPointer, 2, 0),
             (use_g_str_has_prefix_suffix, UseGStrHasPrefixSuffix, 2, 0),
             (use_g_ascii_functions, UseGAsciiFunctions, 2, 0),
             (use_g_strlcpy, UseGStrlcpy, 2, 0),

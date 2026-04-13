@@ -1,0 +1,12 @@
+basic.c:14:3: use_g_steal_pointer: Use return g_steal_pointer (&str); instead of copying str and setting it to NULL
+basic.c:22:3: use_g_steal_pointer: Use return g_steal_pointer (&self->name); instead of copying self->name and setting it to NULL
+basic.c:30:3: use_g_steal_pointer: Use return g_steal_pointer (&self->items); instead of copying self->items and setting it to NULL
+basic.c:38:3: use_g_steal_pointer: Use return g_steal_pointer (&ptr); instead of copying ptr and setting it to NULL
+basic.c:50:7: use_g_steal_pointer: Use return g_steal_pointer (&self->name); instead of copying self->name and setting it to NULL
+basic.c:64:3: use_g_steal_pointer: Use g_steal_pointer (&name) instead of copying and setting to NULL
+basic.c:72:3: use_g_steal_pointer: Use g_steal_pointer (&src->name) instead of copying and setting to NULL
+basic.c:79:3: use_g_steal_pointer: Use g_steal_pointer (&src) instead of copying and setting to NULL
+basic.c:87:3: use_g_steal_pointer: Use g_steal_pointer (&value) instead of copying and setting to NULL
+basic.c:98:7: use_g_steal_pointer: Use g_steal_pointer (&name) instead of copying and setting to NULL
+basic.c:109:3: use_g_steal_pointer: Use g_steal_pointer (&name) instead of if/else copy-and-NULL pattern
+basic.c:124:3: use_g_steal_pointer: Use g_steal_pointer (&value) instead of if/else copy-and-NULL pattern

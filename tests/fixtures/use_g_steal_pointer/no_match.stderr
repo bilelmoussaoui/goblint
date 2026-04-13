@@ -1,0 +1,2 @@
+no_match.c:93:7: use_g_steal_pointer: Use g_steal_pointer (&name) instead of copying and setting to NULL
+no_match.c:108:7: use_g_steal_pointer: Use g_steal_pointer (&name) instead of copying and setting to NULL

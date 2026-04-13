@@ -33,6 +33,7 @@ Rules that suggest more idiomatic ways to write code.
 - **use_g_string_free_and_steal** - Suggests g_string_free_and_steal instead of g_string_free (..., FALSE) for better readability
 - **use_g_source_once** - Suggest using g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE
 - **use_g_source_constants** - Use G_SOURCE_CONTINUE/G_SOURCE_REMOVE instead of TRUE/FALSE in GSourceFunc callbacks
+- **use_g_steal_pointer** - Use g_steal_pointer() instead of manually copying a pointer and setting it to NULL
 - **use_g_str_has_prefix_suffix** - Use g_str_has_prefix/g_str_has_suffix() instead of manual strncmp/strcmp comparisons
 
 ## Complexity
