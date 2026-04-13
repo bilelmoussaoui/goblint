@@ -4,6 +4,26 @@ use goblint::{ast_context::AstContext, config::Config, scanner};
 use tokio::sync::Mutex;
 use tower_lsp::{Client, LanguageServer, jsonrpc::Result, lsp_types::*};
 
+fn byte_offset_to_lsp_position(content: &[u8], offset: usize) -> Option<Position> {
+    if offset > content.len() {
+        return None;
+    }
+    let mut line = 0u32;
+    let mut character = 0u32;
+    for (i, &byte) in content.iter().enumerate() {
+        if i == offset {
+            return Some(Position { line, character });
+        }
+        if byte == b'\n' {
+            line += 1;
+            character = 0;
+        } else {
+            character += 1;
+        }
+    }
+    Some(Position { line, character })
+}
+
 pub struct GObjectBackend {
     client: Client,
     documents: Arc<Mutex<HashMap<Url, String>>>,
@@ -167,6 +187,11 @@ impl GObjectBackend {
                     code: Some(NumberOrString::String(v.rule.to_string())),
                     source: Some(env!("CARGO_PKG_NAME").to_owned()),
                     message: v.message.clone(),
+                    data: if v.fixes.is_empty() {
+                        None
+                    } else {
+                        serde_json::to_value(&v.fixes).ok()
+                    },
                     ..Default::default()
                 }
             })
@@ -187,6 +212,7 @@ impl LanguageServer for GObjectBackend {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -228,5 +254,72 @@ impl LanguageServer for GObjectBackend {
             .lock()
             .await
             .remove(&params.text_document.uri);
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let path = match params.text_document.uri.to_file_path() {
+            Ok(p) => p,
+            Err(_) => return Ok(None),
+        };
+
+        let content = match std::fs::read(&path) {
+            Ok(c) => c,
+            Err(_) => return Ok(None),
+        };
+
+        let mut actions: CodeActionResponse = Vec::new();
+
+        for diagnostic in &params.context.diagnostics {
+            let fixes: Vec<goblint::rules::Fix> = match &diagnostic.data {
+                Some(data) => match serde_json::from_value(data.clone()) {
+                    Ok(f) => f,
+                    Err(_) => continue,
+                },
+                None => continue,
+            };
+
+            let mut text_edits = Vec::new();
+            for fix in &fixes {
+                if let (Some(start), Some(end)) = (
+                    byte_offset_to_lsp_position(&content, fix.start_byte),
+                    byte_offset_to_lsp_position(&content, fix.end_byte),
+                ) {
+                    text_edits.push(TextEdit {
+                        range: Range { start, end },
+                        new_text: fix.replacement.clone(),
+                    });
+                }
+            }
+
+            if text_edits.is_empty() {
+                continue;
+            }
+
+            let rule_name = match &diagnostic.code {
+                Some(NumberOrString::String(s)) => s.as_str(),
+                _ => env!("CARGO_PKG_NAME"),
+            };
+
+            let mut changes = HashMap::new();
+            changes.insert(params.text_document.uri.clone(), text_edits);
+
+            actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                title: format!("Fix: {}", rule_name),
+                kind: Some(CodeActionKind::QUICKFIX),
+                diagnostics: Some(vec![diagnostic.clone()]),
+                edit: Some(WorkspaceEdit {
+                    changes: Some(changes),
+                    ..Default::default()
+                }),
+                is_preferred: Some(true),
+                ..Default::default()
+            }));
+        }
+
+        Ok(if actions.is_empty() {
+            None
+        } else {
+            Some(actions)
+        })
     }
 }

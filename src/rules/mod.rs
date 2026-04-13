@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{ast_context::AstContext, config::Config};
 
 /// Rule category (similar to Clippy's lint categories)
@@ -36,7 +38,7 @@ impl Category {
 }
 
 /// Represents an automated fix for a violation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fix {
     /// Byte offset where the fix starts
     pub start_byte: usize,
