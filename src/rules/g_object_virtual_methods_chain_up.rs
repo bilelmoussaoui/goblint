@@ -117,8 +117,7 @@ impl GObjectVirtualMethodsChainUp {
         if node.kind() == "field_expression" {
             // Check if field name matches method_type (dispose/finalize)
             if let Some(field) = node.child_by_field_name("field") {
-                let field_text = &source[field.byte_range()];
-                let field_str = std::str::from_utf8(field_text).unwrap_or("");
+                let field_str = ast_context.get_node_text(field, source);
 
                 if field_str == method_type {
                     // Check if the argument contains G_OBJECT_CLASS or similar parent class macro

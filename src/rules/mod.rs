@@ -92,6 +92,14 @@ pub struct CheckContext<'a> {
     pub base_byte: usize,
 }
 
+impl<'a> CheckContext<'a> {
+    /// Decode a raw byte range from `source` as UTF-8, returning `""` on
+    /// failure.
+    pub fn source_text(&self, start: usize, end: usize) -> &'a str {
+        std::str::from_utf8(&self.source[start..end]).unwrap_or("")
+    }
+}
+
 pub mod deprecated_add_private;
 pub mod g_declare_semicolon;
 pub mod g_error_init;

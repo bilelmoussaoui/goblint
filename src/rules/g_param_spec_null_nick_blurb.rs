@@ -39,6 +39,7 @@ impl Rule for GParamSpecNullNickBlurb {
                 {
                     let base_byte = func.start_byte.unwrap_or(0);
                     self.check_node(
+                        ast_context,
                         tree.root_node(),
                         func_source,
                         path,
@@ -55,6 +56,7 @@ impl Rule for GParamSpecNullNickBlurb {
 impl GParamSpecNullNickBlurb {
     fn check_node(
         &self,
+        ast_context: &AstContext,
         node: Node,
         source: &[u8],
         file_path: &std::path::Path,
@@ -65,8 +67,7 @@ impl GParamSpecNullNickBlurb {
         if node.kind() == "call_expression"
             && let Some(function_node) = node.child_by_field_name("function")
         {
-            let function_name = &source[function_node.byte_range()];
-            let function_str = std::str::from_utf8(function_name).unwrap_or("");
+            let function_str = ast_context.get_node_text(function_node, source);
 
             if function_str.starts_with("g_param_spec_")
                 && function_str != "g_param_spec_internal"
@@ -84,8 +85,8 @@ impl GParamSpecNullNickBlurb {
                     let nick_arg = args[1];
                     let blurb_arg = args[2];
 
-                    let nick_is_null = self.check_argument_is_null(nick_arg, source);
-                    let blurb_is_null = self.check_argument_is_null(blurb_arg, source);
+                    let nick_is_null = self.check_argument_is_null(ast_context, nick_arg, source);
+                    let blurb_is_null = self.check_argument_is_null(ast_context, blurb_arg, source);
 
                     let mut issues = Vec::new();
                     if !nick_is_null {
@@ -141,13 +142,26 @@ impl GParamSpecNullNickBlurb {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.check_node(child, source, file_path, base_line, base_byte, violations);
+            self.check_node(
+                ast_context,
+                child,
+                source,
+                file_path,
+                base_line,
+                base_byte,
+                violations,
+            );
         }
     }
 
-    fn check_argument_is_null(&self, arg_node: Node, source: &[u8]) -> bool {
-        let arg_text = &source[arg_node.byte_range()];
-        let arg_str = std::str::from_utf8(arg_text).unwrap_or("").trim();
+    fn check_argument_is_null(
+        &self,
+        ast_context: &AstContext,
+        arg_node: Node,
+        source: &[u8],
+    ) -> bool {
+        let arg_str = ast_context.get_node_text(arg_node, source);
+        let arg_str = arg_str.trim();
 
         arg_str == "NULL" || arg_str == "((void*)0)" || arg_str == "0"
     }

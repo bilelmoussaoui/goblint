@@ -71,8 +71,7 @@ impl UseGVariantNewTyped {
                 if let Some(args_node) = node.child_by_field_name("arguments") {
                     let spacing_start = function.end_byte();
                     let spacing_end = args_node.start_byte();
-                    let spacing =
-                        std::str::from_utf8(&ctx.source[spacing_start..spacing_end]).unwrap_or("");
+                    let spacing = ctx.source_text(spacing_start, spacing_end);
 
                     // Build replacement
                     let replacement = if rest_args.is_empty() {

@@ -139,8 +139,7 @@ impl UseGStrEqual {
             // Preserve spacing between function name and arguments
             let spacing_start = function.end_byte();
             let spacing_end = args.start_byte();
-            let spacing =
-                std::str::from_utf8(&ctx.source[spacing_start..spacing_end]).unwrap_or("");
+            let spacing = ctx.source_text(spacing_start, spacing_end);
 
             let args_text = ast_context.get_node_text(args, ctx.source);
 

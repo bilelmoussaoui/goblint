@@ -147,7 +147,7 @@ impl UseGClearHandleId {
                         consequence.start_byte(),
                         consequence.end_byte(),
                         ctx,
-                        std::str::from_utf8(&ctx.source[call_stmt.byte_range()]).unwrap_or(""),
+                        &ast_context.get_node_text(call_stmt, ctx.source),
                     );
 
                     violations.push(

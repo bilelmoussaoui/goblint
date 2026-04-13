@@ -230,18 +230,14 @@ impl UnnecessaryNullCheck {
                 let mut stmt_text = String::new();
                 for child in consequence.children(&mut cursor) {
                     if child.kind() == "expression_statement" {
-                        stmt_text = std::str::from_utf8(&ctx.source[child.byte_range()])
-                            .unwrap_or("")
-                            .to_string();
+                        stmt_text = ast_context.get_node_text(child, ctx.source);
                         break;
                     }
                 }
                 stmt_text
             } else {
                 // Single statement without braces
-                std::str::from_utf8(&ctx.source[consequence.byte_range()])
-                    .unwrap_or("")
-                    .to_string()
+                ast_context.get_node_text(consequence, ctx.source)
             };
 
             let fix = Fix::from_node(node, ctx, replacement);
