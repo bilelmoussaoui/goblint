@@ -61,6 +61,12 @@ impl UnnecessaryNullCheck {
             return None;
         }
 
+        // Don't flag if there's an else branch — removing the if would also
+        // drop the else logic.
+        if node.child_by_field_name("alternative").is_some() {
+            return None;
+        }
+
         // Get the condition
         let condition = node.child_by_field_name("condition")?;
 
