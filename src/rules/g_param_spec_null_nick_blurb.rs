@@ -93,7 +93,7 @@ impl GParamSpecNullNickBlurb {
                     }
 
                     if !issues.is_empty() {
-                        let fix = if !nick_is_null && !blurb_is_null {
+                        let string_fix = if !nick_is_null && !blurb_is_null {
                             Fix::from_range(
                                 nick_arg.start_byte(),
                                 blurb_arg.end_byte(),
@@ -111,7 +111,21 @@ impl GParamSpecNullNickBlurb {
                             )
                         };
 
-                        violations.push(self.violation_with_fix(
+                        // Also fix the flags: after this rule runs, both nick
+                        // and blurb will be NULL, so remove STATIC_NICK,
+                        // STATIC_BLURB, and STATIC_STRINGS, and ensure
+                        // STATIC_NAME is present (name is always a literal).
+                        let mut fixes = vec![string_fix];
+                        if let Some(flags_arg) = args.last()
+                            && args.len() >= 4
+                        {
+                            let flags_text = ast_context.get_node_text(*flags_arg, ctx.source);
+                            if let Some(new_flags) = self.compute_new_flags(flags_text) {
+                                fixes.push(Fix::from_node(*flags_arg, ctx, new_flags));
+                            }
+                        }
+
+                        violations.push(self.violation_with_fixes(
                             ctx.file_path,
                             ctx.base_line + node.start_position().row,
                             node.start_position().column + 1,
@@ -120,7 +134,7 @@ impl GParamSpecNullNickBlurb {
                                 function_str,
                                 issues.join(" and ")
                             ),
-                            fix,
+                            fixes,
                         ));
                     }
                 }
@@ -143,5 +157,31 @@ impl GParamSpecNullNickBlurb {
         let arg_str = arg_str.trim();
 
         arg_str == "NULL" || arg_str == "((void*)0)" || arg_str == "0"
+    }
+
+    /// After nick and blurb are set to NULL, compute the correct replacement
+    /// flags string. Returns `None` if the flags are already correct.
+    fn compute_new_flags(&self, flags_text: &str) -> Option<String> {
+        const REMOVE: &[&str] = &[
+            "G_PARAM_STATIC_NICK",
+            "G_PARAM_STATIC_BLURB",
+            "G_PARAM_STATIC_STRINGS",
+        ];
+
+        let parts: Vec<&str> = flags_text.split('|').map(|s| s.trim()).collect();
+        let needs_removal = parts.iter().any(|p| REMOVE.contains(p));
+        let has_name = parts.contains(&"G_PARAM_STATIC_NAME");
+
+        if !needs_removal && has_name {
+            return None;
+        }
+
+        let mut new_parts: Vec<&str> = parts.into_iter().filter(|p| !REMOVE.contains(p)).collect();
+
+        if !new_parts.contains(&"G_PARAM_STATIC_NAME") {
+            new_parts.push("G_PARAM_STATIC_NAME");
+        }
+
+        Some(new_parts.join(" | "))
     }
 }

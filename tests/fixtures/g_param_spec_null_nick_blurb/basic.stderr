@@ -1,1 +1,6 @@
-basic.c:9:5: g_param_spec_null_nick_blurb: g_param_spec_string should have NULL for nick (parameter 2) and blurb (parameter 3)
+basic.c:10:5: g_param_spec_null_nick_blurb: g_param_spec_string should have NULL for nick (parameter 2) and blurb (parameter 3)
+basic.c:14:5: g_param_spec_null_nick_blurb: g_param_spec_string should have NULL for nick (parameter 2) and blurb (parameter 3)
+basic.c:19:5: g_param_spec_null_nick_blurb: g_param_spec_string should have NULL for nick (parameter 2) and blurb (parameter 3)
+basic.c:24:5: g_param_spec_null_nick_blurb: g_param_spec_string should have NULL for nick (parameter 2)
+basic.c:28:5: g_param_spec_null_nick_blurb: g_param_spec_string should have NULL for blurb (parameter 3)
+basic.c:32:5: g_param_spec_null_nick_blurb: g_param_spec_string should have NULL for nick (parameter 2)
