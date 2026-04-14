@@ -1,0 +1,6 @@
+misuse.c:7:7: use_g_strcmp0: strcmp() returns 0 for equality — use 'strcmp(...) == 0' or 'strcmp(...) != 0' instead of bare boolean check
+misuse.c:11:8: use_g_strcmp0: strcmp() returns 0 for equality — use 'strcmp(...) == 0' or 'strcmp(...) != 0' instead of bare boolean check
+misuse.c:15:7: use_g_strcmp0: g_strcmp0() returns 0 for equality — use 'g_strcmp0(...) == 0' or 'g_strcmp0(...) != 0' instead of bare boolean check
+misuse.c:19:8: use_g_strcmp0: g_strcmp0() returns 0 for equality — use 'g_strcmp0(...) == 0' or 'g_strcmp0(...) != 0' instead of bare boolean check
+misuse.c:23:7: use_g_strcmp0: Consider g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)
+misuse.c:27:7: use_g_strcmp0: Consider g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)

@@ -121,7 +121,6 @@ macro_rules! for_each_rule {
             (g_object_virtual_methods_chain_up, GObjectVirtualMethodsChainUp, 2, 0),
             (g_task_source_tag, GTaskSourceTag, 2, 36),
             (unnecessary_null_check, UnnecessaryNullCheck, 2, 0),
-            (use_g_str_equal, UseGStrEqual, 2, 0),
             (use_g_set_str, UseGSetStr, 2, 76),
             (use_g_autoptr_error, UseGAutoptrError, 2, 44),
             (use_g_autoptr_goto_cleanup, UseGAutoptrGotoCleanup, 2, 44),

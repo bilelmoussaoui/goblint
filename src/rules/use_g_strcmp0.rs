@@ -63,26 +63,74 @@ impl UseGStrcmp0 {
             && let Some(function) = node.child_by_field_name("function")
         {
             let func_name = ast_context.get_node_text(function, ctx.source);
-            if func_name == "strcmp" {
-                // Skip equality comparisons (== 0 / != 0): use_g_str_equal handles
-                // those with a more semantically precise suggestion (g_str_equal).
-                let in_equality_cmp = parent.is_some_and(|p| {
+            if func_name == "strcmp" || func_name == "g_strcmp0" {
+                // Check if it's used in a proper comparison context
+                let (in_comparison, operator) = if let Some(p) = parent {
                     if p.kind() == "binary_expression"
                         && let Some(op) = p.child_by_field_name("operator")
                     {
                         let op_text = ast_context.get_node_text(op, ctx.source);
-                        return op_text == "==" || op_text == "!=";
+                        (true, Some(op_text))
+                    } else {
+                        (false, None)
                     }
-                    false
-                });
+                } else {
+                    (false, None)
+                };
 
-                if !in_equality_cmp {
+                // Detect misuse: if (strcmp(a, b)) or if (!strcmp(a, b))
+                if !in_comparison {
+                    // Check if we're in a conditional context by traversing up the tree
+                    let mut current = parent;
+                    let mut is_negated = false;
+                    let mut found_condition = false;
+
+                    while let Some(p) = current {
+                        if p.kind() == "unary_expression" {
+                            is_negated = true;
+                        } else if p.kind() == "if_statement"
+                            || p.kind() == "while_statement"
+                            || p.kind() == "for_statement"
+                        {
+                            found_condition = true;
+                            break;
+                        } else if p.kind() == "binary_expression" {
+                            // Stop if we hit a binary expression (we're part of a larger
+                            // comparison)
+                            break;
+                        }
+                        current = p.parent();
+                    }
+
+                    if found_condition || is_negated {
+                        violations.push(self.violation(
+                            ctx.file_path,
+                            ctx.base_line + node.start_position().row,
+                            node.start_position().column + 1,
+                            format!(
+                                "{}() returns 0 for equality — use '{}(...) == 0' or '{}(...) != 0' instead of bare boolean check",
+                                func_name, func_name, func_name
+                            ),
+                        ));
+                    }
+                }
+
+                // Only suggest g_strcmp0 for strcmp (not for g_strcmp0 itself)
+                if func_name == "strcmp" && in_comparison {
+                    let message = if let Some(op) = operator
+                        && (op == "==" || op == "!=")
+                    {
+                        "Consider g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)"
+                    } else {
+                        "Consider g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)"
+                    };
+
                     let fix = Fix::from_node(function, ctx, "g_strcmp0");
                     violations.push(self.violation_with_fix(
                         ctx.file_path,
                         ctx.base_line + node.start_position().row,
                         node.start_position().column + 1,
-                        "Use g_strcmp0 instead of strcmp (NULL-safe)".to_string(),
+                        message.to_string(),
                         fix,
                     ));
                 }
@@ -93,7 +141,7 @@ impl UseGStrcmp0 {
                         ctx.file_path,
                         ctx.base_line + node.start_position().row,
                         node.start_position().column + 1,
-                        "Use g_strcmp0 or check for NULL first instead of strncmp (NULL-safe)"
+                        "Consider g_strcmp0 or check for NULL first instead of strncmp (if NULL-safety needed)"
                             .to_string(),
                     ),
                 );

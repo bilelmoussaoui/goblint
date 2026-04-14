@@ -1,2 +1,0 @@
-basic.c:7:7: use_g_str_equal: Use g_str_equal (a, b) instead of strcmp() == 0 for string equality
-basic.c:10:7: use_g_str_equal: Use !g_str_equal (a, b) instead of strcmp() != 0 for string equality

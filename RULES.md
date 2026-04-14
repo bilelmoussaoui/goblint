@@ -27,9 +27,8 @@ Rules that suggest more idiomatic ways to write code.
 
 - **use_g_settings_typed** - Prefer g_settings_get/set_string/boolean/etc over g_settings_get/set_value with g_variant
 - **use_g_variant_new_typed** - Prefer g_variant_new_string/boolean/etc over g_variant_new with format strings
-- **use_g_strcmp0** - Use g_strcmp0 instead of strcmp (NULL-safe)
+- **use_g_strcmp0** - Suggest g_strcmp0 instead of strcmp if arguments can be NULL (NULL-safe); also detects misuse of strcmp/g_strcmp0 as bare boolean checks
 - **use_explicit_default_flags** - Use explicit default flag constants (e.g., G_APPLICATION_DEFAULT_FLAGS) instead of 0
-- **use_g_str_equal** - Suggest g_str_equal() instead of strcmp() == 0 for better readability
 - **use_g_string_free_and_steal** - Suggests g_string_free_and_steal instead of g_string_free (..., FALSE) for better readability
 - **use_g_source_once** - Suggest using g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE
 - **use_g_source_constants** - Use G_SOURCE_CONTINUE/G_SOURCE_REMOVE instead of TRUE/FALSE in GSourceFunc callbacks
@@ -66,7 +65,7 @@ Rules that suggest changes for better performance.
 
 Rules that are rather strict or have occasional false positives.
 
-- **g_declare_semicolon** - Enforce semicolons after G_DECLARE_* macros
+- **g_declare_semicolon** - Enforce semicolons after G_DECLARE_* and G_DEFINE_* macros (including multi-line variants)
 - **matching_declare_define** - Ensure G_DECLARE_* and G_DEFINE_* macros are used consistently
 - **g_param_spec_null_nick_blurb** - Ensure g_param_spec_* functions have NULL for nick and blurb parameters
 - **use_g_object_class_install_properties** - Suggest g_object_class_install_properties for multiple g_object_class_install_property calls

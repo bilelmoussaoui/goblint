@@ -4,7 +4,7 @@ static gboolean
 my_func (const char *a,
          const char *b)
 {
-  /* Equality check — use_g_str_equal handles this, not us */
+  /* Equality check with proper comparison */
   if (strcmp (a, b) == 0)
     return TRUE;
 
