@@ -96,26 +96,31 @@ impl UnnecessaryNullCheck {
 
         // Handle binary expressions (ptr != NULL)
         if condition.kind() == "binary_expression" {
-            if let Some(left) = condition.child_by_field_name("left") {
-                let left_text = ast_context.get_node_text(left, source);
-                if !ast_context.is_null_literal(left_text) {
-                    // Check operator is != or ==
-                    if let Some(operator) = condition.child_by_field_name("operator") {
-                        let op = ast_context.get_node_text(operator, source);
-                        if op == "!=" || op == "==" {
-                            return Some(left_text);
-                        }
-                    }
-                }
+            // Check operator is != or ==
+            let operator = condition.child_by_field_name("operator")?;
+            let op = ast_context.get_node_text(operator, source);
+            if op != "!=" && op != "==" {
+                return None;
             }
 
-            // Try right side for "NULL != ptr" pattern
-            if let Some(right) = condition.child_by_field_name("right") {
-                let right_text = ast_context.get_node_text(right, source);
-                if !ast_context.is_null_literal(right_text) {
-                    return Some(right_text);
-                }
+            let left = condition.child_by_field_name("left")?;
+            let right = condition.child_by_field_name("right")?;
+
+            let left_text = ast_context.get_node_text(left, source);
+            let right_text = ast_context.get_node_text(right, source);
+
+            // Check for "ptr != NULL" pattern
+            if !ast_context.is_null_literal(left_text) && ast_context.is_null_literal(right_text) {
+                return Some(left_text);
             }
+
+            // Check for "NULL != ptr" pattern
+            if ast_context.is_null_literal(left_text) && !ast_context.is_null_literal(right_text) {
+                return Some(right_text);
+            }
+
+            // If neither side is NULL, this is not a NULL check (e.g., ptr1 != ptr2)
+            return None;
         }
 
         // Handle parenthesized expression - recurse into the inner expression

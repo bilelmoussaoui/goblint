@@ -1,0 +1,1 @@
+pointer_comparison.c:24:3: unnecessary_null_check: Remove unnecessary NULL check before g_free (g_free handles NULL)
