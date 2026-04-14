@@ -72,20 +72,41 @@ impl UseGSetStr {
                     self.check_free_then_strdup(ast_context, body_node, ctx.source)
             {
                 let position = first_stmt.start_position();
-                let replacement = format!("g_set_str (&{}, {});", var_name, new_val);
+
+                // Bytes between the two statements may contain comments that
+                // should be preserved in the fix.  Strip only the leading
+                // newline+indentation (which belonged to the deleted free call's
+                // line) and keep everything else — comments, trailing indentation
+                // — as a prefix for the g_set_str replacement.
+                let intermediate = std::str::from_utf8(
+                    &ctx.source[first_stmt.end_byte()..second_stmt.start_byte()],
+                )
+                .unwrap_or("");
+                let comment_prefix = intermediate.trim_start_matches(['\n', '\r', ' ', '\t']);
+
+                let set_str_call = format!("g_set_str (&{}, {});", var_name, new_val);
+
+                // If there are comments between the two statements, include them
+                // in the fix so they are not deleted.  The message only shows
+                // the g_set_str call itself, without the comment prefix.
+                let fix_text = if comment_prefix.is_empty() {
+                    set_str_call.clone()
+                } else {
+                    format!("{}{}", comment_prefix, set_str_call)
+                };
 
                 let fix = Fix::from_range(
                     first_stmt.start_byte(),
                     second_stmt.end_byte(),
                     ctx,
-                    &replacement,
+                    &fix_text,
                 );
 
                 violations.push(self.violation_with_fix(
                     ctx.file_path,
                     ctx.base_line + position.row,
                     position.column + 1,
-                    format!("Use {} instead of g_free and g_strdup", replacement),
+                    format!("Use {} instead of g_free and g_strdup", set_str_call),
                     fix,
                 ));
             }
@@ -98,8 +119,10 @@ impl UseGSetStr {
         }
     }
 
-    /// Check for consecutive g_free + g_strdup
-    /// Returns ((var_name, args_text), first_stmt, second_stmt)
+    /// Check for g_free + g_strdup where only comments (no other statements)
+    /// appear between them.
+    ///
+    /// Returns ((var_name, new_val), first_stmt, second_stmt).
     fn check_free_then_strdup<'a>(
         &self,
         ast_context: &AstContext,
@@ -107,26 +130,44 @@ impl UseGSetStr {
         source: &'a [u8],
     ) -> Option<((&'a str, &'a str), Node<'a>, Node<'a>)> {
         let mut cursor = compound.walk();
-        let statements: Vec<_> = compound
-            .children(&mut cursor)
-            .filter(|n| n.kind() == "expression_statement")
-            .collect();
+        let children: Vec<_> = compound.children(&mut cursor).collect();
 
-        // Look for consecutive pairs
-        for i in 0..statements.len().saturating_sub(1) {
-            let first = statements[i];
-            let second = statements[i + 1];
+        let mut i = 0;
+        while i < children.len() {
+            let child = children[i];
 
-            // Check if first is g_free
-            if let Some(var_name) = self.extract_gfree_var(ast_context, first, source) {
-                // Check if second is assignment with g_strdup
+            // Look for a g_free / g_clear_pointer expression_statement.
+            if child.kind() != "expression_statement" {
+                i += 1;
+                continue;
+            }
+            let Some(var_name) = self.extract_gfree_var(ast_context, child, source) else {
+                i += 1;
+                continue;
+            };
+
+            let first_stmt = child;
+
+            // Advance past comment nodes only.  Any other intervening node
+            // (for loop, if statement, another call, …) means the free and
+            // the strdup are not truly adjacent and we must not merge them.
+            let mut j = i + 1;
+            while j < children.len() && children[j].kind() == "comment" {
+                j += 1;
+            }
+
+            // The next non-comment must be the g_strdup assignment.
+            if j < children.len() && children[j].kind() == "expression_statement" {
+                let second_stmt = children[j];
                 if let Some((assign_var, new_val)) =
-                    self.extract_strdup_assignment(ast_context, second, source)
+                    self.extract_strdup_assignment(ast_context, second_stmt, source)
                     && assign_var.trim() == var_name.trim()
                 {
-                    return Some(((var_name, new_val), first, second));
+                    return Some(((var_name, new_val), first_stmt, second_stmt));
                 }
             }
+
+            i += 1;
         }
 
         None

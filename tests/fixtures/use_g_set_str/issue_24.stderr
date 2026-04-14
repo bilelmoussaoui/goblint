@@ -1,0 +1,1 @@
+issue_24.c:15:3: use_g_set_str: Use g_set_str (&self->multichar_buffer_save, text); instead of g_free and g_strdup
