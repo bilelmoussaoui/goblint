@@ -1,0 +1,1 @@
+issue_23.c:12:3: use_g_set_str: Use g_set_str (&self->word, outer_func (inner_func (raw))); instead of g_free and g_strdup

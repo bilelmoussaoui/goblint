@@ -68,14 +68,11 @@ impl UseGSetStr {
             };
 
             if let Some(body_node) = body
-                && let Some(((var_name, args_text), first_stmt, second_stmt)) =
+                && let Some(((var_name, new_val), first_stmt, second_stmt)) =
                     self.check_free_then_strdup(ast_context, body_node, ctx.source)
             {
                 let position = first_stmt.start_position();
-                // Strip parentheses from args if present
-                let args_clean = args_text.trim_start_matches('(').trim_end_matches(')');
-
-                let replacement = format!("g_set_str (&{}, {});", var_name, args_clean);
+                let replacement = format!("g_set_str (&{}, {});", var_name, new_val);
 
                 let fix = Fix::from_range(
                     first_stmt.start_byte(),
@@ -199,11 +196,19 @@ impl UseGSetStr {
                 if right.kind() == "call_expression" {
                     if let Some(func) = right.child_by_field_name("function") {
                         let func_name = ast_context.get_node_text(func, source);
-                        if (func_name == "g_strdup" || func_name == "g_strndup")
+                        if func_name == "g_strdup"
                             && let Some(args) = right.child_by_field_name("arguments")
                         {
-                            let args_text = ast_context.get_node_text(args, source);
-                            return Some((left_text.trim(), args_text.trim()));
+                            // Extract the argument node directly so we get clean text
+                            // without the surrounding parens of the argument_list.
+                            let mut cursor = args.walk();
+                            if let Some(arg) = args
+                                .children(&mut cursor)
+                                .find(|n| n.kind() != "(" && n.kind() != ")" && n.kind() != ",")
+                            {
+                                let arg_text = ast_context.get_node_text(arg, source);
+                                return Some((left_text.trim(), arg_text.trim()));
+                            }
                         }
                     }
                 }
