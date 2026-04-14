@@ -37,35 +37,47 @@ impl Rule for GDeclareSemicolon {
             // Track byte offset as we go through lines
             let mut byte_offset = 0;
 
+            // Track if we're inside a G_DECLARE macro (for multi-line cases)
+            let mut in_g_declare: Option<usize> = None; // Store the starting line number
+
             // Look for G_DECLARE_* macros
             for (line_num, line) in source.lines().enumerate() {
                 let trimmed = line.trim();
 
-                // Check if this line contains a G_DECLARE macro call end
+                // Check if we're starting a G_DECLARE macro
                 if trimmed.contains("G_DECLARE_FINAL_TYPE")
                     || trimmed.contains("G_DECLARE_DERIVABLE_TYPE")
                     || trimmed.contains("G_DECLARE_INTERFACE")
                 {
-                    // Check if it's the closing line (contains closing paren)
-                    if trimmed.contains(')') && !trimmed.ends_with(");") {
-                        // Find the closing paren and check what comes after
-                        if let Some(paren_pos) = line.rfind(')') {
-                            let after_paren = &line[paren_pos + 1..].trim();
-                            if after_paren.is_empty() {
-                                // Calculate byte position right after the closing paren
-                                let fix_byte_pos = byte_offset + paren_pos + 1;
+                    in_g_declare = Some(line_num);
+                }
 
-                                let mut v = self.violation_with_fix(
-                                    path,
-                                    line_num + 1,
-                                    paren_pos + 1,
-                                    "G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.".to_string(),
-                                    Fix::new(fix_byte_pos, fix_byte_pos, ";"),
-                                );
-                                v.snippet = Some(format!("{}; // Add semicolon here", trimmed));
-                                violations.push(v);
-                            }
+                // If we're in a G_DECLARE macro, check for the closing paren
+                if in_g_declare.is_some() && trimmed.contains(')') {
+                    // Check if this looks like the closing line (not a nested paren)
+                    // Simple heuristic: if the line ends with ) or has ) followed by
+                    // whitespace/comment
+                    if let Some(paren_pos) = line.rfind(')') {
+                        let after_paren = line[paren_pos + 1..].trim();
+
+                        // Check if there's no semicolon after the closing paren
+                        if !after_paren.starts_with(';') {
+                            // Calculate byte position right after the closing paren
+                            let fix_byte_pos = byte_offset + paren_pos + 1;
+
+                            let mut v = self.violation_with_fix(
+                                path,
+                                line_num + 1,
+                                paren_pos + 1,
+                                "G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.".to_string(),
+                                Fix::new(fix_byte_pos, fix_byte_pos, ";"),
+                            );
+                            v.snippet = Some(format!("{}; // Add semicolon here", trimmed));
+                            violations.push(v);
                         }
+
+                        // Reset state - we've processed this G_DECLARE
+                        in_g_declare = None;
                     }
                 }
 

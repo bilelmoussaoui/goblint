@@ -1,1 +1,4 @@
-basic.h:5:57: g_declare_semicolon: G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
+basic.h:6:57: g_declare_semicolon: G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
+basic.h:13:30: g_declare_semicolon: G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
+basic.h:17:54: g_declare_semicolon: G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
+basic.h:28:29: g_declare_semicolon: G_DECLARE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
