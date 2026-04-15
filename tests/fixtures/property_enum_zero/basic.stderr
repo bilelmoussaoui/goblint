@@ -1,1 +1,3 @@
-basic.c:3:3: property_enum_zero: Property enum should start with PROP_0, not PROP_NAME = 0. First property should be PROP_0, second should be PROP_NAME
+basic.c:4:1: property_enum_convention: Property enum should start with PROP_0, not PROP_NAME, and should end with N_PROPS
+basic.c:11:1: property_enum_convention: Property enum should start with MY_OBJECT_PROPS2_PROP_0, not PROP_FOO, and should end with MY_OBJECT_PROPS2_N_PROPS
+basic.c:17:1: property_enum_convention: Property enum should end with WIDGET_PROPS_N_PROPS
