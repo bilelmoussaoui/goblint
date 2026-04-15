@@ -80,38 +80,43 @@ impl UseGStrcmp0 {
 
                 // Detect misuse: if (strcmp(a, b)) or if (!strcmp(a, b))
                 if !in_comparison {
-                    // Check if we're in a conditional context by traversing up the tree
-                    let mut current = parent;
-                    let mut is_negated = false;
-                    let mut found_condition = false;
+                    // Check if this is being returned directly (valid for comparison functions)
+                    let is_return_value = parent.is_some_and(|p| p.kind() == "return_statement");
 
-                    while let Some(p) = current {
-                        if p.kind() == "unary_expression" {
-                            is_negated = true;
-                        } else if p.kind() == "if_statement"
-                            || p.kind() == "while_statement"
-                            || p.kind() == "for_statement"
-                        {
-                            found_condition = true;
-                            break;
-                        } else if p.kind() == "binary_expression" {
-                            // Stop if we hit a binary expression (we're part of a larger
-                            // comparison)
-                            break;
+                    if !is_return_value {
+                        // Check if we're in a conditional context by traversing up the tree
+                        let mut current = parent;
+                        let mut is_negated = false;
+                        let mut found_condition = false;
+
+                        while let Some(p) = current {
+                            if p.kind() == "unary_expression" {
+                                is_negated = true;
+                            } else if p.kind() == "if_statement"
+                                || p.kind() == "while_statement"
+                                || p.kind() == "for_statement"
+                            {
+                                found_condition = true;
+                                break;
+                            } else if p.kind() == "binary_expression" {
+                                // Stop if we hit a binary expression (we're part of a larger
+                                // comparison)
+                                break;
+                            }
+                            current = p.parent();
                         }
-                        current = p.parent();
-                    }
 
-                    if found_condition || is_negated {
-                        violations.push(self.violation(
-                            ctx.file_path,
-                            ctx.base_line + node.start_position().row,
-                            node.start_position().column + 1,
-                            format!(
-                                "{}() returns 0 for equality — use '{}(...) == 0' or '{}(...) != 0' instead of bare boolean check",
-                                func_name, func_name, func_name
-                            ),
-                        ));
+                        if found_condition || is_negated {
+                            violations.push(self.violation(
+                                ctx.file_path,
+                                ctx.base_line + node.start_position().row,
+                                node.start_position().column + 1,
+                                format!(
+                                    "{}() returns 0 for equality — use '{}(...) == 0' or '{}(...) != 0' instead of bare boolean check",
+                                    func_name, func_name, func_name
+                                ),
+                            ));
+                        }
                     }
                 }
 
