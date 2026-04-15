@@ -11,6 +11,8 @@ enum OutputFormat {
     Text,
     /// SARIF JSON format for GitHub Code Scanning, VS Code, etc.
     Sarif,
+    /// GCC-compatible format for Emacs, Vim, and other tools
+    Gcc,
 }
 
 #[derive(Parser, Debug)]
@@ -60,6 +62,18 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    // Auto-disable colors if not outputting to a terminal (for Emacs, pipes, etc.)
+    // unless using gcc format (which never uses colors)
+    if !matches!(args.format, OutputFormat::Gcc) {
+        use std::io::IsTerminal;
+        if !std::io::stdout().is_terminal() {
+            colored::control::set_override(false);
+        }
+    } else {
+        // GCC format never uses colors
+        colored::control::set_override(false);
+    }
 
     // Load configuration
     let mut config = config::Config::load(&args.config)?;
@@ -190,6 +204,9 @@ fn main() -> Result<()> {
         OutputFormat::Sarif => {
             let sarif_output = output::sarif::generate_sarif(&violations, &config, &project_root);
             println!("{}", sarif_output);
+        }
+        OutputFormat::Gcc => {
+            reporter::report_violations_gcc(&violations, &project_root);
         }
     }
 

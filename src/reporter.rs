@@ -1,10 +1,14 @@
-use std::{collections::HashMap, env};
+use std::{collections::HashMap, env, path::Path};
 
 use colored::*;
 
 use crate::{config::Config, rules::Violation};
 
 pub fn report_violations(violations: &[Violation], verbose: bool, config: &Config) {
+    // Check if we're outputting to a terminal
+    use std::io::IsTerminal;
+    let use_hyperlinks = std::io::stdout().is_terminal();
+
     if violations.is_empty() {
         if verbose {
             println!("{}", "No violations found!".green().bold());
@@ -21,12 +25,13 @@ pub fn report_violations(violations: &[Violation], verbose: bool, config: &Confi
     println!();
 
     for violation in violations {
-        // Create clickable link
+        // Create clickable link (or plain text if not a terminal)
         let file_link = create_clickable_link(
             &violation.file,
             violation.line,
             violation.column,
             &config.editor_url,
+            use_hyperlinks,
         );
 
         println!("{}", file_link);
@@ -163,11 +168,42 @@ pub fn report_summary(violations: &[Violation], fixable: &HashMap<&str, bool>) {
     );
 }
 
+/// Report violations in GCC-compatible format for Emacs, Vim, and other tools
+/// Format: path/to/file.c:line:column: level: message [rule_name]
+pub fn report_violations_gcc(violations: &[Violation], project_root: &Path) {
+    for violation in violations {
+        // Make path relative to project root for cleaner output
+        let relative_path = violation
+            .file
+            .strip_prefix(project_root)
+            .unwrap_or(&violation.file);
+
+        let level = match violation.level {
+            crate::config::RuleLevel::Error => "error",
+            crate::config::RuleLevel::Warn => "warning",
+            crate::config::RuleLevel::Ignore => {
+                unreachable!("Ignored violations should not be reported")
+            }
+        };
+
+        println!(
+            "{}:{}:{}: {}: {} [{}]",
+            relative_path.display(),
+            violation.line,
+            violation.column,
+            level,
+            violation.message,
+            violation.rule
+        );
+    }
+}
+
 fn create_clickable_link(
     file_path: &std::path::Path,
     line: usize,
     column: usize,
     editor_url_template: &Option<String>,
+    use_hyperlinks: bool,
 ) -> String {
     // Convert to absolute path if relative
     let abs_path = if file_path.is_absolute() {
@@ -182,6 +218,11 @@ fn create_clickable_link(
     // Format: file:line:column
     let location = format!("{}:{}:{}", abs_path.display(), line, column);
 
+    if !use_hyperlinks {
+        // Plain text output for pipes, redirects, etc. - no colors, no hyperlinks
+        return location;
+    }
+
     // Use configured editor URL or default
     let file_url = if let Some(template) = editor_url_template {
         template
@@ -193,7 +234,7 @@ fn create_clickable_link(
         format!("file://{}", abs_path.display())
     };
 
-    // OSC 8 hyperlink escape sequence
+    // OSC 8 hyperlink escape sequence with colored location
     let hyperlink = format!(
         "\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\",
         file_url,
