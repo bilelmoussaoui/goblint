@@ -1,0 +1,3 @@
+basic.c:10:3: use_g_bytes_unref_to_data: Use g_bytes_unref_to_data(bytes, &size) instead of g_bytes_get_data() followed by g_bytes_unref()
+basic.c:21:3: use_g_bytes_unref_to_data: Use g_bytes_unref_to_data(bytes, out_size) instead of g_bytes_get_data() followed by g_bytes_unref()
+basic.c:35:7: use_g_bytes_unref_to_data: Use g_bytes_unref_to_data(bytes, &size) instead of g_bytes_get_data() followed by g_bytes_unref()

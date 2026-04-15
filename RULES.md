@@ -40,6 +40,7 @@ Rules that suggest more idiomatic ways to write code.
 Rules that suggest simpler alternatives to complex patterns.
 
 - **use_clear_functions** - Suggest g_clear_object/g_clear_pointer instead of manual unref and NULL assignment
+- **use_g_bytes_unref_to_data** - Suggest g_bytes_unref_to_data() instead of g_bytes_get_data() followed by g_bytes_unref()
 - **use_g_new** - Suggest g_new/g_new0 instead of g_malloc/g_malloc0 with sizeof for type safety
 - **use_g_set_str** - Suggest g_set_str() instead of manual g_free and g_strdup
 - **use_g_autoptr_error** - Suggest g_autoptr(GError) instead of manual g_error_free

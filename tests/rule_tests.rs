@@ -209,6 +209,10 @@ rule_test!(
     goblint::rules::UseGObjectNewWithProperties
 );
 rule_test!(use_g_autofree, goblint::rules::UseGAutofree);
+rule_test!(
+    use_g_bytes_unref_to_data,
+    goblint::rules::UseGBytesUnrefToData
+);
 rule_test!(use_g_autoptr_error, goblint::rules::UseGAutoptrError);
 rule_test!(
     use_g_autoptr_goto_cleanup,

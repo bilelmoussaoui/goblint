@@ -126,6 +126,7 @@ macro_rules! for_each_rule {
             (use_g_autoptr_goto_cleanup, UseGAutoptrGotoCleanup, 2, 44),
             (use_g_autoptr_inline_cleanup, UseGAutoptrInlineCleanup, 2, 44),
             (use_g_autofree, UseGAutofree, 2, 44),
+            (use_g_bytes_unref_to_data, UseGBytesUnrefToData, 2, 32),
             (use_g_clear_handle_id, UseGClearHandleId, 2, 56),
             (use_g_clear_list, UseGClearList, 2, 64),
             (use_g_clear_signal_handler, UseGClearSignalHandler, 2, 0),
