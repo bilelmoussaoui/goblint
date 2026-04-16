@@ -41,11 +41,23 @@ impl Rule for GObjectVirtualMethodsChainUp {
             return;
         };
 
-        // Verify it's a GObject virtual method (has at least one pointer parameter)
-        // Most GObject virtual methods take a GObject* or derived type as first
-        // parameter
-        let has_pointer_param = func.parameters.iter().any(|p| p.type_name.contains("*"));
-        if !has_pointer_param {
+        // Verify it's a GObject virtual method by checking the first parameter
+        // GObject virtual methods take GObject* or a derived type (XxxObject*) as first
+        // param
+        if func.parameters.is_empty() {
+            return;
+        }
+
+        let first_param_type = &func.parameters[0].type_name;
+
+        // Must be a pointer type
+        if !first_param_type.contains("*") {
+            return;
+        }
+
+        // Must be GObject or a type ending in "Object"
+        // This matches: GObject*, MyObject*, FooBarObject*, etc.
+        if !first_param_type.contains("GObject") && !first_param_type.contains("Object *") {
             return;
         }
 
@@ -140,22 +152,31 @@ impl GObjectVirtualMethodsChainUp {
     fn looks_like_parent_class_variable(&self, text: &str) -> bool {
         // Common variable names that hold parent class:
         // parent_object_class, parent_class, object_class, klass, parent_klass
-        let text_lower = text.to_lowercase();
+
+        // Extract just the variable name if this is a field access like
+        // "object_class->dispose"
+        let var_name = if let Some(arrow_pos) = text.find("->") {
+            &text[..arrow_pos]
+        } else {
+            text
+        };
+
+        let var_lower = var_name.to_lowercase();
 
         // Check for explicit parent references
-        if text_lower.contains("parent")
-            && (text_lower.contains("class") || text_lower.contains("klass"))
+        if var_lower.contains("parent")
+            && (var_lower.contains("class") || var_lower.contains("klass"))
         {
             return true;
         }
 
         // Check for *_class or *_klass variables (object_class, gobject_class, etc.)
-        if text_lower.ends_with("_class") || text_lower.ends_with("_klass") {
+        if var_lower.ends_with("_class") || var_lower.ends_with("_klass") {
             return true;
         }
 
         // Just "klass" or "class" by itself
-        if text_lower == "klass" || text_lower == "class" {
+        if var_lower == "klass" || var_lower == "class" {
             return true;
         }
 
