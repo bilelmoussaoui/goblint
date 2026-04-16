@@ -1,4 +1,4 @@
-use gobject_ast::{Assignment, CallExpression, Expression, ExpressionStmt, Statement};
+use gobject_ast::{Assignment, AssignmentOp, CallExpression, Expression, ExpressionStmt, Statement};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -134,7 +134,7 @@ impl UseGBytesUnrefToData {
         };
 
         // Check operator is "="
-        if assignment.operator != "=" {
+        if assignment.operator != AssignmentOp::Assign {
             return None;
         }
 

@@ -1,4 +1,5 @@
 pub mod expression;
+pub mod operators;
 mod project;
 mod source_location;
 pub mod statement;
@@ -11,6 +12,7 @@ pub use expression::{
     SizeofExpression, StringLiteralExpression, SubscriptExpression, UnaryExpression,
     UpdateExpression,
 };
+pub use operators::{AssignmentOp, BinaryOp, UnaryOp, UpdateOp};
 pub use project::{FileModel, Project};
 pub use source_location::SourceLocation;
 pub use statement::{

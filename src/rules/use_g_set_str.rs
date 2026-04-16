@@ -1,4 +1,4 @@
-use gobject_ast::{Expression, Statement};
+use gobject_ast::{AssignmentOp, Expression, Statement, UnaryOp};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -199,7 +199,7 @@ impl UseGSetStr {
             // First argument is &var - extract var
             let gobject_ast::Argument::Expression(first_arg) = &call.arguments[0];
             if let Expression::Unary(unary) = &**first_arg
-                && unary.operator == "&"
+                && unary.operator == UnaryOp::AddressOf
             {
                 return Some(self.expr_to_string(&unary.operand));
             }
@@ -219,7 +219,7 @@ impl UseGSetStr {
             return None;
         };
 
-        if assign.operator != "=" {
+        if assign.operator != AssignmentOp::Assign {
             return None;
         }
 
@@ -257,7 +257,7 @@ impl UseGSetStr {
             Expression::StringLiteral(s) => format!("\"{}\"", s.value),
             Expression::Unary(unary) => {
                 // Handle *ptr, &ptr, etc.
-                format!("{}{}", unary.operator, self.expr_to_string(&unary.operand))
+                format!("{}{}", unary.operator.as_str(), self.expr_to_string(&unary.operand))
             }
             Expression::Call(call) => {
                 // Reconstruct the call expression

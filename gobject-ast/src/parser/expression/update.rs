@@ -1,16 +1,15 @@
 use tree_sitter::Node;
 
 use crate::{
-    model::{Expression, UpdateExpression},
+    model::{Expression, UpdateExpression, UpdateOp},
     parser::Parser,
 };
 
 impl Parser {
     pub(crate) fn parse_update_expression(&self, node: Node, source: &[u8]) -> Option<Expression> {
         let operator_node = node.child_by_field_name("operator")?;
-        let operator = std::str::from_utf8(&source[operator_node.byte_range()])
-            .ok()?
-            .to_owned();
+        let operator_str = std::str::from_utf8(&source[operator_node.byte_range()]).ok()?;
+        let operator = UpdateOp::from_str(operator_str)?;
 
         let argument_node = node.child_by_field_name("argument")?;
         let operand = self.parse_expression(argument_node, source)?;

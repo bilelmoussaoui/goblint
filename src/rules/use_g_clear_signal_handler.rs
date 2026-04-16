@@ -1,4 +1,4 @@
-use gobject_ast::{Expression, Statement};
+use gobject_ast::{AssignmentOp, Expression, Statement};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -282,7 +282,7 @@ impl UseGClearSignalHandler {
         };
 
         // Check left side matches expected_id and right side is 0
-        assign.lhs == expected_id && assign.operator == "=" && assign.rhs.is_zero()
+        assign.lhs == expected_id && assign.operator == AssignmentOp::Assign && assign.rhs.is_zero()
     }
 
     /// Check if any statement calls a cleanup function on the target

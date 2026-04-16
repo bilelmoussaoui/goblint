@@ -1,4 +1,4 @@
-use gobject_ast::{Expression, Statement};
+use gobject_ast::{AssignmentOp, BinaryOp, Expression, Statement};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -303,7 +303,7 @@ impl UseGStealPointer {
             Expression::Identifier(id) => Some(id.name.clone()),
             Expression::FieldAccess(f) => Some(f.text.clone()),
             Expression::Binary(bin) => {
-                if bin.operator == "!=" {
+                if bin.operator == BinaryOp::NotEqual {
                     // Check for expr != NULL or NULL != expr
                     if matches!(&*bin.right, Expression::Null(_)) {
                         // expr != NULL, return left side
@@ -497,7 +497,7 @@ impl UseGStealPointer {
             return None;
         };
 
-        if assign.operator != "=" {
+        if assign.operator != AssignmentOp::Assign {
             return None;
         }
 

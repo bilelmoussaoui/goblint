@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use gobject_ast::{Expression, Statement};
+use gobject_ast::{Expression, Statement, UnaryOp};
 
 use super::Rule;
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -191,7 +191,7 @@ impl UseGFileLoadBytes {
 
         // Handle &var
         if let Expression::Unary(unary) = expr.as_ref()
-            && unary.operator == "&"
+            && unary.operator == UnaryOp::AddressOf
         {
             return unary.operand.extract_variable_name();
         }

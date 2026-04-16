@@ -1,4 +1,4 @@
-use gobject_ast::{Expression, Statement};
+use gobject_ast::{BinaryOp, Expression, Statement};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -84,7 +84,7 @@ impl UseGStrHasPrefixSuffix {
     ) {
         // Check if this is a binary expression with == or !=
         if let Expression::Binary(bin) = expr
-            && (bin.operator == "==" || bin.operator == "!=")
+            && matches!(bin.operator, BinaryOp::Equal | BinaryOp::NotEqual)
         {
             // Check both sides for strcmp/strncmp patterns
             self.check_for_prefix_pattern(
@@ -134,7 +134,7 @@ impl UseGStrHasPrefixSuffix {
         &self,
         strncmp_side: &Expression,
         value_side: &Expression,
-        operator: &str,
+        operator: &BinaryOp,
         file_path: &std::path::Path,
         location: &gobject_ast::SourceLocation,
         violations: &mut Vec<Violation>,
@@ -171,7 +171,7 @@ impl UseGStrHasPrefixSuffix {
         // Get the string argument
         let str_arg_text = self.arg_to_text(&call.arguments[0]);
 
-        let replacement = if operator == "==" {
+        let replacement = if *operator == BinaryOp::Equal {
             format!("g_str_has_prefix ({str_arg_text}, \"{prefix_text}\")")
         } else {
             format!("!g_str_has_prefix ({str_arg_text}, \"{prefix_text}\")")
@@ -183,7 +183,7 @@ impl UseGStrHasPrefixSuffix {
             file_path,
             location.line,
             location.column,
-            format!("Use {replacement} instead of strncmp() {operator} 0"),
+            format!("Use {replacement} instead of strncmp() {} 0", operator.as_str()),
             fix,
         ));
     }
@@ -194,7 +194,7 @@ impl UseGStrHasPrefixSuffix {
         &self,
         strcmp_side: &Expression,
         value_side: &Expression,
-        operator: &str,
+        operator: &BinaryOp,
         file_path: &std::path::Path,
         location: &gobject_ast::SourceLocation,
         violations: &mut Vec<Violation>,
@@ -228,7 +228,7 @@ impl UseGStrHasPrefixSuffix {
             return;
         };
 
-        let replacement = if operator == "==" {
+        let replacement = if *operator == BinaryOp::Equal {
             format!("g_str_has_suffix ({str_expr}, \"{suffix_text}\")")
         } else {
             format!("!g_str_has_suffix ({str_expr}, \"{suffix_text}\")")
@@ -240,7 +240,7 @@ impl UseGStrHasPrefixSuffix {
             file_path,
             location.line,
             location.column,
-            format!("Use {replacement} instead of strcmp() {operator} 0"),
+            format!("Use {replacement} instead of strcmp() {} 0", operator.as_str()),
             fix,
         ));
     }
@@ -259,7 +259,7 @@ impl UseGStrHasPrefixSuffix {
             return None;
         };
 
-        if top_bin.operator != "-" {
+        if top_bin.operator != BinaryOp::Subtract {
             return None;
         }
 
@@ -275,7 +275,7 @@ impl UseGStrHasPrefixSuffix {
             return None;
         };
 
-        if inner_bin.operator != "+" {
+        if inner_bin.operator != BinaryOp::Add {
             return None;
         }
 

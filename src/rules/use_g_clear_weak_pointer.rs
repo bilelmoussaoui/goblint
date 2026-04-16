@@ -1,4 +1,4 @@
-use gobject_ast::{Expression, Statement};
+use gobject_ast::{AssignmentOp, Expression, Statement, UnaryOp};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -157,7 +157,7 @@ impl UseGClearWeakPointer {
 
         // Handle unary & operator: &var
         if let Expression::Unary(unary) = inner_expr.as_ref()
-            && unary.operator == "&"
+            && unary.operator == UnaryOp::AddressOf
         {
             return unary.operand.extract_variable_name();
         }
@@ -176,6 +176,6 @@ impl UseGClearWeakPointer {
         };
 
         // Check left side matches var_name and right side is NULL
-        assign.lhs == var_name && assign.operator == "=" && assign.rhs.is_null()
+        assign.lhs == var_name && assign.operator == AssignmentOp::Assign && assign.rhs.is_null()
     }
 }

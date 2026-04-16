@@ -1,4 +1,4 @@
-use gobject_ast::{Expression, Statement};
+use gobject_ast::{Expression, Statement, UnaryOp};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -94,7 +94,7 @@ impl UseGStrcmp0 {
                 ));
             }
             // Negated call: if (!strcmp(a, b)) or if (!g_strcmp0(a, b))
-            Expression::Unary(unary) if unary.operator == "!" => {
+            Expression::Unary(unary) if unary.operator == UnaryOp::Not => {
                 if let Expression::Call(call) = &*unary.operand
                     && self.is_str_compare(&call.function)
                 {

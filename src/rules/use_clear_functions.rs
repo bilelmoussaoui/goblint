@@ -1,4 +1,4 @@
-use gobject_ast::{Expression, IfStatement, Statement};
+use gobject_ast::{BinaryOp, Expression, IfStatement, Statement};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -149,7 +149,7 @@ impl UseClearFunctions {
     fn has_logical_operators(&self, expr: &Expression) -> bool {
         match expr {
             Expression::Binary(bin) => {
-                if bin.operator == "&&" || bin.operator == "||" {
+                if matches!(bin.operator, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
                     return true;
                 }
                 // Recursively check operands
