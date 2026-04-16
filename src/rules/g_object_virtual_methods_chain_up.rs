@@ -67,40 +67,19 @@ impl Rule for GObjectVirtualMethodsChainUp {
 impl GObjectVirtualMethodsChainUp {
     fn has_chainup_call(&self, statements: &[Statement], method_type: &str) -> bool {
         for stmt in statements {
-            // Check expressions for field access like parent_class->dispose
-            for expr in stmt.expressions() {
-                if self.check_expression_for_chainup(expr, method_type) {
-                    return true;
-                }
-            }
-
-            // Recursively check nested statements
-            match stmt {
-                Statement::If(if_stmt) => {
-                    if self.has_chainup_call(&if_stmt.then_body, method_type) {
-                        return true;
-                    }
-                    if let Some(else_body) = &if_stmt.else_body
-                        && self.has_chainup_call(else_body, method_type)
-                    {
-                        return true;
+            let mut found = false;
+            stmt.walk(&mut |s| {
+                // Check expressions for field access like parent_class->dispose
+                for expr in s.expressions() {
+                    if self.check_expression_for_chainup(expr, method_type) {
+                        found = true;
                     }
                 }
-                Statement::Compound(compound) => {
-                    if self.has_chainup_call(&compound.statements, method_type) {
-                        return true;
-                    }
-                }
-                Statement::Labeled(labeled) => {
-                    if self.has_chainup_call(std::slice::from_ref(&labeled.statement), method_type)
-                    {
-                        return true;
-                    }
-                }
-                _ => {}
+            });
+            if found {
+                return true;
             }
         }
-
         false
     }
 

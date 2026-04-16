@@ -49,28 +49,11 @@ impl UnnecessaryNullCheck {
         violations: &mut Vec<Violation>,
     ) {
         for stmt in statements {
-            match stmt {
-                Statement::If(if_stmt) => {
+            stmt.walk(&mut |s| {
+                if let Statement::If(if_stmt) = s {
                     self.check_if_statement(if_stmt, file_path, source, violations);
-                    // Recursively check nested statements
-                    self.check_statements(&if_stmt.then_body, file_path, source, violations);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.check_statements(else_body, file_path, source, violations);
-                    }
                 }
-                Statement::Compound(compound) => {
-                    self.check_statements(&compound.statements, file_path, source, violations);
-                }
-                Statement::Labeled(labeled) => {
-                    self.check_statements(
-                        std::slice::from_ref(&labeled.statement),
-                        file_path,
-                        source,
-                        violations,
-                    );
-                }
-                _ => {}
-            }
+            });
         }
     }
 

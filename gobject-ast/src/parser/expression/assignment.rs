@@ -1,6 +1,9 @@
 use tree_sitter::Node;
 
-use crate::{model::{Assignment, AssignmentOp}, parser::Parser};
+use crate::{
+    model::{Assignment, AssignmentOp},
+    parser::Parser,
+};
 
 impl Parser {
     pub(crate) fn parse_assignment(&self, node: Node, source: &[u8]) -> Option<Assignment> {

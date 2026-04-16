@@ -86,42 +86,37 @@ impl GTaskSourceTag {
         let mut results = Vec::new();
 
         for stmt in statements {
-            match stmt {
-                // Check declarations: GTask *task = g_task_new(...)
-                Statement::Declaration(decl) => {
-                    if let Some(Expression::Call(call)) = &decl.initializer
-                        && call.function == "g_task_new"
-                    {
-                        // Find the column where the variable name appears
-                        let var_name_column =
-                            self.find_var_name_column(decl.location.start_byte, &decl.name, source);
-                        let mut location = decl.location.clone();
-                        location.column = var_name_column;
-                        results.push((decl.name.clone(), location));
+            stmt.walk(&mut |s| {
+                match s {
+                    // Check declarations: GTask *task = g_task_new(...)
+                    Statement::Declaration(decl) => {
+                        if let Some(Expression::Call(call)) = &decl.initializer
+                            && call.function == "g_task_new"
+                        {
+                            // Find the column where the variable name appears
+                            let var_name_column = self.find_var_name_column(
+                                decl.location.start_byte,
+                                &decl.name,
+                                source,
+                            );
+                            let mut location = decl.location.clone();
+                            location.column = var_name_column;
+                            results.push((decl.name.clone(), location));
+                        }
                     }
-                }
-                // Check assignments: task = g_task_new(...)
-                Statement::Expression(expr_stmt) => {
-                    if let Expression::Assignment(assignment) = &expr_stmt.expr
-                        && let Expression::Call(call) = assignment.rhs.as_ref()
-                        && call.function == "g_task_new"
-                    {
-                        // For assignments, use the assignment location
-                        results.push((assignment.lhs.clone(), assignment.location.clone()));
+                    // Check assignments: task = g_task_new(...)
+                    Statement::Expression(expr_stmt) => {
+                        if let Expression::Assignment(assignment) = &expr_stmt.expr
+                            && let Expression::Call(call) = assignment.rhs.as_ref()
+                            && call.function == "g_task_new"
+                        {
+                            // For assignments, use the assignment location
+                            results.push((assignment.lhs.clone(), assignment.location.clone()));
+                        }
                     }
+                    _ => {}
                 }
-                // Recurse into nested statements
-                Statement::If(if_stmt) => {
-                    results.extend(self.find_gtask_new_vars(&if_stmt.then_body, source));
-                    if let Some(else_body) = &if_stmt.else_body {
-                        results.extend(self.find_gtask_new_vars(else_body, source));
-                    }
-                }
-                Statement::Compound(compound) => {
-                    results.extend(self.find_gtask_new_vars(&compound.statements, source));
-                }
-                _ => {}
-            }
+            });
         }
 
         results
@@ -152,25 +147,9 @@ impl GTaskSourceTag {
         source: &[u8],
     ) -> bool {
         for stmt in statements {
-            // Check if any call is g_task_set_source_tag with our variable
-            if let Some(found) = self.check_statement_for_set_source_tag(stmt, var_name, source)
-                && found
-            {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn check_statement_for_set_source_tag(
-        &self,
-        stmt: &Statement,
-        var_name: &str,
-        source: &[u8],
-    ) -> Option<bool> {
-        match stmt {
-            Statement::Expression(_) => {
-                if let Some(call) = stmt.extract_call()
+            let mut found = false;
+            stmt.walk(&mut |s| {
+                if let Some(call) = s.extract_call()
                     && call.function == "g_task_set_source_tag"
                     && !call.arguments.is_empty()
                 {
@@ -178,28 +157,15 @@ impl GTaskSourceTag {
                     if let Some(arg_text) = call.get_arg_text(0, source)
                         && arg_text.contains(var_name)
                     {
-                        return Some(true);
+                        found = true;
                     }
                 }
+            });
+            if found {
+                return true;
             }
-            Statement::If(if_stmt) => {
-                if self.has_set_source_tag_call(&if_stmt.then_body, var_name, source) {
-                    return Some(true);
-                }
-                if let Some(else_body) = &if_stmt.else_body
-                    && self.has_set_source_tag_call(else_body, var_name, source)
-                {
-                    return Some(true);
-                }
-            }
-            Statement::Compound(compound) => {
-                if self.has_set_source_tag_call(&compound.statements, var_name, source) {
-                    return Some(true);
-                }
-            }
-            _ => {}
         }
-        None
+        false
     }
 
     fn extract_indentation(&self, start_byte: usize, source: &[u8]) -> String {

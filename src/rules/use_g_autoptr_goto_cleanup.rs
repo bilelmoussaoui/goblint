@@ -109,8 +109,8 @@ impl UseGAutoptrGotoCleanup {
         result: &mut HashMap<String, (String, gobject_ast::SourceLocation)>,
     ) {
         for stmt in statements {
-            match stmt {
-                Statement::Declaration(decl) => {
+            stmt.walk(&mut |s| {
+                if let Statement::Declaration(decl) = s {
                     // Only track pointer types
                     if decl.type_name.contains('*') {
                         // Skip field access names
@@ -122,23 +122,7 @@ impl UseGAutoptrGotoCleanup {
                         }
                     }
                 }
-                Statement::Compound(compound) => {
-                    self.collect_local_pointer_declarations(&compound.statements, result);
-                }
-                Statement::If(if_stmt) => {
-                    self.collect_local_pointer_declarations(&if_stmt.then_body, result);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.collect_local_pointer_declarations(else_body, result);
-                    }
-                }
-                Statement::Labeled(labeled) => {
-                    self.collect_local_pointer_declarations(
-                        std::slice::from_ref(&labeled.statement),
-                        result,
-                    );
-                }
-                _ => {}
-            }
+            });
         }
     }
 
@@ -151,159 +135,91 @@ impl UseGAutoptrGotoCleanup {
         use gobject_ast::Expression;
 
         for stmt in statements {
-            match stmt {
-                // Pattern 1: Type *var = allocation_call();
-                Statement::Declaration(decl) => {
-                    if let Some(Expression::Call(call)) = &decl.initializer
-                        && call.is_allocation_call()
-                        && let Some((type_text, location)) = local_vars.get(&decl.name)
-                    {
-                        result.insert(decl.name.clone(), (type_text.clone(), location.clone()));
-                    }
-                }
-                // Pattern 2: var = allocation_call();
-                Statement::Expression(expr_stmt) => {
-                    if let Expression::Assignment(assign) = &expr_stmt.expr
-                        && let Expression::Call(call) = &*assign.rhs
-                        && call.is_allocation_call()
-                    {
-                        // Only simple identifiers, not field expressions
-                        if !assign.lhs.contains("->")
-                            && !assign.lhs.contains('.')
-                            && let Some((type_text, location)) = local_vars.get(&assign.lhs)
+            stmt.walk(&mut |s| {
+                match s {
+                    // Pattern 1: Type *var = allocation_call();
+                    Statement::Declaration(decl) => {
+                        if let Some(Expression::Call(call)) = &decl.initializer
+                            && call.is_allocation_call()
+                            && let Some((type_text, location)) = local_vars.get(&decl.name)
                         {
-                            result
-                                .insert(assign.lhs.clone(), (type_text.clone(), location.clone()));
+                            result.insert(decl.name.clone(), (type_text.clone(), location.clone()));
                         }
                     }
-                }
-                // Recurse
-                Statement::Compound(compound) => {
-                    self.collect_allocated_vars(&compound.statements, local_vars, result);
-                }
-                Statement::If(if_stmt) => {
-                    self.collect_allocated_vars(&if_stmt.then_body, local_vars, result);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.collect_allocated_vars(else_body, local_vars, result);
+                    // Pattern 2: var = allocation_call();
+                    Statement::Expression(expr_stmt) => {
+                        if let Expression::Assignment(assign) = &expr_stmt.expr
+                            && let Expression::Call(call) = &*assign.rhs
+                            && call.is_allocation_call()
+                        {
+                            // Only simple identifiers, not field expressions
+                            if !assign.lhs.contains("->")
+                                && !assign.lhs.contains('.')
+                                && let Some((type_text, location)) = local_vars.get(&assign.lhs)
+                            {
+                                result.insert(
+                                    assign.lhs.clone(),
+                                    (type_text.clone(), location.clone()),
+                                );
+                            }
+                        }
                     }
+                    _ => {}
                 }
-                Statement::Labeled(labeled) => {
-                    self.collect_allocated_vars(
-                        std::slice::from_ref(&labeled.statement),
-                        local_vars,
-                        result,
-                    );
-                }
-                _ => {}
-            }
+            });
         }
     }
 
     /// Find all goto statements and collect the labels they target
     fn find_goto_labels(&self, statements: &[Statement]) -> HashSet<String> {
         let mut labels = HashSet::new();
-        self.collect_goto_labels(statements, &mut labels);
-        labels
-    }
-
-    fn collect_goto_labels(&self, statements: &[Statement], labels: &mut HashSet<String>) {
         for stmt in statements {
-            match stmt {
-                Statement::Goto(goto_stmt) => {
+            stmt.walk(&mut |s| {
+                if let Statement::Goto(goto_stmt) = s {
                     labels.insert(goto_stmt.label.clone());
                 }
-                Statement::Compound(compound) => {
-                    self.collect_goto_labels(&compound.statements, labels);
-                }
-                Statement::If(if_stmt) => {
-                    self.collect_goto_labels(&if_stmt.then_body, labels);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.collect_goto_labels(else_body, labels);
-                    }
-                }
-                Statement::Labeled(labeled) => {
-                    self.collect_goto_labels(std::slice::from_ref(&labeled.statement), labels);
-                }
-                _ => {}
-            }
+            });
         }
+        labels
     }
 
     /// Find all labels and what variables they cleanup (unref/free)
     /// Returns map of label_name -> set of variable names
     fn find_cleanup_labels(&self, statements: &[Statement]) -> HashMap<String, HashSet<String>> {
         let mut result = HashMap::new();
-        self.collect_cleanup_labels(statements, &mut result);
-        result
-    }
 
-    fn collect_cleanup_labels(
-        &self,
-        statements: &[Statement],
-        result: &mut HashMap<String, HashSet<String>>,
-    ) {
         for stmt in statements {
-            match stmt {
-                Statement::Labeled(labeled) => {
+            stmt.walk(&mut |s| {
+                if let Statement::Labeled(labeled) = s {
                     // Find cleanup calls in this labeled statement
-                    let mut cleanup_vars = HashSet::new();
-                    self.find_cleanup_calls(
-                        std::slice::from_ref(&labeled.statement),
-                        &mut cleanup_vars,
-                    );
-
+                    let cleanup_vars = self.find_cleanup_calls(&labeled.statement);
                     if !cleanup_vars.is_empty() {
                         result.insert(labeled.label.clone(), cleanup_vars);
                     }
-
-                    // Also recurse to find nested labeled statements
-                    self.collect_cleanup_labels(std::slice::from_ref(&labeled.statement), result);
                 }
-                Statement::Compound(compound) => {
-                    self.collect_cleanup_labels(&compound.statements, result);
-                }
-                Statement::If(if_stmt) => {
-                    self.collect_cleanup_labels(&if_stmt.then_body, result);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.collect_cleanup_labels(else_body, result);
-                    }
-                }
-                _ => {}
-            }
+            });
         }
+
+        result
     }
 
-    fn find_cleanup_calls(&self, statements: &[Statement], cleanup_vars: &mut HashSet<String>) {
+    fn find_cleanup_calls(&self, stmt: &Statement) -> HashSet<String> {
         use gobject_ast::Expression;
 
-        for stmt in statements {
-            match stmt {
-                Statement::Expression(expr_stmt) => {
-                    if let Expression::Call(call) = &expr_stmt.expr
-                        && call.is_cleanup_call()
-                        && !call.arguments.is_empty()
-                    {
-                        let gobject_ast::Argument::Expression(arg_expr) = &call.arguments[0];
-                        // Extract variable name (handle &var or var)
-                        if let Some(var_name) = arg_expr.extract_variable_name() {
-                            cleanup_vars.insert(var_name.to_string());
-                        }
-                    }
+        let mut cleanup_vars = HashSet::new();
+        stmt.walk(&mut |s| {
+            if let Statement::Expression(expr_stmt) = s
+                && let Expression::Call(call) = &expr_stmt.expr
+                && call.is_cleanup_call()
+                && !call.arguments.is_empty()
+            {
+                let gobject_ast::Argument::Expression(arg_expr) = &call.arguments[0];
+                // Extract variable name (handle &var or var)
+                if let Some(var_name) = arg_expr.extract_variable_name() {
+                    cleanup_vars.insert(var_name.to_string());
                 }
-                Statement::Compound(compound) => {
-                    self.find_cleanup_calls(&compound.statements, cleanup_vars);
-                }
-                Statement::If(if_stmt) => {
-                    self.find_cleanup_calls(&if_stmt.then_body, cleanup_vars);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.find_cleanup_calls(else_body, cleanup_vars);
-                    }
-                }
-                Statement::Labeled(labeled) => {
-                    self.find_cleanup_calls(std::slice::from_ref(&labeled.statement), cleanup_vars);
-                }
-                _ => {}
             }
-        }
+        });
+        cleanup_vars
     }
 }

@@ -257,7 +257,11 @@ impl UseGSetStr {
             Expression::StringLiteral(s) => format!("\"{}\"", s.value),
             Expression::Unary(unary) => {
                 // Handle *ptr, &ptr, etc.
-                format!("{}{}", unary.operator.as_str(), self.expr_to_string(&unary.operand))
+                format!(
+                    "{}{}",
+                    unary.operator.as_str(),
+                    self.expr_to_string(&unary.operand)
+                )
             }
             Expression::Call(call) => {
                 // Reconstruct the call expression

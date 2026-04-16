@@ -147,17 +147,15 @@ impl UseClearFunctions {
     }
 
     fn has_logical_operators(&self, expr: &Expression) -> bool {
-        match expr {
-            Expression::Binary(bin) => {
-                if matches!(bin.operator, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
-                    return true;
-                }
-                // Recursively check operands
-                self.has_logical_operators(&bin.left) || self.has_logical_operators(&bin.right)
+        let mut found = false;
+        expr.walk(&mut |e| {
+            if let Expression::Binary(bin) = e
+                && matches!(bin.operator, BinaryOp::LogicalAnd | BinaryOp::LogicalOr)
+            {
+                found = true;
             }
-            Expression::Unary(unary) => self.has_logical_operators(&unary.operand),
-            _ => false,
-        }
+        });
+        found
     }
 
     fn find_unref_call<'a>(

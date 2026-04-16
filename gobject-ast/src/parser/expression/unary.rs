@@ -1,6 +1,9 @@
 use tree_sitter::Node;
 
-use crate::{model::{UnaryExpression, UnaryOp}, parser::Parser};
+use crate::{
+    model::{UnaryExpression, UnaryOp},
+    parser::Parser,
+};
 
 impl Parser {
     pub(crate) fn parse_unary_expression(

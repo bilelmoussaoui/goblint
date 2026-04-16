@@ -102,12 +102,12 @@ impl UseGAutoptrInlineCleanup {
         result: &mut HashMap<String, (String, gobject_ast::SourceLocation)>,
     ) {
         for stmt in statements {
-            match stmt {
-                Statement::Declaration(decl) => {
+            stmt.walk(&mut |s| {
+                if let Statement::Declaration(decl) = s {
                     // Skip variables already using g_autoptr/g_autofree
                     if decl.type_name.contains("g_autoptr") || decl.type_name.contains("g_autofree")
                     {
-                        continue;
+                        return;
                     }
 
                     // Only track pointer types for GObject types
@@ -121,20 +121,7 @@ impl UseGAutoptrInlineCleanup {
                         }
                     }
                 }
-                Statement::Compound(compound) => {
-                    self.collect_local_vars(&compound.statements, result);
-                }
-                Statement::If(if_stmt) => {
-                    self.collect_local_vars(&if_stmt.then_body, result);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.collect_local_vars(else_body, result);
-                    }
-                }
-                Statement::Labeled(labeled) => {
-                    self.collect_local_vars(std::slice::from_ref(&labeled.statement), result);
-                }
-                _ => {}
-            }
+            });
         }
     }
 
@@ -173,154 +160,86 @@ impl UseGAutoptrInlineCleanup {
     }
 
     fn is_var_allocated(&self, statements: &[Statement], var_name: &str) -> bool {
-        self.find_var_allocation(statements, var_name)
-    }
-
-    fn find_var_allocation(&self, statements: &[Statement], var_name: &str) -> bool {
         use gobject_ast::Expression;
 
         for stmt in statements {
-            match stmt {
-                // Check init: Type *var = allocation_call()
-                Statement::Declaration(decl) => {
-                    if decl.name == var_name
-                        && let Some(Expression::Call(call)) = &decl.initializer
-                        && call.is_allocation_call()
-                    {
-                        return true;
+            let mut found = false;
+            stmt.walk(&mut |s| {
+                match s {
+                    // Check init: Type *var = allocation_call()
+                    Statement::Declaration(decl) => {
+                        if decl.name == var_name
+                            && let Some(Expression::Call(call)) = &decl.initializer
+                            && call.is_allocation_call()
+                        {
+                            found = true;
+                        }
                     }
+                    // Check assignment: var = allocation_call()
+                    Statement::Expression(expr_stmt) => {
+                        if let Expression::Assignment(assign) = &expr_stmt.expr
+                            && assign.lhs == var_name
+                            && let Expression::Call(call) = &*assign.rhs
+                            && call.is_allocation_call()
+                        {
+                            found = true;
+                        }
+                    }
+                    _ => {}
                 }
-                // Check assignment: var = allocation_call()
-                Statement::Expression(expr_stmt) => {
-                    if let Expression::Assignment(assign) = &expr_stmt.expr
-                        && assign.lhs == var_name
-                        && let Expression::Call(call) = &*assign.rhs
-                        && call.is_allocation_call()
-                    {
-                        return true;
-                    }
-                }
-                // Recurse
-                Statement::Compound(compound) => {
-                    if self.find_var_allocation(&compound.statements, var_name) {
-                        return true;
-                    }
-                }
-                Statement::If(if_stmt) => {
-                    if self.find_var_allocation(&if_stmt.then_body, var_name) {
-                        return true;
-                    }
-                    if let Some(else_body) = &if_stmt.else_body
-                        && self.find_var_allocation(else_body, var_name)
-                    {
-                        return true;
-                    }
-                }
-                Statement::Labeled(labeled) => {
-                    if self.find_var_allocation(std::slice::from_ref(&labeled.statement), var_name)
-                    {
-                        return true;
-                    }
-                }
-                _ => {}
+            });
+            if found {
+                return true;
             }
         }
-
         false
     }
 
     fn is_var_manually_freed(&self, statements: &[Statement], var_name: &str) -> bool {
-        self.find_manual_free(statements, var_name)
-    }
-
-    fn find_manual_free(&self, statements: &[Statement], var_name: &str) -> bool {
         use gobject_ast::Expression;
 
         for stmt in statements {
-            match stmt {
-                Statement::Expression(expr_stmt) => {
-                    if let Expression::Call(call) = &expr_stmt.expr {
-                        // Check if this is a cleanup call with our variable
-                        if call.is_cleanup_call() && !call.arguments.is_empty() {
-                            let gobject_ast::Argument::Expression(arg_expr) = &call.arguments[0];
-                            // Check for var or &var
-                            if let Some(arg_var) = arg_expr.extract_variable_name()
-                                && arg_var == var_name
-                            {
-                                return true;
-                            }
+            let mut found = false;
+            stmt.walk(&mut |s| {
+                if let Statement::Expression(expr_stmt) = s
+                    && let Expression::Call(call) = &expr_stmt.expr
+                {
+                    // Check if this is a cleanup call with our variable
+                    if call.is_cleanup_call() && !call.arguments.is_empty() {
+                        let gobject_ast::Argument::Expression(arg_expr) = &call.arguments[0];
+                        // Check for var or &var
+                        if let Some(arg_var) = arg_expr.extract_variable_name()
+                            && arg_var == var_name
+                        {
+                            found = true;
                         }
                     }
                 }
-                // Recurse
-                Statement::Compound(compound) => {
-                    if self.find_manual_free(&compound.statements, var_name) {
-                        return true;
-                    }
-                }
-                Statement::If(if_stmt) => {
-                    if self.find_manual_free(&if_stmt.then_body, var_name) {
-                        return true;
-                    }
-                    if let Some(else_body) = &if_stmt.else_body
-                        && self.find_manual_free(else_body, var_name)
-                    {
-                        return true;
-                    }
-                }
-                Statement::Labeled(labeled) => {
-                    if self.find_manual_free(std::slice::from_ref(&labeled.statement), var_name) {
-                        return true;
-                    }
-                }
-                _ => {}
+            });
+            if found {
+                return true;
             }
         }
-
         false
     }
 
     fn is_var_returned(&self, statements: &[Statement], var_name: &str) -> bool {
-        self.find_return_of_var(statements, var_name)
-    }
-
-    fn find_return_of_var(&self, statements: &[Statement], var_name: &str) -> bool {
         use gobject_ast::Expression;
 
         for stmt in statements {
-            match stmt {
-                Statement::Return(ret) => {
-                    if let Some(Expression::Identifier(id)) = &ret.value
-                        && id.name == var_name
-                    {
-                        return true;
-                    }
+            let mut found = false;
+            stmt.walk(&mut |s| {
+                if let Statement::Return(ret) = s
+                    && let Some(Expression::Identifier(id)) = &ret.value
+                    && id.name == var_name
+                {
+                    found = true;
                 }
-                // Recurse
-                Statement::Compound(compound) => {
-                    if self.find_return_of_var(&compound.statements, var_name) {
-                        return true;
-                    }
-                }
-                Statement::If(if_stmt) => {
-                    if self.find_return_of_var(&if_stmt.then_body, var_name) {
-                        return true;
-                    }
-                    if let Some(else_body) = &if_stmt.else_body
-                        && self.find_return_of_var(else_body, var_name)
-                    {
-                        return true;
-                    }
-                }
-                Statement::Labeled(labeled) => {
-                    if self.find_return_of_var(std::slice::from_ref(&labeled.statement), var_name) {
-                        return true;
-                    }
-                }
-                _ => {}
+            });
+            if found {
+                return true;
             }
         }
-
         false
     }
 }

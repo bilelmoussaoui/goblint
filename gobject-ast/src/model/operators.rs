@@ -97,16 +97,16 @@ impl BinaryOp {
 /// Unary operators in C
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnaryOp {
-    Not,            // !
-    BitwiseNot,     // ~
-    Negate,         // - (unary minus)
-    Plus,           // + (unary plus)
-    Dereference,    // *
-    AddressOf,      // &
-    PreIncrement,   // ++x (handled by UpdateExpression but can appear)
-    PreDecrement,   // --x (handled by UpdateExpression but can appear)
-    PostIncrement,  // x++ (handled by UpdateExpression but can appear)
-    PostDecrement,  // x-- (handled by UpdateExpression but can appear)
+    Not,           // !
+    BitwiseNot,    // ~
+    Negate,        // - (unary minus)
+    Plus,          // + (unary plus)
+    Dereference,   // *
+    AddressOf,     // &
+    PreIncrement,  // ++x (handled by UpdateExpression but can appear)
+    PreDecrement,  // --x (handled by UpdateExpression but can appear)
+    PostIncrement, // x++ (handled by UpdateExpression but can appear)
+    PostDecrement, // x-- (handled by UpdateExpression but can appear)
 }
 
 impl UnaryOp {
@@ -169,17 +169,17 @@ impl UpdateOp {
 /// Assignment operators in C
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AssignmentOp {
-    Assign,            // =
-    AddAssign,         // +=
-    SubtractAssign,    // -=
-    MultiplyAssign,    // *=
-    DivideAssign,      // /=
-    ModuloAssign,      // %=
-    BitwiseAndAssign,  // &=
-    BitwiseOrAssign,   // |=
-    BitwiseXorAssign,  // ^=
-    LeftShiftAssign,   // <<=
-    RightShiftAssign,  // >>=
+    Assign,           // =
+    AddAssign,        // +=
+    SubtractAssign,   // -=
+    MultiplyAssign,   // *=
+    DivideAssign,     // /=
+    ModuloAssign,     // %=
+    BitwiseAndAssign, // &=
+    BitwiseOrAssign,  // |=
+    BitwiseXorAssign, // ^=
+    LeftShiftAssign,  // <<=
+    RightShiftAssign, // >>=
 }
 
 impl AssignmentOp {

@@ -46,33 +46,17 @@ impl UseGStrHasPrefixSuffix {
         violations: &mut Vec<Violation>,
     ) {
         for stmt in statements {
-            // Check expressions in this statement
-            for expr in stmt.expressions() {
-                self.check_expression(expr, file_path, violations);
-            }
+            stmt.walk(&mut |s| {
+                // Check expressions in this statement
+                for expr in s.expressions() {
+                    self.check_expression(expr, file_path, violations);
+                }
 
-            // Recurse into nested statements
-            match stmt {
-                Statement::If(if_stmt) => {
-                    // Check the condition expression
+                // Check condition expression for if statements
+                if let Statement::If(if_stmt) = s {
                     self.check_expression(&if_stmt.condition, file_path, violations);
-                    self.check_statements(&if_stmt.then_body, file_path, violations);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.check_statements(else_body, file_path, violations);
-                    }
                 }
-                Statement::Compound(compound) => {
-                    self.check_statements(&compound.statements, file_path, violations);
-                }
-                Statement::Labeled(labeled) => {
-                    self.check_statements(
-                        std::slice::from_ref(&labeled.statement),
-                        file_path,
-                        violations,
-                    );
-                }
-                _ => {}
-            }
+            });
         }
     }
 
@@ -183,7 +167,10 @@ impl UseGStrHasPrefixSuffix {
             file_path,
             location.line,
             location.column,
-            format!("Use {replacement} instead of strncmp() {} 0", operator.as_str()),
+            format!(
+                "Use {replacement} instead of strncmp() {} 0",
+                operator.as_str()
+            ),
             fix,
         ));
     }
@@ -240,7 +227,10 @@ impl UseGStrHasPrefixSuffix {
             file_path,
             location.line,
             location.column,
-            format!("Use {replacement} instead of strcmp() {} 0", operator.as_str()),
+            format!(
+                "Use {replacement} instead of strcmp() {} 0",
+                operator.as_str()
+            ),
             fix,
         ));
     }

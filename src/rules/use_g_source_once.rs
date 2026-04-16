@@ -180,26 +180,16 @@ impl UseGSourceOnce {
         let mut returns = Vec::new();
 
         for stmt in statements {
-            match stmt {
-                Statement::Return(ret_stmt) => {
-                    if let Some(value) = &ret_stmt.value {
-                        // Get the return value as a string
-                        if let Some(val_str) = self.expr_to_simple_string(value) {
-                            returns.push(val_str);
-                        }
+            stmt.walk(&mut |s| {
+                if let Statement::Return(ret_stmt) = s
+                    && let Some(value) = &ret_stmt.value
+                {
+                    // Get the return value as a string
+                    if let Some(val_str) = self.expr_to_simple_string(value) {
+                        returns.push(val_str);
                     }
                 }
-                Statement::If(if_stmt) => {
-                    returns.extend(self.collect_all_return_values(&if_stmt.then_body));
-                    if let Some(else_body) = &if_stmt.else_body {
-                        returns.extend(self.collect_all_return_values(else_body));
-                    }
-                }
-                Statement::Compound(compound) => {
-                    returns.extend(self.collect_all_return_values(&compound.statements));
-                }
-                _ => {}
-            }
+            });
         }
 
         returns
@@ -212,21 +202,11 @@ impl UseGSourceOnce {
         let mut locations = Vec::new();
 
         for stmt in statements {
-            match stmt {
-                Statement::Return(ret_stmt) => {
+            stmt.walk(&mut |s| {
+                if let Statement::Return(ret_stmt) = s {
                     locations.push(ret_stmt.location.clone());
                 }
-                Statement::If(if_stmt) => {
-                    locations.extend(self.collect_all_return_locations(&if_stmt.then_body));
-                    if let Some(else_body) = &if_stmt.else_body {
-                        locations.extend(self.collect_all_return_locations(else_body));
-                    }
-                }
-                Statement::Compound(compound) => {
-                    locations.extend(self.collect_all_return_locations(&compound.statements));
-                }
-                _ => {}
-            }
+            });
         }
 
         locations
@@ -353,36 +333,21 @@ impl UseGSourceOnce {
 
     fn has_non_source_add_usage(&self, statements: &[Statement], callback_name: &str) -> bool {
         for stmt in statements {
-            if self.statement_uses_identifier(stmt, callback_name) {
-                // Check if this is inside a g_idle_add or g_timeout_add call
-                // For now, we'll be conservative and just check if it's used in any expression
-                // that's not a direct g_idle_add/g_timeout_add call
-                if !self.is_source_add_statement(stmt, callback_name) {
-                    return true;
-                }
-            }
-
-            // Recurse into nested statements
-            match stmt {
-                Statement::If(if_stmt) => {
-                    if self.has_non_source_add_usage(&if_stmt.then_body, callback_name) {
-                        return true;
-                    }
-                    if let Some(else_body) = &if_stmt.else_body
-                        && self.has_non_source_add_usage(else_body, callback_name)
-                    {
-                        return true;
+            let mut found = false;
+            stmt.walk(&mut |s| {
+                if self.statement_uses_identifier(s, callback_name) {
+                    // Check if this is inside a g_idle_add or g_timeout_add call
+                    // For now, we'll be conservative and just check if it's used in any expression
+                    // that's not a direct g_idle_add/g_timeout_add call
+                    if !self.is_source_add_statement(s, callback_name) {
+                        found = true;
                     }
                 }
-                Statement::Compound(compound) => {
-                    if self.has_non_source_add_usage(&compound.statements, callback_name) {
-                        return true;
-                    }
-                }
-                _ => {}
+            });
+            if found {
+                return true;
             }
         }
-
         false
     }
 
@@ -410,23 +375,15 @@ impl UseGSourceOnce {
     }
 
     fn expr_uses_identifier(&self, expr: &Expression, identifier: &str) -> bool {
-        match expr {
-            Expression::Identifier(id) => id.name == identifier,
-            Expression::Call(call) => {
-                // Check if callback is used in arguments
-                call.arguments.iter().any(|arg| {
-                    let gobject_ast::Argument::Expression(e) = arg;
-                    self.expr_uses_identifier(e, identifier)
-                })
+        let mut found = false;
+        expr.walk(&mut |e| {
+            if let Expression::Identifier(id) = e
+                && id.name == identifier
+            {
+                found = true;
             }
-            Expression::Assignment(assign) => self.expr_uses_identifier(&assign.rhs, identifier),
-            Expression::Binary(bin) => {
-                self.expr_uses_identifier(&bin.left, identifier)
-                    || self.expr_uses_identifier(&bin.right, identifier)
-            }
-            Expression::Unary(unary) => self.expr_uses_identifier(&unary.operand, identifier),
-            _ => false,
-        }
+        });
+        found
     }
 
     fn is_source_add_statement(&self, stmt: &Statement, callback_name: &str) -> bool {

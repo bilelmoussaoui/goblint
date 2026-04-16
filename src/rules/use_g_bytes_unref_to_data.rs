@@ -1,4 +1,6 @@
-use gobject_ast::{Assignment, AssignmentOp, CallExpression, Expression, ExpressionStmt, Statement};
+use gobject_ast::{
+    Assignment, AssignmentOp, CallExpression, Expression, ExpressionStmt, Statement,
+};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};

@@ -1,6 +1,9 @@
 use tree_sitter::Node;
 
-use crate::{model::{BinaryExpression, BinaryOp}, parser::Parser};
+use crate::{
+    model::{BinaryExpression, BinaryOp},
+    parser::Parser,
+};
 
 impl Parser {
     pub(crate) fn parse_binary_expression(

@@ -87,8 +87,7 @@ impl UseGFileLoadBytes {
         violations: &mut Vec<Violation>,
     ) {
         for stmt in statements {
-            // Check expressions in this statement
-            match stmt {
+            stmt.walk(&mut |s| match s {
                 Statement::Expression(expr_stmt) => {
                     self.check_expr_for_bytes_new_take(
                         &expr_stmt.expr,
@@ -118,44 +117,7 @@ impl UseGFileLoadBytes {
                     }
                 }
                 _ => {}
-            }
-
-            // Recurse into nested statements
-            match stmt {
-                Statement::If(if_stmt) => {
-                    self.find_bytes_new_take_violations(
-                        &if_stmt.then_body,
-                        file_path,
-                        load_contents_vars,
-                        violations,
-                    );
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.find_bytes_new_take_violations(
-                            else_body,
-                            file_path,
-                            load_contents_vars,
-                            violations,
-                        );
-                    }
-                }
-                Statement::Compound(compound) => {
-                    self.find_bytes_new_take_violations(
-                        &compound.statements,
-                        file_path,
-                        load_contents_vars,
-                        violations,
-                    );
-                }
-                Statement::Labeled(labeled) => {
-                    self.find_bytes_new_take_violations(
-                        std::slice::from_ref(&labeled.statement),
-                        file_path,
-                        load_contents_vars,
-                        violations,
-                    );
-                }
-                _ => {}
-            }
+            });
         }
     }
 

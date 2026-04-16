@@ -112,23 +112,13 @@ impl UseGSourceConstants {
         violations: &mut Vec<Violation>,
     ) {
         for stmt in statements {
-            match stmt {
-                Statement::Return(ret_stmt) => {
-                    if let Some(value) = &ret_stmt.value {
-                        self.check_return_value(file_path, value, source, violations);
-                    }
+            stmt.walk(&mut |s| {
+                if let Statement::Return(ret_stmt) = s
+                    && let Some(value) = &ret_stmt.value
+                {
+                    self.check_return_value(file_path, value, source, violations);
                 }
-                Statement::If(if_stmt) => {
-                    self.check_statements(file_path, &if_stmt.then_body, source, violations);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.check_statements(file_path, else_body, source, violations);
-                    }
-                }
-                Statement::Compound(compound) => {
-                    self.check_statements(file_path, &compound.statements, source, violations);
-                }
-                _ => {}
-            }
+            });
         }
     }
 

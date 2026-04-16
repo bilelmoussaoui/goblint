@@ -46,31 +46,19 @@ impl UseGStrcmp0 {
         violations: &mut Vec<Violation>,
     ) {
         for stmt in statements {
-            match stmt {
-                Statement::If(if_stmt) => {
-                    // Check for misuse and proper use in condition
-                    self.check_condition(&if_stmt.condition, file_path, violations);
-                    self.check_statements(&if_stmt.then_body, file_path, violations);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.check_statements(else_body, file_path, violations);
+            stmt.walk(&mut |s| {
+                match s {
+                    Statement::If(if_stmt) => {
+                        // Check for misuse and proper use in condition
+                        self.check_condition(&if_stmt.condition, file_path, violations);
                     }
+                    Statement::Return(_) => {
+                        // strcmp/g_strcmp0 in return statements is OK
+                        // (comparison functions)
+                    }
+                    _ => {}
                 }
-                Statement::Return(_) => {
-                    // strcmp/g_strcmp0 in return statements is OK (comparison
-                    // functions)
-                }
-                Statement::Compound(compound) => {
-                    self.check_statements(&compound.statements, file_path, violations);
-                }
-                Statement::Labeled(labeled) => {
-                    self.check_statements(
-                        std::slice::from_ref(&labeled.statement),
-                        file_path,
-                        violations,
-                    );
-                }
-                _ => {}
-            }
+            });
         }
     }
 
@@ -110,9 +98,10 @@ impl UseGStrcmp0 {
                 }
             }
             // Binary expression: check for strcmp in proper comparison
-            Expression::Binary(bin) => {
-                self.check_strcmp_in_comparison(&bin.left, file_path, violations);
-                self.check_strcmp_in_comparison(&bin.right, file_path, violations);
+            Expression::Binary(_) => {
+                condition.walk(&mut |e| {
+                    self.check_strcmp_in_comparison(e, file_path, violations);
+                });
             }
             _ => {}
         }
