@@ -1,0 +1,1 @@
+for_loop.c:27:3: unnecessary_null_check: Remove unnecessary NULL check before g_clear_list (g_clear_list handles NULL)
