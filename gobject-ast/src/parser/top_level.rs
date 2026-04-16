@@ -1,22 +1,132 @@
 use tree_sitter::Node;
 
 use super::Parser;
-use crate::model::*;
+use crate::model::{top_level::*, *};
 
 impl Parser {
-    pub(super) fn extract_include(&self, node: Node, source: &[u8]) -> Option<Include> {
-        let path_node = node.child_by_field_name("path")?;
-        let path_text = std::str::from_utf8(&source[path_node.byte_range()]).ok()?;
+    /// Find a function_declarator node within a declaration
+    fn find_function_declarator_in_node<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
+        // Direct declarator field
+        if let Some(declarator) = node.child_by_field_name("declarator") {
+            if let Some(func_decl) = self.find_function_declarator(declarator) {
+                return Some(func_decl);
+            }
+        }
 
-        // Check if system include (<>) or local ("")
-        let is_system = path_text.starts_with('<');
-        let path = path_text.trim_matches(&['<', '>', '"'][..]);
+        // Search all children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(func_decl) = self.find_function_declarator(child) {
+                return Some(func_decl);
+            }
+        }
 
-        Some(Include {
-            path: path.to_owned(),
-            is_system,
-            line: node.start_position().row + 1,
-        })
+        None
+    }
+
+    /// Parse a top-level item (declaration, definition, preprocessor directive,
+    /// etc.)
+    pub(super) fn parse_top_level_item(&self, node: Node, source: &[u8]) -> Option<TopLevelItem> {
+        match node.kind() {
+            "preproc_include" => {
+                let path_node = node.child_by_field_name("path")?;
+                let path_text = std::str::from_utf8(&source[path_node.byte_range()]).ok()?;
+                let is_system = path_text.starts_with('<');
+                let path = path_text.trim_matches(&['<', '>', '"'][..]).to_owned();
+
+                Some(TopLevelItem::Preprocessor(PreprocessorDirective::Include {
+                    path,
+                    is_system,
+                    location: self.node_location(node),
+                }))
+            }
+            "preproc_def" | "preproc_function_def" => {
+                let name_node = node.child_by_field_name("name")?;
+                let name = std::str::from_utf8(&source[name_node.byte_range()])
+                    .ok()?
+                    .to_owned();
+
+                Some(TopLevelItem::Preprocessor(PreprocessorDirective::Define {
+                    name,
+                    location: self.node_location(node),
+                }))
+            }
+            "preproc_call" => {
+                let directive_node = node.child_by_field_name("directive")?;
+                let directive = std::str::from_utf8(&source[directive_node.byte_range()])
+                    .ok()?
+                    .to_owned();
+
+                Some(TopLevelItem::Preprocessor(PreprocessorDirective::Call {
+                    directive,
+                    location: self.node_location(node),
+                }))
+            }
+            "preproc_if" | "preproc_ifdef" | "preproc_elif" | "preproc_else" => {
+                Some(TopLevelItem::Preprocessor(PreprocessorDirective::Other {
+                    location: self.node_location(node),
+                }))
+            }
+            "type_definition" => {
+                // Check for typedef
+                if let Some(typedef) = self.extract_typedef_from_type_definition(node, source) {
+                    return Some(TopLevelItem::TypeDefinition(TypeDefItem::Typedef {
+                        name: typedef.name,
+                        target_type: typedef.target_type,
+                        location: self.node_location(node),
+                    }));
+                }
+                None
+            }
+            "declaration" => {
+                // Check if this is a function declaration
+                let func_declarator = self.find_function_declarator_in_node(node);
+
+                if let Some(func_decl) = func_declarator {
+                    // Extract function name
+                    let name = self.extract_declarator_name(func_decl, source)?;
+
+                    // Check for static storage class
+                    let decl_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
+                    let is_static = decl_text.contains("static");
+
+                    // Extract export macros from first line
+                    let export_macros = self.find_export_macros_in_declaration(node, source);
+
+                    return Some(TopLevelItem::FunctionDeclaration(FunctionDeclItem {
+                        name: name.to_owned(),
+                        is_static,
+                        export_macros: export_macros.into_iter().map(|s| s.to_owned()).collect(),
+                        location: self.node_location(node),
+                    }));
+                }
+
+                // Variable or type declaration - parse as statement
+                if let Some(stmt) = self.parse_statement(node, source) {
+                    return Some(TopLevelItem::Declaration(stmt));
+                }
+                None
+            }
+            "function_definition" => {
+                let (name, is_static) = self.extract_function_from_definition(node, source)?;
+
+                // Find the function body
+                let body = node.child_by_field_name("body");
+                let body_statements = body
+                    .map(|b| self.parse_function_body(b, source))
+                    .unwrap_or_default();
+                let body_location = body.map(|b| self.node_location(b));
+
+                Some(TopLevelItem::FunctionDefinition(FunctionDefItem {
+                    name: name.to_owned(),
+                    is_static,
+                    body_statements,
+                    location: self.node_location(node),
+                    body_location,
+                }))
+            }
+            _ => None,
+        }
     }
 
     pub(super) fn extract_typedef_from_type_definition(
@@ -40,19 +150,28 @@ impl Parser {
     }
 
     pub(super) fn extract_struct(&self, node: Node, source: &[u8]) -> Option<StructInfo> {
-        // Look for struct definitions or declarations
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "struct_specifier" {
-                if let Some(name_node) = child.child_by_field_name("name") {
-                    let name = std::str::from_utf8(&source[name_node.byte_range()]).ok()?;
-                    let has_body = child.child_by_field_name("body").is_some();
-                    return Some(StructInfo {
-                        name: name.to_owned(),
-                        line: child.start_position().row + 1,
-                        fields: Vec::new(), // TODO: extract fields
-                        is_opaque: !has_body,
-                    });
+        // Parse as declaration to use our AST types
+        if let Some(Statement::Declaration(decl)) = self.parse_statement(node, source) {
+            // Check if this is a struct declaration
+            let decl_text =
+                std::str::from_utf8(&source[decl.location.start_byte..decl.location.end_byte])
+                    .ok()?;
+            if decl_text.contains("struct ") {
+                // Extract struct name and check for body
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "struct_specifier" {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let name = std::str::from_utf8(&source[name_node.byte_range()]).ok()?;
+                            let has_body = child.child_by_field_name("body").is_some();
+                            return Some(StructInfo {
+                                name: name.to_owned(),
+                                line: child.start_position().row + 1,
+                                fields: Vec::new(), // TODO: extract fields
+                                is_opaque: !has_body,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -60,6 +179,12 @@ impl Parser {
     }
 
     pub(super) fn extract_enum(&self, node: Node, source: &[u8]) -> Option<EnumInfo> {
+        // Check if this is a typedef or regular declaration containing an enum
+        let node_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
+        if !node_text.contains("enum ") {
+            return None;
+        }
+
         // Handle typedef enum { ... } Name;
         if node.kind() == "type_definition" {
             if let Some(type_node) = node.child_by_field_name("type") {
@@ -80,23 +205,26 @@ impl Parser {
                     }
                 }
             }
+            return None;
         }
 
-        // Handle standalone enum Name { ... };
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "enum_specifier" {
-                if let Some(name_node) = child.child_by_field_name("name") {
-                    let name = std::str::from_utf8(&source[name_node.byte_range()]).ok()?;
-                    if let Some(body) = child.child_by_field_name("body") {
-                        let values = self.extract_enum_values(body, source);
-                        return Some(EnumInfo {
-                            name: name.to_owned(),
-                            line: child.start_position().row + 1,
-                            values,
-                            body_start_byte: body.start_byte(),
-                            body_end_byte: body.end_byte(),
-                        });
+        // Handle standalone enum Name { ... }; - parse as declaration first
+        if let Some(Statement::Declaration(_)) = self.parse_statement(node, source) {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "enum_specifier" {
+                    if let Some(name_node) = child.child_by_field_name("name") {
+                        let name = std::str::from_utf8(&source[name_node.byte_range()]).ok()?;
+                        if let Some(body) = child.child_by_field_name("body") {
+                            let values = self.extract_enum_values(body, source);
+                            return Some(EnumInfo {
+                                name: name.to_owned(),
+                                line: child.start_position().row + 1,
+                                values,
+                                body_start_byte: body.start_byte(),
+                                body_end_byte: body.end_byte(),
+                            });
+                        }
                     }
                 }
             }
@@ -115,20 +243,28 @@ impl Parser {
                         .unwrap_or("")
                         .to_owned();
 
-                    let (value, value_start, value_end) =
-                        if let Some(value_node) = child.child_by_field_name("value") {
-                            // Try to parse the value as an integer
-                            let value_str = std::str::from_utf8(&source[value_node.byte_range()])
-                                .unwrap_or("")
-                                .trim();
-                            (
-                                value_str.parse::<i64>().ok(),
-                                Some(value_node.start_byte()),
-                                Some(value_node.end_byte()),
-                            )
+                    let (value, value_start, value_end) = if let Some(value_node) =
+                        child.child_by_field_name("value")
+                    {
+                        let value_start = value_node.start_byte();
+                        let value_end = value_node.end_byte();
+
+                        // Parse as expression (only if it's actually an expression node)
+                        let parsed_value = if Parser::is_expression_node(&value_node) {
+                            self.parse_expression(value_node, source)
+                                .and_then(|expr| match &expr {
+                                    Expression::NumberLiteral(n) => n.value.parse::<i64>().ok(),
+                                    Expression::Identifier(_) => None, // Symbolic constant
+                                    _ => None,
+                                })
                         } else {
-                            (None, None, None)
+                            None
                         };
+
+                        (parsed_value, Some(value_start), Some(value_end))
+                    } else {
+                        (None, None, None)
+                    };
 
                     values.push(EnumValue {
                         name,
@@ -147,377 +283,39 @@ impl Parser {
         values
     }
 
-    pub(super) fn extract_gobject_type_declaration(
-        &self,
-        node: Node,
-        source: &[u8],
-    ) -> Option<GObjectType> {
-        let directive = node.child_by_field_name("directive")?;
-        let directive_text = std::str::from_utf8(&source[directive.byte_range()]).ok()?;
-
-        // Check if it's a G_DECLARE_* or G_DEFINE_* macro
-        match directive_text {
-            "G_DECLARE_FINAL_TYPE" | "G_DECLARE_DERIVABLE_TYPE" | "G_DECLARE_INTERFACE" => {
-                self.extract_g_declare(node, source, directive_text)
-            }
-            "G_DEFINE_TYPE" | "G_DEFINE_TYPE_WITH_PRIVATE" | "G_DEFINE_ABSTRACT_TYPE" => {
-                self.extract_g_define(node, source, directive_text)
-            }
-            _ => None,
-        }
-    }
-
-    pub(super) fn extract_g_declare(
-        &self,
-        node: Node,
-        source: &[u8],
-        macro_name: &str,
-    ) -> Option<GObjectType> {
-        // G_DECLARE_*_TYPE (TypeName, function_prefix, MODULE, TYPE_NAME, ParentType)
-        let args = node.child_by_field_name("arguments")?;
-        let mut cursor = args.walk();
-        let mut arg_values = Vec::new();
-
-        for child in args.children(&mut cursor) {
-            if child.kind() == "identifier" || child.kind() == "type_identifier" {
-                let text = std::str::from_utf8(&source[child.byte_range()]).ok()?;
-                arg_values.push(text);
-            }
-        }
-
-        if arg_values.len() < 5 {
-            return None;
-        }
-
-        let type_name = arg_values[0];
-        let function_prefix = arg_values[1];
-        let module_prefix = arg_values[2];
-        let type_prefix = arg_values[3];
-        let parent_type = arg_values[4];
-
-        let type_macro = format!("{}_TYPE_{}", module_prefix, type_prefix);
-
-        let kind = match macro_name {
-            "G_DECLARE_FINAL_TYPE" => GObjectTypeKind::DeclareFinal {
-                function_prefix: function_prefix.to_owned(),
-                module_prefix: module_prefix.to_owned(),
-                type_prefix: type_prefix.to_owned(),
-                parent_type: parent_type.to_owned(),
-            },
-            "G_DECLARE_DERIVABLE_TYPE" => GObjectTypeKind::DeclareDerivable {
-                function_prefix: function_prefix.to_owned(),
-                module_prefix: module_prefix.to_owned(),
-                type_prefix: type_prefix.to_owned(),
-                parent_type: parent_type.to_owned(),
-            },
-            "G_DECLARE_INTERFACE" => GObjectTypeKind::DeclareInterface {
-                function_prefix: function_prefix.to_owned(),
-                module_prefix: module_prefix.to_owned(),
-                type_prefix: type_prefix.to_owned(),
-                prerequisite_type: parent_type.to_owned(),
-            },
-            _ => return None,
-        };
-
-        Some(GObjectType {
-            type_name: type_name.to_owned(),
-            type_macro,
-            kind,
-            class_struct: None,
-            line: node.start_position().row + 1,
-        })
-    }
-
-    pub(super) fn extract_g_define(
-        &self,
-        node: Node,
-        source: &[u8],
-        macro_name: &str,
-    ) -> Option<GObjectType> {
-        // G_DEFINE_TYPE (TypeName, function_prefix, PARENT_TYPE)
-        let args = node.child_by_field_name("arguments")?;
-        let mut cursor = args.walk();
-        let mut arg_values = Vec::new();
-
-        for child in args.children(&mut cursor) {
-            if child.kind() == "identifier" || child.kind() == "type_identifier" {
-                let text = std::str::from_utf8(&source[child.byte_range()]).ok()?;
-                arg_values.push(text);
-            }
-        }
-
-        if arg_values.len() < 3 {
-            return None;
-        }
-
-        let type_name = arg_values[0];
-        let function_prefix = arg_values[1];
-        let parent_type = arg_values[2];
-
-        // Generate type macro from type name
-        let type_macro = format!("TYPE_{}", type_name.to_uppercase());
-
-        let kind = match macro_name {
-            "G_DEFINE_TYPE" => GObjectTypeKind::DefineType {
-                function_prefix: function_prefix.to_owned(),
-                parent_type: parent_type.to_owned(),
-            },
-            "G_DEFINE_TYPE_WITH_PRIVATE" => GObjectTypeKind::DefineTypeWithPrivate {
-                function_prefix: function_prefix.to_owned(),
-                parent_type: parent_type.to_owned(),
-            },
-            "G_DEFINE_ABSTRACT_TYPE" => GObjectTypeKind::DefineAbstractType {
-                function_prefix: function_prefix.to_owned(),
-                parent_type: parent_type.to_owned(),
-            },
-            _ => return None,
-        };
-
-        Some(GObjectType {
-            type_name: type_name.to_owned(),
-            type_macro,
-            kind,
-            class_struct: None,
-            line: node.start_position().row + 1,
-        })
-    }
-
-    pub(super) fn collect_identifiers<'a>(
-        &self,
-        node: Node,
-        source: &'a [u8],
-        result: &mut Vec<&'a str>,
-    ) {
-        if node.kind() == "identifier" || node.kind() == "type_identifier" {
-            if let Ok(text) = std::str::from_utf8(&source[node.byte_range()]) {
-                result.push(text);
-            }
-        }
-
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.collect_identifiers(child, source, result);
-        }
-    }
-
-    pub(super) fn extract_gobject_from_identifier(
-        &self,
-        _id_node: Node,
-        parent: Node,
-        source: &[u8],
-        macro_name: &str,
-    ) -> Option<GObjectType> {
-        // Recursively find all identifiers in parent node
-        let mut arg_values = Vec::new();
-        self.collect_identifiers(parent, source, &mut arg_values);
-
-        // Remove the macro name itself from the list
-        arg_values.retain(|name| *name != macro_name);
-
-        // G_DECLARE_*_TYPE needs 5 args
-        if macro_name.starts_with("G_DECLARE_") && arg_values.len() >= 5 {
-            let type_name = arg_values[0];
-            let function_prefix = arg_values[1];
-            let module_prefix = arg_values[2];
-            let type_prefix = arg_values[3];
-            let parent_type = arg_values[4];
-
-            let type_macro = format!("{}_TYPE_{}", module_prefix, type_prefix);
-
-            let kind = match macro_name {
-                "G_DECLARE_FINAL_TYPE" => GObjectTypeKind::DeclareFinal {
-                    function_prefix: function_prefix.to_owned(),
-                    module_prefix: module_prefix.to_owned(),
-                    type_prefix: type_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DECLARE_DERIVABLE_TYPE" => GObjectTypeKind::DeclareDerivable {
-                    function_prefix: function_prefix.to_owned(),
-                    module_prefix: module_prefix.to_owned(),
-                    type_prefix: type_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DECLARE_INTERFACE" => GObjectTypeKind::DeclareInterface {
-                    function_prefix: function_prefix.to_owned(),
-                    module_prefix: module_prefix.to_owned(),
-                    type_prefix: type_prefix.to_owned(),
-                    prerequisite_type: parent_type.to_owned(),
-                },
-                _ => return None,
-            };
-
-            return Some(GObjectType {
-                type_name: type_name.to_owned(),
-                type_macro,
-                kind,
-                class_struct: None,
-                line: parent.start_position().row + 1,
-            });
-        }
-
-        // G_DEFINE_* needs 3 args
-        if macro_name.starts_with("G_DEFINE_") && arg_values.len() >= 3 {
-            let type_name = arg_values[0];
-            let function_prefix = arg_values[1];
-            let parent_type = arg_values[2];
-
-            let type_macro = format!("TYPE_{}", type_name.to_uppercase());
-
-            let kind = match macro_name {
-                "G_DEFINE_TYPE" => GObjectTypeKind::DefineType {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_TYPE_WITH_PRIVATE" => GObjectTypeKind::DefineTypeWithPrivate {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_ABSTRACT_TYPE" => GObjectTypeKind::DefineAbstractType {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                _ => return None,
-            };
-
-            return Some(GObjectType {
-                type_name: type_name.to_owned(),
-                type_macro,
-                kind,
-                class_struct: None,
-                line: parent.start_position().row + 1,
-            });
-        }
-
-        None
-    }
-
-    pub(super) fn extract_vfuncs(&self, body_node: Node, source: &[u8]) -> Vec<VirtualFunction> {
-        let mut vfuncs = Vec::new();
-
-        let mut cursor = body_node.walk();
-        for child in body_node.children(&mut cursor) {
-            if child.kind() == "field_declaration" {
-                // Look for function pointer fields
-                if let Some(vfunc) = self.extract_vfunc_from_field(child, source) {
-                    vfuncs.push(vfunc);
-                }
-            }
-        }
-
-        vfuncs
-    }
-
-    pub(super) fn extract_vfunc_from_field(
-        &self,
-        field_node: Node,
-        source: &[u8],
-    ) -> Option<VirtualFunction> {
-        // A function pointer field looks like:
-        // return_type (*name) (params);
-        // In tree-sitter this is a field_declaration with a function_declarator
-
-        let mut cursor = field_node.walk();
-        for child in field_node.children(&mut cursor) {
-            if child.kind() == "function_declarator" {
-                // This is a function pointer
-                return self.extract_function_pointer(child, field_node, source);
-            }
-        }
-
-        None
-    }
-
-    pub(super) fn extract_function_pointer(
-        &self,
-        func_decl: Node,
-        field_node: Node,
-        source: &[u8],
-    ) -> Option<VirtualFunction> {
-        // Get the function name from the declarator
-        let declarator = func_decl.child_by_field_name("declarator")?;
-        let name = self.extract_pointer_declarator_name(declarator, source)?;
-
-        // Get return type from the field_declaration type
-        let return_type = field_node
-            .child_by_field_name("type")
-            .and_then(|t| std::str::from_utf8(&source[t.byte_range()]).ok());
-
-        // Extract parameters
-        let mut parameters = Vec::new();
-        if let Some(params_node) = func_decl.child_by_field_name("parameters") {
-            parameters = self.extract_parameters(params_node, source);
-        }
-
-        Some(VirtualFunction {
-            name: name.to_owned(),
-            return_type: return_type.map(ToOwned::to_owned),
-            parameters,
-        })
-    }
-
-    pub(super) fn extract_pointer_declarator_name<'a>(
-        &self,
-        declarator: Node,
-        source: &'a [u8],
-    ) -> Option<&'a str> {
-        // For function pointers, the declarator can be:
-        // - parenthesized_declarator containing pointer_declarator
-        // - pointer_declarator containing identifier or field_identifier
-
-        if declarator.kind() == "parenthesized_declarator" {
-            // Look for pointer_declarator inside
-            let mut cursor = declarator.walk();
-            for child in declarator.children(&mut cursor) {
-                if child.kind() == "pointer_declarator" {
-                    return self.extract_pointer_declarator_name(child, source);
-                } else if child.kind() == "identifier" || child.kind() == "field_identifier" {
-                    return std::str::from_utf8(&source[child.byte_range()]).ok();
-                }
-            }
-        } else if declarator.kind() == "pointer_declarator" {
-            if let Some(inner) = declarator.child_by_field_name("declarator") {
-                if inner.kind() == "identifier" || inner.kind() == "field_identifier" {
-                    return std::str::from_utf8(&source[inner.byte_range()]).ok();
-                }
-                return self.extract_pointer_declarator_name(inner, source);
-            }
-        } else if declarator.kind() == "identifier" || declarator.kind() == "field_identifier" {
-            return std::str::from_utf8(&source[declarator.byte_range()]).ok();
-        }
-
-        None
-    }
-
     pub(super) fn extract_parameters(&self, params_node: Node, source: &[u8]) -> Vec<Parameter> {
         let mut parameters = Vec::new();
 
         let mut cursor = params_node.walk();
         for child in params_node.children(&mut cursor) {
-            if child.kind() == "parameter_declaration" {
-                let type_node = child.child_by_field_name("type");
-                let mut type_name = type_node
-                    .and_then(|t| std::str::from_utf8(&source[t.byte_range()]).ok())
-                    .unwrap_or_default()
-                    .to_owned();
-
-                let declarator = child.child_by_field_name("declarator");
-                let name = declarator
-                    .as_ref()
-                    .and_then(|d| self.extract_declarator_name(*d, source));
-
-                // If declarator is a pointer_declarator, append * to type_name
-                if let Some(decl) = declarator {
-                    let pointer_count = self.count_pointer_levels(decl);
-                    for _ in 0..pointer_count {
-                        type_name.push('*');
-                    }
-                }
-
-                parameters.push(Parameter {
-                    name: name.map(ToOwned::to_owned),
-                    type_name,
-                });
+            // Check node kind before processing
+            if !child.is_named() || child.kind() != "parameter_declaration" {
+                continue;
             }
+
+            let type_node = child.child_by_field_name("type");
+            let mut type_name = type_node
+                .and_then(|t| std::str::from_utf8(&source[t.byte_range()]).ok())
+                .unwrap_or_default()
+                .to_owned();
+
+            let declarator = child.child_by_field_name("declarator");
+            let name = declarator
+                .as_ref()
+                .and_then(|d| self.extract_declarator_name(*d, source));
+
+            // If declarator is a pointer_declarator, append * to type_name
+            if let Some(decl) = declarator {
+                let pointer_count = self.count_pointer_levels(decl);
+                for _ in 0..pointer_count {
+                    type_name.push('*');
+                }
+            }
+
+            parameters.push(Parameter {
+                name: name.map(ToOwned::to_owned),
+                type_name,
+            });
         }
 
         parameters

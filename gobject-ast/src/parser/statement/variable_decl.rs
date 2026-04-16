@@ -69,7 +69,7 @@ impl Parser {
                 }
             } else {
                 // After "=", parse as initializer
-                if child.is_named() {
+                if child.is_named() && Parser::is_expression_node(&child) {
                     initializer = self.parse_expression(child, source);
                 }
             }

@@ -1,18 +1,15 @@
 mod expression;
+mod gobject;
 mod statement;
 mod top_level;
 
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
 use tree_sitter::{Node, Parser as TSParser};
 use walkdir::WalkDir;
 
-use crate::model::*;
+use crate::model::{top_level::*, *};
 
 pub struct Parser {
     parser: TSParser,
@@ -35,6 +32,44 @@ impl Parser {
             node.start_position().column + 1,
             node.start_byte(),
             node.end_byte(),
+        )
+    }
+
+    /// Check if a tree-sitter node is an expression
+    fn is_expression_node(node: &Node) -> bool {
+        matches!(
+            node.kind(),
+            "call_expression"
+                | "assignment_expression"
+                | "binary_expression"
+                | "unary_expression"
+                | "pointer_expression"
+                | "parenthesized_expression"
+                | "identifier"
+                | "field_expression"
+                | "string_literal"
+                | "number_literal"
+                | "null"
+                | "NULL"
+                | "true"
+                | "TRUE"
+                | "false"
+                | "FALSE"
+                | "cast_expression"
+                | "conditional_expression"
+                | "sizeof_expression"
+                | "alignof_expression"
+                | "subscript_expression"
+                | "initializer_list"
+                | "char_literal"
+                | "update_expression"
+                | "concatenated_string"
+                | "compound_literal_expression"
+                | "comma_expression"
+                | "offsetof_expression"
+                | "gnu_asm_expression"
+                | "compound_statement"
+                | "comment"
         )
     }
 
@@ -72,44 +107,21 @@ impl Parser {
 
         let mut file_model = FileModel::new(path.to_path_buf());
 
-        // Build macro map for export macros
-        let macro_map = self.build_macro_map(tree.root_node(), &source);
-
-        // Find static forward declarations (for .c files)
-        let static_forwards = self.find_static_forward_declarations(tree.root_node(), &source);
-
         // Extract all content from this file
-        self.extract_file_content(
-            tree.root_node(),
-            &source,
-            &mut file_model,
-            &macro_map,
-            &static_forwards,
-        );
+        self.visit_node(tree.root_node(), &source, &mut file_model);
 
         // Second pass: extract class structs for derivable types
-        self.extract_class_structs(tree.root_node(), &source, &mut file_model);
-
-        // Third pass: extract class structs from source text (for cases where
-        // tree-sitter misparsed)
-        self.extract_class_structs_from_text(&source, &mut file_model);
+        self.extract_class_structs_from_ast(
+            tree.root_node(),
+            &source,
+            &mut file_model.gobject_types,
+        );
 
         // Store the source for detailed pattern matching by rules
         file_model.source = source;
 
         project.files.insert(path.to_path_buf(), file_model);
         Ok(())
-    }
-
-    fn extract_file_content<'a>(
-        &self,
-        node: Node,
-        source: &'a [u8],
-        file_model: &mut FileModel,
-        macro_map: &HashMap<usize, Vec<&'a str>>,
-        static_forwards: &HashSet<&'a str>,
-    ) {
-        self.visit_node(node, source, file_model, macro_map, static_forwards);
     }
 
     fn find_export_macros_in_declaration<'a>(
@@ -145,292 +157,185 @@ impl Parser {
         result
     }
 
-    fn build_macro_map<'a>(&self, root: Node, source: &'a [u8]) -> HashMap<usize, Vec<&'a str>> {
-        let mut map = HashMap::new();
-        self.build_macro_map_recursive(root, source, &mut map);
-        map
-    }
-
-    fn build_macro_map_recursive<'a>(
-        &self,
-        node: Node,
-        source: &'a [u8],
-        map: &mut HashMap<usize, Vec<&'a str>>,
-    ) {
-        // Check for preprocessor directives like #define
-        if node.kind() == "preproc_call" {
-            if let Some(directive) = node.child_by_field_name("directive") {
-                let text = &source[directive.byte_range()];
-                if let Ok(s) = std::str::from_utf8(text) {
-                    if s.ends_with("_EXPORT")
-                        || s.starts_with("G_DEPRECATED")
-                        || s.starts_with("G_MODULE_")
-                        || s == "G_GNUC_DEPRECATED"
-                        || s == "G_GNUC_WARN_UNUSED_RESULT"
-                    {
-                        // Add to next line (the declaration)
-                        map.entry(node.end_position().row + 1)
-                            .or_insert_with(Vec::new)
-                            .push(s);
-                    }
-                }
-            }
-        }
-        // For declarations, check if they have export macros before them
-        else if node.kind() == "declaration" {
-            let decl_line = node.start_position().row;
-
-            // Look for export macros by checking the source text before the declaration
-            let export_macros = self.find_export_macros_in_declaration(node, source);
-
-            if !export_macros.is_empty() {
-                map.entry(decl_line)
-                    .or_insert_with(Vec::new)
-                    .extend(export_macros);
-            }
-        }
-
-        // Recurse into children
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.build_macro_map_recursive(child, source, map);
-        }
-    }
-
-    fn visit_node<'a>(
-        &self,
-        node: Node,
-        source: &'a [u8],
-        file_model: &mut FileModel,
-        macro_map: &HashMap<usize, Vec<&'a str>>,
-        static_forwards: &HashSet<&'a str>,
-    ) {
-        // Extract GObject type declarations (G_DECLARE_* macros) before skipping
-        // preproc
-        if node.kind() == "preproc_call" {
-            if let Some(gobject_type) = self.extract_gobject_type_declaration(node, source) {
-                file_model.gobject_types.push(gobject_type);
-            }
-        }
-
-        // Extract includes before skipping preproc
-        if node.kind() == "preproc_include" {
-            if let Some(include) = self.extract_include(node, source) {
-                file_model.includes.push(include);
-            }
-        }
-
-        // Skip preprocessor macro definitions and includes, but traverse conditional
-        // blocks
-        if node.kind() == "preproc_def"
-            || node.kind() == "preproc_function_def"
-            || node.kind() == "preproc_call"
-            || node.kind() == "preproc_include"
-        {
-            return;
-        }
-
-        // Extract typedefs (type_definition nodes)
-        if node.kind() == "type_definition" {
-            if let Some(typedef) = self.extract_typedef_from_type_definition(node, source) {
-                file_model.typedefs.push(typedef);
-            }
-            // Also check for typedef enums
-            if let Some(enum_info) = self.extract_enum(node, source) {
-                file_model.enums.push(enum_info);
-            }
-        }
-
-        // Extract GObject types from identifier pattern (handles ERROR nodes from
-        // macros)
-        if node.kind() == "identifier" {
-            let text = std::str::from_utf8(&source[node.byte_range()]).unwrap_or("");
-            if text.starts_with("G_DECLARE_") || text.starts_with("G_DEFINE_") {
-                // Found a GObject type macro, look for parent to get arguments
-                if let Some(parent) = node.parent() {
-                    if let Some(gobject_type) =
-                        self.extract_gobject_from_identifier(node, parent, source, text)
-                    {
-                        file_model.gobject_types.push(gobject_type);
-                    }
-                }
-            }
-        }
-
-        // Extract structs directly from struct_specifier nodes
-        if node.kind() == "struct_specifier" {
-            if let Some(name_node) = node.child_by_field_name("name") {
-                if let Ok(name) = std::str::from_utf8(&source[name_node.byte_range()]) {
-                    let has_body = node.child_by_field_name("body").is_some();
-                    file_model.structs.push(StructInfo {
-                        name: name.to_owned(),
-                        line: node.start_position().row + 1,
-                        fields: Vec::new(),
-                        is_opaque: !has_body,
+    fn visit_node(&self, node: Node, source: &[u8], file_model: &mut FileModel) {
+        // Try to parse as a top-level item first
+        if let Some(item) = self.parse_top_level_item(node, source) {
+            match item {
+                TopLevelItem::Preprocessor(PreprocessorDirective::Include {
+                    path,
+                    is_system,
+                    location,
+                }) => {
+                    file_model.includes.push(Include {
+                        path,
+                        is_system,
+                        line: location.line,
                     });
+                    return; // Don't recurse into includes
                 }
-            }
-        }
+                TopLevelItem::Preprocessor(PreprocessorDirective::Call { directive, .. }) => {
+                    // Check if it's a GObject type declaration
+                    if directive.starts_with("G_DECLARE_") || directive.starts_with("G_DEFINE_") {
+                        if let Some(gobject_type) =
+                            self.extract_gobject_type_declaration(node, source)
+                        {
+                            file_model.gobject_types.push(gobject_type);
+                        }
+                    }
+                    return; // Don't recurse into preprocessor calls
+                }
+                TopLevelItem::Preprocessor(_) => {
+                    return; // Skip other preprocessor directives
+                }
+                TopLevelItem::TypeDefinition(TypeDefItem::Typedef {
+                    name,
+                    target_type,
+                    location,
+                }) => {
+                    file_model.typedefs.push(TypedefInfo {
+                        name,
+                        target_type,
+                        line: location.line,
+                    });
 
-        // Look for declarations and definitions
-        if node.kind() == "declaration" || node.kind() == "expression_statement" {
-            // Get export macros for this line from the macro map
-            let export_macros = macro_map
-                .get(&node.start_position().row)
-                .cloned()
-                .unwrap_or_default();
+                    // Also check for typedef enums
+                    if let Some(enum_info) = self.extract_enum(node, source) {
+                        file_model.enums.push(enum_info);
+                    }
+                }
+                TopLevelItem::FunctionDefinition(func_def) => {
+                    // Extract parameters and other details
+                    let parameters = node
+                        .child_by_field_name("declarator")
+                        .and_then(|d| self.find_function_declarator(d))
+                        .and_then(|fd| fd.child_by_field_name("parameters"))
+                        .map(|p| self.extract_parameters(p, source))
+                        .unwrap_or_default();
 
-            // Extract structs (this may find some, but struct_specifier above catches more)
-            if let Some(struct_info) = self.extract_struct(node, source) {
-                file_model.structs.push(struct_info);
-            }
+                    let func_name = func_def.name;
 
-            // Extract enums
-            if let Some(enum_info) = self.extract_enum(node, source) {
-                file_model.enums.push(enum_info);
-            }
-
-            // Extract function declarations
-            let mut func_names = Vec::new();
-            self.find_all_function_names(node, source, &mut func_names);
-
-            // Check if this declaration has 'static' storage class
-            let is_static = self.has_static_storage_class(node, source);
-
-            for func_name in func_names {
-                if !is_macro_identifier(&func_name) && !is_gobject_type_macro(&func_name) {
                     file_model.functions.push(FunctionInfo {
-                        name: func_name.to_owned(),
-                        line: node.start_position().row + 1,
-                        is_static,
-                        export_macros: export_macros.iter().map(|s| s.to_string()).collect(),
-                        has_static_forward_decl: static_forwards.contains(func_name),
-                        is_definition: false,
+                        name: func_name,
+                        line: func_def.location.line,
+                        is_static: func_def.is_static,
+                        export_macros: Vec::new(),
+                        is_definition: true,
                         return_type: None,
-                        parameters: Vec::new(),
-                        start_byte: None,
-                        end_byte: None,
-                        body_start_byte: None,
-                        body_end_byte: None,
-                        body_statements: Vec::new(),
+                        parameters,
+                        start_byte: Some(func_def.location.start_byte),
+                        end_byte: Some(func_def.location.end_byte),
+                        body_start_byte: func_def.body_location.as_ref().map(|l| l.start_byte),
+                        body_end_byte: func_def.body_location.as_ref().map(|l| l.end_byte),
+                        body_statements: func_def.body_statements,
                     });
+
+                    // Only recurse into the declarator/type, NOT into the function body
+                    let mut cursor = node.walk();
+                    for child in node.children(&mut cursor) {
+                        if child.kind() != "compound_statement" {
+                            self.visit_node(child, source, file_model);
+                        }
+                    }
+                    return;
                 }
-            }
-        }
-
-        // Extract function definitions
-        if node.kind() == "function_definition" {
-            // Check if this is a G_DECLARE macro that tree-sitter misparsed
-            let func_info = self.extract_function_from_definition(node, source);
-            let is_g_declare = func_info
-                .as_ref()
-                .map_or(false, |(name, _)| name.starts_with("G_DECLARE_"));
-
-            // Only recurse into the declarator/type, NOT into the function body
-            // This prevents picking up function calls inside function bodies as
-            // declarations
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                // Skip compound_statement (function body) to avoid false declarations
-                if child.kind() != "compound_statement" {
-                    self.visit_node(child, source, file_model, macro_map, static_forwards);
-                }
-            }
-
-            // Don't add G_DECLARE as a function
-            if !is_g_declare {
-                if let Some((name, is_static)) = func_info {
-                    if !is_gobject_type_macro(&name) {
-                        // Find the function body (compound_statement)
-                        let body = node.child_by_field_name("body");
-                        let (body_start, body_end) = body
-                            .map(|b| (Some(b.start_byte()), Some(b.end_byte())))
-                            .unwrap_or((None, None));
-
-                        // Parse body statements
-                        let body_statements = body
-                            .map(|b| self.parse_function_body(b, source))
-                            .unwrap_or_default();
-
-                        // Extract parameters - find the function_declarator and its parameters
-                        // field
-                        let parameters = node
-                            .child_by_field_name("declarator")
-                            .and_then(|d| self.find_function_declarator(d))
-                            .and_then(|fd| fd.child_by_field_name("parameters"))
-                            .map(|p| self.extract_parameters(p, source))
-                            .unwrap_or_default();
-
+                TopLevelItem::FunctionDeclaration(func_decl) => {
+                    // Function declaration - all info already extracted in parse_top_level_item
+                    if !is_macro_identifier(&func_decl.name) {
+                        let func_name = func_decl.name;
                         file_model.functions.push(FunctionInfo {
-                            name: name.to_owned(),
-                            line: node.start_position().row + 1,
-                            is_static: is_static || static_forwards.contains(name),
-                            export_macros: Vec::new(),
-                            has_static_forward_decl: static_forwards.contains(name),
-                            is_definition: true,
+                            name: func_name,
+                            line: func_decl.location.line,
+                            is_static: func_decl.is_static,
+                            export_macros: func_decl.export_macros,
+                            is_definition: false,
                             return_type: None,
-                            parameters,
-                            start_byte: Some(node.start_byte()),
-                            end_byte: Some(node.end_byte()),
-                            body_start_byte: body_start,
-                            body_end_byte: body_end,
-                            body_statements,
+                            parameters: Vec::new(),
+                            start_byte: None,
+                            end_byte: None,
+                            body_start_byte: None,
+                            body_end_byte: None,
+                            body_statements: Vec::new(),
                         });
                     }
                 }
+                TopLevelItem::Declaration(_stmt) => {
+                    // Variable/type declaration - extract structs and enums
+                    if let Some(struct_info) = self.extract_struct(node, source) {
+                        file_model.structs.push(struct_info);
+                    }
+
+                    if let Some(enum_info) = self.extract_enum(node, source) {
+                        file_model.enums.push(enum_info);
+                    }
+                }
+                _ => {}
             }
-            // Don't recurse again at the bottom
-            return;
         }
 
-        // Recurse
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.visit_node(child, source, file_model, macro_map, static_forwards);
-        }
-    }
-
-    fn find_static_forward_declarations<'a>(
-        &self,
-        node: Node,
-        source: &'a [u8],
-    ) -> HashSet<&'a str> {
-        let mut static_decls = HashSet::new();
-        self.visit_for_static_decls(node, source, &mut static_decls);
-        static_decls
-    }
-
-    fn visit_for_static_decls<'a>(
-        &self,
-        node: Node,
-        source: &'a [u8],
-        static_decls: &mut HashSet<&'a str>,
-    ) {
-        if node.kind() == "declaration" {
-            let mut is_static = false;
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if child.kind() == "storage_class_specifier" {
-                    let text = &source[child.byte_range()];
-                    if std::str::from_utf8(text).unwrap_or("") == "static" {
-                        is_static = true;
-                        break;
+        // Only recurse for nodes that may contain top-level items
+        // (preprocessor blocks, ERROR nodes from misparsed macros)
+        match node.kind() {
+            "preproc_if" | "preproc_ifdef" | "preproc_elif" | "preproc_else" => {
+                // Preprocessor conditionals may contain declarations
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    self.visit_node(child, source, file_model);
+                }
+            }
+            "ERROR" => {
+                // ERROR nodes from misparsed macros - look for G_DECLARE/G_DEFINE identifiers
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "identifier" {
+                        let text = std::str::from_utf8(&source[child.byte_range()]).unwrap_or("");
+                        if text.starts_with("G_DECLARE_") || text.starts_with("G_DEFINE_") {
+                            if let Some(gobject_type) =
+                                self.extract_gobject_from_identifier(child, node, source, text)
+                            {
+                                file_model.gobject_types.push(gobject_type);
+                            }
+                        }
                     }
                 }
             }
-
-            if is_static {
-                let mut names = Vec::new();
-                self.find_all_function_names(node, source, &mut names);
-                for name in names {
-                    static_decls.insert(name);
+            "translation_unit" => {
+                // Top-level node - recurse to find all items
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    self.visit_node(child, source, file_model);
                 }
             }
-        }
-
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.visit_for_static_decls(child, source, static_decls);
+            "expression_statement" => {
+                // Might be a GObject macro parsed as an expression
+                // Recurse to find identifiers
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "call_expression" {
+                        // Check if this is a G_DECLARE/G_DEFINE macro call
+                        if let Some(func_node) = child.child_by_field_name("function") {
+                            if func_node.kind() == "identifier" {
+                                let func_name =
+                                    std::str::from_utf8(&source[func_node.byte_range()])
+                                        .unwrap_or("");
+                                if func_name.starts_with("G_DECLARE_")
+                                    || func_name.starts_with("G_DEFINE_")
+                                {
+                                    if let Some(gobject_type) = self
+                                        .extract_gobject_from_identifier(
+                                            func_node, child, source, func_name,
+                                        )
+                                    {
+                                        file_model.gobject_types.push(gobject_type);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                // Other nodes are fully handled by TopLevelItem - don't recurse
+            }
         }
     }
 
@@ -439,16 +344,9 @@ impl Parser {
         node: Node,
         source: &'a [u8],
     ) -> Option<(&'a str, bool)> {
-        let mut is_static = false;
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "storage_class_specifier" {
-                let text = &source[child.byte_range()];
-                if std::str::from_utf8(text).unwrap_or("") == "static" {
-                    is_static = true;
-                }
-            }
-        }
+        // Check if function definition contains "static"
+        let func_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
+        let is_static = func_text.starts_with("static") || func_text.contains("\nstatic ");
 
         let declarator = node.child_by_field_name("declarator")?;
         let name = self.extract_declarator_name(declarator, source)?;
@@ -456,63 +354,7 @@ impl Parser {
         Some((name, is_static))
     }
 
-    fn has_static_storage_class(&self, node: Node, source: &[u8]) -> bool {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "storage_class_specifier" {
-                let text = &source[child.byte_range()];
-                if std::str::from_utf8(text).unwrap_or("") == "static" {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    fn find_all_function_names<'a>(&self, node: Node, source: &'a [u8], result: &mut Vec<&'a str>) {
-        if node.kind() == "function_declarator" {
-            if let Some(name) = self.extract_declarator_name(node, source) {
-                result.push(name);
-            }
-        } else if node.kind() == "expression_statement" {
-            // Handle call_expression pattern (CLUTTER_EXPORT cases)
-            if let Some(name) = self.extract_from_call_expression(node, source) {
-                result.push(name);
-            }
-        }
-
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.find_all_function_names(child, source, result);
-        }
-    }
-
-    fn extract_from_call_expression<'a>(&self, node: Node, source: &'a [u8]) -> Option<&'a str> {
-        let call_expr = self.find_call_expression(node)?;
-        let func_node = call_expr.child_by_field_name("function")?;
-        if func_node.kind() == "identifier" {
-            let name = &source[func_node.byte_range()];
-            return Some(std::str::from_utf8(name).ok()?);
-        }
-        None
-    }
-
-    fn find_call_expression<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
-        if node.kind() == "call_expression" {
-            return Some(node);
-        }
-
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if let Some(found) = self.find_call_expression(child) {
-                return Some(found);
-            }
-        }
-
-        None
-    }
-
-    fn find_function_declarator<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
+    pub(super) fn find_function_declarator<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
         if node.kind() == "function_declarator" {
             return Some(node);
         }
@@ -534,157 +376,12 @@ impl Parser {
 
         None
     }
-
-    fn extract_class_structs(&self, node: Node, source: &[u8], file_model: &mut FileModel) {
-        self.visit_for_class_structs(node, source, file_model);
-    }
-
-    fn visit_for_class_structs(&self, node: Node, source: &[u8], file_model: &mut FileModel) {
-        // Look for struct_specifier nodes
-        if node.kind() == "struct_specifier" {
-            if let Some(name_node) = node.child_by_field_name("name") {
-                if let Ok(struct_name) = std::str::from_utf8(&source[name_node.byte_range()]) {
-                    // Check if this is a class struct (ends with "Class" and starts with "_")
-                    if struct_name.starts_with("_") && struct_name.ends_with("Class") {
-                        // Extract the type name: _CoglWinsysClass -> CoglWinsys
-                        let type_name = &struct_name[1..struct_name.len() - 5]; // Remove leading "_" and trailing "Class"
-
-                        // Find matching GObjectType
-                        if let Some(gobject_idx) = file_model
-                            .gobject_types
-                            .iter()
-                            .position(|gt| gt.type_name == type_name)
-                        {
-                            // Extract virtual functions from this struct
-                            if let Some(body) = node.child_by_field_name("body") {
-                                let vfuncs = self.extract_vfuncs(body, source);
-
-                                let class_struct = ClassStruct {
-                                    name: struct_name.to_owned(),
-                                    vfuncs,
-                                };
-
-                                // Update the GObjectType with the class struct
-                                file_model.gobject_types[gobject_idx].class_struct =
-                                    Some(class_struct);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Recurse
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.visit_for_class_structs(child, source, file_model);
-        }
-    }
-
-    fn extract_class_structs_from_text(&self, source: &[u8], file_model: &mut FileModel) {
-        // For derivable types without class_struct, try to find it in the source text
-        let source_str = std::str::from_utf8(source).unwrap_or("");
-
-        for gobject_type in &mut file_model.gobject_types {
-            // Only process derivable types that don't have a class_struct yet
-            if let GObjectTypeKind::DeclareDerivable { .. } = &gobject_type.kind {
-                if gobject_type.class_struct.is_some() {
-                    continue;
-                }
-
-                // Look for "struct _TypeNameClass"
-                let struct_name = format!("_{}", gobject_type.type_name) + "Class";
-                let pattern = format!("struct {}", struct_name);
-
-                if let Some(start_idx) = source_str.find(&pattern) {
-                    // Found the struct definition - extract it and re-parse
-                    let struct_start = start_idx;
-                    // Find the matching closing brace
-                    if let Some(open_brace) = source_str[struct_start..].find('{') {
-                        let _body_start = struct_start + open_brace + 1;
-                        if let Some(struct_end) =
-                            self.find_matching_brace(source_str, struct_start + open_brace)
-                        {
-                            // Extract the struct text and re-parse it with tree-sitter
-                            let struct_text = &source_str[struct_start..struct_end + 1];
-
-                            // Create a new parser for re-parsing this snippet
-                            let mut temp_parser = TSParser::new();
-                            if temp_parser
-                                .set_language(&tree_sitter_c::LANGUAGE.into())
-                                .is_ok()
-                            {
-                                if let Some(tree) = temp_parser.parse(struct_text.as_bytes(), None)
-                                {
-                                    let mut vfuncs = Vec::new();
-                                    // Look for struct_specifier in the parsed tree
-                                    self.extract_vfuncs_from_tree(
-                                        tree.root_node(),
-                                        struct_text.as_bytes(),
-                                        &mut vfuncs,
-                                    );
-
-                                    gobject_type.class_struct = Some(ClassStruct {
-                                        name: struct_name,
-                                        vfuncs,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn find_matching_brace(&self, text: &str, open_pos: usize) -> Option<usize> {
-        let mut depth = 1;
-        let bytes = text.as_bytes();
-
-        for (i, &ch) in bytes.iter().enumerate().skip(open_pos + 1) {
-            match ch {
-                b'{' => depth += 1,
-                b'}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(i);
-                    }
-                }
-                _ => {}
-            }
-        }
-        None
-    }
-
-    fn extract_vfuncs_from_tree(
-        &self,
-        node: Node,
-        source: &[u8],
-        vfuncs: &mut Vec<VirtualFunction>,
-    ) {
-        // Recursively look for struct_specifier with a body
-        if node.kind() == "struct_specifier" {
-            if let Some(body) = node.child_by_field_name("body") {
-                *vfuncs = self.extract_vfuncs(body, source);
-                return;
-            }
-        }
-
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.extract_vfuncs_from_tree(child, source, vfuncs);
-        }
-    }
 }
 
 impl Default for Parser {
     fn default() -> Self {
         Self::new().expect("Failed to create parser")
     }
-}
-
-fn is_gobject_type_macro(name: &str) -> bool {
-    name.starts_with("G_DECLARE_") || name.starts_with("G_DEFINE_")
 }
 
 fn is_macro_identifier(name: &str) -> bool {

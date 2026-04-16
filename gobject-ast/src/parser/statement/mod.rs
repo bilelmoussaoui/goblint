@@ -28,7 +28,7 @@ impl Parser {
                 body_statements = self.parse_function_body(child, source);
                 break;
             } else if child.is_named()
-                && !child.kind().ends_with("_expression")
+                && !Parser::is_expression_node(&child)
                 && child.kind() != ";"
                 && child.kind() != "("
                 && child.kind() != ")"

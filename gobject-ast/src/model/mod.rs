@@ -3,6 +3,7 @@ pub mod operators;
 mod project;
 mod source_location;
 pub mod statement;
+pub mod top_level;
 pub mod types;
 
 pub use expression::{

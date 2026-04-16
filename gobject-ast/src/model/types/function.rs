@@ -11,7 +11,6 @@ pub struct FunctionInfo {
     pub line: usize,
     pub is_static: bool,
     pub export_macros: Vec<String>, // CLUTTER_EXPORT, G_MODULE_EXPORT, G_DEPRECATED_FOR, etc.
-    pub has_static_forward_decl: bool, // Has a static forward declaration in the same file
     pub is_definition: bool,        // true = definition, false = declaration
     pub return_type: Option<String>,
     pub parameters: Vec<Parameter>,

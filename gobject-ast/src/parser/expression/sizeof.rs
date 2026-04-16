@@ -33,7 +33,7 @@ impl Parser {
 
                 // Parenthesized expression is ambiguous - could be type or expression
                 // Just parse as expression and let the rule decide what to do with it
-                _ if child.is_named() => {
+                _ if child.is_named() && Parser::is_expression_node(&child) => {
                     if let Some(expr) = self.parse_expression(child, source) {
                         operand = Some(SizeofOperand::Expression(Box::new(expr)));
                     }

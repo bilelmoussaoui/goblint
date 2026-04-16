@@ -35,7 +35,9 @@ impl Parser {
                 let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {
                     if child.is_named() && child.kind() != "(" && child.kind() != ")" {
-                        return self.parse_expression(child, source);
+                        if Parser::is_expression_node(&child) {
+                            return self.parse_expression(child, source);
+                        }
                     }
                 }
                 None
@@ -148,7 +150,9 @@ impl Parser {
                 let mut last_expr = None;
                 for child in node.children(&mut cursor) {
                     if child.is_named() && child.kind() != "," {
-                        last_expr = self.parse_expression(child, source);
+                        if Parser::is_expression_node(&child) {
+                            last_expr = self.parse_expression(child, source);
+                        }
                     }
                 }
                 last_expr

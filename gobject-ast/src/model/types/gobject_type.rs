@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::function::Parameter;
+use super::{FunctionInfo, Property, function::Parameter};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GObjectType {
@@ -9,6 +9,48 @@ pub struct GObjectType {
     pub kind: GObjectTypeKind,
     pub class_struct: Option<ClassStruct>, // For derivable types
     pub line: usize,
+}
+
+impl GObjectType {
+    /// Get the expected class_init function name based on the function_prefix
+    pub fn class_init_function_name(&self) -> String {
+        let function_prefix = match &self.kind {
+            GObjectTypeKind::DeclareFinal {
+                function_prefix, ..
+            }
+            | GObjectTypeKind::DeclareDerivable {
+                function_prefix, ..
+            }
+            | GObjectTypeKind::DeclareInterface {
+                function_prefix, ..
+            }
+            | GObjectTypeKind::DefineType {
+                function_prefix, ..
+            }
+            | GObjectTypeKind::DefineTypeWithPrivate {
+                function_prefix, ..
+            }
+            | GObjectTypeKind::DefineAbstractType {
+                function_prefix, ..
+            } => function_prefix,
+        };
+
+        format!("{}_class_init", function_prefix)
+    }
+
+    /// Extract properties from a class_init function
+    /// Looks for *_param_spec_* calls and extracts property metadata
+    pub fn extract_properties(&self, class_init_func: &FunctionInfo) -> Vec<Property> {
+        class_init_func
+            .find_calls_matching(|name| {
+                // Match any function ending with _param_spec_* pattern
+                // e.g., g_param_spec_string, cogl_param_spec_color, etc.
+                name.contains("_param_spec_")
+            })
+            .iter()
+            .filter_map(|call| Property::from_param_spec_call(call))
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
