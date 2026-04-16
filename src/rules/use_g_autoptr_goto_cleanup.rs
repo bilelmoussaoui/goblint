@@ -155,7 +155,7 @@ impl UseGAutoptrGotoCleanup {
                 // Pattern 1: Type *var = allocation_call();
                 Statement::Declaration(decl) => {
                     if let Some(Expression::Call(call)) = &decl.initializer
-                        && self.is_allocation_call(&call.function)
+                        && call.is_allocation_call()
                         && let Some((type_text, location)) = local_vars.get(&decl.name)
                     {
                         result.insert(decl.name.clone(), (type_text.clone(), location.clone()));
@@ -165,7 +165,7 @@ impl UseGAutoptrGotoCleanup {
                 Statement::Expression(expr_stmt) => {
                     if let Expression::Assignment(assign) = &expr_stmt.expr
                         && let Expression::Call(call) = &*assign.rhs
-                        && self.is_allocation_call(&call.function)
+                        && call.is_allocation_call()
                     {
                         // Only simple identifiers, not field expressions
                         if !assign.lhs.contains("->")
@@ -197,23 +197,6 @@ impl UseGAutoptrGotoCleanup {
                 _ => {}
             }
         }
-    }
-
-    fn is_allocation_call(&self, func_name: &str) -> bool {
-        // Functions that allocate GObject types
-        matches!(
-            func_name,
-            "g_object_new"
-                | "g_object_new_with_properties"
-                | "g_type_create_instance"
-                | "g_new"
-                | "g_new0"
-                | "g_try_new"
-                | "g_try_new0"
-                | "g_file_new_for_path"
-                | "g_file_new_for_uri"
-        ) || func_name.ends_with("_new")
-            || func_name.ends_with("_get_instance")
     }
 
     /// Find all goto statements and collect the labels they target
@@ -297,7 +280,7 @@ impl UseGAutoptrGotoCleanup {
             match stmt {
                 Statement::Expression(expr_stmt) => {
                     if let Expression::Call(call) = &expr_stmt.expr
-                        && self.is_cleanup_call(&call.function)
+                        && call.is_cleanup_call()
                         && !call.arguments.is_empty()
                     {
                         let gobject_ast::Argument::Expression(arg_expr) = &call.arguments[0];
@@ -322,22 +305,5 @@ impl UseGAutoptrGotoCleanup {
                 _ => {}
             }
         }
-    }
-
-    fn is_cleanup_call(&self, func_name: &str) -> bool {
-        // Functions that cleanup/free GObject types
-        matches!(
-            func_name,
-            "g_object_unref"
-                | "g_clear_object"
-                | "g_clear_pointer"
-                | "g_error_free"
-                | "g_clear_error"
-                | "g_free"
-                | "g_clear_handle_id"
-                | "g_clear_signal_handler"
-        ) || func_name.ends_with("_unref")
-            || func_name.ends_with("_free")
-            || func_name.ends_with("_destroy")
     }
 }

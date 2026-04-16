@@ -185,7 +185,7 @@ impl UseGAutoptrInlineCleanup {
                 Statement::Declaration(decl) => {
                     if decl.name == var_name
                         && let Some(Expression::Call(call)) = &decl.initializer
-                        && self.is_allocation_call(&call.function)
+                        && call.is_allocation_call()
                     {
                         return true;
                     }
@@ -195,7 +195,7 @@ impl UseGAutoptrInlineCleanup {
                     if let Expression::Assignment(assign) = &expr_stmt.expr
                         && assign.lhs == var_name
                         && let Expression::Call(call) = &*assign.rhs
-                        && self.is_allocation_call(&call.function)
+                        && call.is_allocation_call()
                     {
                         return true;
                     }
@@ -229,30 +229,6 @@ impl UseGAutoptrInlineCleanup {
         false
     }
 
-    fn is_allocation_call(&self, func_name: &str) -> bool {
-        // Functions that allocate GObject types
-        matches!(
-            func_name,
-            "g_object_new"
-                | "g_object_new_with_properties"
-                | "g_type_create_instance"
-                | "g_file_new_for_path"
-                | "g_file_new_for_uri"
-                | "g_file_new_tmp"
-                | "g_variant_new"
-                | "g_variant_ref_sink"
-                | "g_bytes_new"
-                | "g_bytes_new_take"
-                | "g_hash_table_new"
-                | "g_hash_table_new_full"
-                | "g_array_new"
-                | "g_ptr_array_new"
-                | "g_error_new"
-                | "g_error_new_literal"
-        ) || func_name.ends_with("_new")
-            || func_name.ends_with("_get_instance")
-    }
-
     fn is_var_manually_freed(&self, statements: &[Statement], var_name: &str) -> bool {
         self.find_manual_free(statements, var_name)
     }
@@ -265,7 +241,7 @@ impl UseGAutoptrInlineCleanup {
                 Statement::Expression(expr_stmt) => {
                     if let Expression::Call(call) = &expr_stmt.expr {
                         // Check if this is a cleanup call with our variable
-                        if self.is_cleanup_call(&call.function) && !call.arguments.is_empty() {
+                        if call.is_cleanup_call() && !call.arguments.is_empty() {
                             let gobject_ast::Argument::Expression(arg_expr) = &call.arguments[0];
                             // Check for var or &var
                             if let Some(arg_var) = arg_expr.extract_variable_name()
@@ -302,32 +278,6 @@ impl UseGAutoptrInlineCleanup {
         }
 
         false
-    }
-
-    fn is_cleanup_call(&self, func_name: &str) -> bool {
-        // Functions that cleanup/free GObject types
-        matches!(
-            func_name,
-            "g_object_unref"
-                | "g_clear_object"
-                | "g_clear_pointer"
-                | "g_error_free"
-                | "g_clear_error"
-                | "g_list_free"
-                | "g_list_free_full"
-                | "g_slist_free"
-                | "g_slist_free_full"
-                | "g_hash_table_unref"
-                | "g_hash_table_destroy"
-                | "g_bytes_unref"
-                | "g_variant_unref"
-                | "g_array_unref"
-                | "g_array_free"
-                | "g_ptr_array_unref"
-                | "g_ptr_array_free"
-        ) || func_name.ends_with("_unref")
-            || func_name.ends_with("_free")
-            || func_name.ends_with("_destroy")
     }
 
     fn is_var_returned(&self, statements: &[Statement], var_name: &str) -> bool {

@@ -28,6 +28,71 @@ impl CallExpression {
         let Argument::Expression(expr) = self.arguments.get(index)?;
         expr.extract_string_value()
     }
+
+    /// Check if this call is a GObject allocation function
+    /// Recognizes g_object_new, g_new, and various other allocation patterns
+    pub fn is_allocation_call(&self) -> bool {
+        matches!(
+            self.function.as_str(),
+            "g_object_new"
+                | "g_object_new_with_properties"
+                | "g_type_create_instance"
+                | "g_new"
+                | "g_new0"
+                | "g_try_new"
+                | "g_try_new0"
+                | "g_malloc"
+                | "g_malloc0"
+                | "g_strdup"
+                | "g_strndup"
+                | "g_file_new_for_path"
+                | "g_file_new_for_uri"
+                | "g_file_new_tmp"
+                | "g_variant_new"
+                | "g_variant_ref_sink"
+                | "g_bytes_new"
+                | "g_bytes_new_take"
+                | "g_hash_table_new"
+                | "g_hash_table_new_full"
+                | "g_array_new"
+                | "g_ptr_array_new"
+                | "g_error_new"
+                | "g_error_new_literal"
+        ) || self.function.ends_with("_new")
+            || self.function.ends_with("_get_instance")
+            || self.function.contains("_new_")
+            || self.function.contains("_create")
+    }
+
+    /// Check if this call is a GObject cleanup/free function
+    /// Recognizes g_object_unref, g_free, and various other cleanup patterns
+    pub fn is_cleanup_call(&self) -> bool {
+        matches!(
+            self.function.as_str(),
+            "g_object_unref"
+                | "g_clear_object"
+                | "g_clear_pointer"
+                | "g_error_free"
+                | "g_clear_error"
+                | "g_free"
+                | "g_clear_handle_id"
+                | "g_clear_signal_handler"
+                | "g_list_free"
+                | "g_list_free_full"
+                | "g_slist_free"
+                | "g_slist_free_full"
+                | "g_hash_table_unref"
+                | "g_hash_table_destroy"
+                | "g_bytes_unref"
+                | "g_variant_unref"
+                | "g_array_unref"
+                | "g_array_free"
+                | "g_ptr_array_unref"
+                | "g_ptr_array_free"
+        ) || self.function.ends_with("_unref")
+            || self.function.ends_with("_free")
+            || self.function.ends_with("_destroy")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
