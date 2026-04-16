@@ -18,33 +18,31 @@ impl Rule for UseGObjectNewWithProperties {
         super::Category::Complexity
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
-        ast_context: &AstContext,
+        _ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                // Find all g_object_new calls with no properties
-                let empty_new_calls: Vec<_> = func
-                    .find_calls(&["g_object_new"])
-                    .into_iter()
-                    .filter(|call| self.is_g_object_new_empty(call))
-                    .collect();
-
-                if empty_new_calls.is_empty() {
-                    return;
-                }
-
-                // Check statements for the pattern
-                self.check_statements(&func.body_statements, &empty_new_calls, path, violations);
-            }
+        if !func.is_definition {
+            return;
         }
+
+        // Find all g_object_new calls with no properties
+        let empty_new_calls: Vec<_> = func
+            .find_calls(&["g_object_new"])
+            .into_iter()
+            .filter(|call| self.is_g_object_new_empty(call))
+            .collect();
+
+        if empty_new_calls.is_empty() {
+            return;
+        }
+
+        // Check statements for the pattern
+        self.check_statements(&func.body_statements, &empty_new_calls, path, violations);
     }
 }
 

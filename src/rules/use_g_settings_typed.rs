@@ -22,40 +22,40 @@ impl Rule for UseGSettingsTyped {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
         ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
+        if !func.is_definition {
+            return;
+        }
 
-                // Check for g_settings_set_value calls
-                for call in func.find_calls(&["g_settings_set_value"]) {
-                    self.check_settings_set_call(path, call, &file.source, violations);
-                }
+        let source = &ast_context.project.files.get(path).unwrap().source;
 
-                // Check for g_variant_get_* calls
-                for call in func.find_calls(&[
-                    "g_variant_get_string",
-                    "g_variant_get_boolean",
-                    "g_variant_get_byte",
-                    "g_variant_get_int16",
-                    "g_variant_get_uint16",
-                    "g_variant_get_int32",
-                    "g_variant_get_uint32",
-                    "g_variant_get_int64",
-                    "g_variant_get_uint64",
-                    "g_variant_get_double",
-                    "g_variant_get_strv",
-                ]) {
-                    self.check_variant_get_call(path, call, &file.source, violations);
-                }
-            }
+        // Check for g_settings_set_value calls
+        for call in func.find_calls(&["g_settings_set_value"]) {
+            self.check_settings_set_call(path, call, source, violations);
+        }
+
+        // Check for g_variant_get_* calls
+        for call in func.find_calls(&[
+            "g_variant_get_string",
+            "g_variant_get_boolean",
+            "g_variant_get_byte",
+            "g_variant_get_int16",
+            "g_variant_get_uint16",
+            "g_variant_get_int32",
+            "g_variant_get_uint32",
+            "g_variant_get_int64",
+            "g_variant_get_uint64",
+            "g_variant_get_double",
+            "g_variant_get_strv",
+        ]) {
+            self.check_variant_get_call(path, call, source, violations);
         }
     }
 }

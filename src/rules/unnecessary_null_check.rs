@@ -22,22 +22,21 @@ impl Rule for UnnecessaryNullCheck {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
         ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                // Walk through function body looking for if statements
-                self.check_statements(&func.body_statements, path, file, violations);
-            }
+        if !func.is_definition {
+            return;
         }
+
+        let source = &ast_context.project.files.get(path).unwrap().source;
+        // Walk through function body looking for if statements
+        self.check_statements(&func.body_statements, path, source, violations);
     }
 }
 
@@ -46,27 +45,27 @@ impl UnnecessaryNullCheck {
         &self,
         statements: &[Statement],
         file_path: &std::path::Path,
-        file: &gobject_ast::FileModel,
+        source: &[u8],
         violations: &mut Vec<Violation>,
     ) {
         for stmt in statements {
             match stmt {
                 Statement::If(if_stmt) => {
-                    self.check_if_statement(if_stmt, file_path, file, violations);
+                    self.check_if_statement(if_stmt, file_path, source, violations);
                     // Recursively check nested statements
-                    self.check_statements(&if_stmt.then_body, file_path, file, violations);
+                    self.check_statements(&if_stmt.then_body, file_path, source, violations);
                     if let Some(else_body) = &if_stmt.else_body {
-                        self.check_statements(else_body, file_path, file, violations);
+                        self.check_statements(else_body, file_path, source, violations);
                     }
                 }
                 Statement::Compound(compound) => {
-                    self.check_statements(&compound.statements, file_path, file, violations);
+                    self.check_statements(&compound.statements, file_path, source, violations);
                 }
                 Statement::Labeled(labeled) => {
                     self.check_statements(
                         std::slice::from_ref(&labeled.statement),
                         file_path,
-                        file,
+                        source,
                         violations,
                     );
                 }
@@ -79,7 +78,7 @@ impl UnnecessaryNullCheck {
         &self,
         if_stmt: &gobject_ast::IfStatement,
         file_path: &std::path::Path,
-        file: &gobject_ast::FileModel,
+        source: &[u8],
         violations: &mut Vec<Violation>,
     ) {
         // Don't flag if there's an else branch — removing the if would also drop the
@@ -135,7 +134,7 @@ impl UnnecessaryNullCheck {
         // Create a fix: replace the if statement with the call statement
         // Extract the statement text from the source
         let stmt_text = std::str::from_utf8(
-            &file.source[expr_stmt.location.start_byte..expr_stmt.location.end_byte],
+            &source[expr_stmt.location.start_byte..expr_stmt.location.end_byte],
         )
         .unwrap_or("");
 

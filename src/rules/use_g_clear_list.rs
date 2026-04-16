@@ -22,21 +22,20 @@ impl Rule for UseGClearList {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
         ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                self.check_statements(path, &func.body_statements, &file.source, violations);
-            }
+        if !func.is_definition {
+            return;
         }
+
+        let source = &ast_context.project.files.get(path).unwrap().source;
+        self.check_statements(path, &func.body_statements, source, violations);
     }
 }
 

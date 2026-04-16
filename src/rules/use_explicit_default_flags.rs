@@ -78,25 +78,23 @@ impl Rule for UseExplicitDefaultFlags {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
-        ast_context: &AstContext,
+        _ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
+        if !func.is_definition {
+            return;
+        }
+
         // Collect all function names from FLAG_REPLACEMENTS
         let function_names: Vec<&str> = FLAG_REPLACEMENTS.iter().map(|(name, ..)| *name).collect();
 
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                for call in func.find_calls(&function_names) {
-                    self.check_call(path, call, violations);
-                }
-            }
+        for call in func.find_calls(&function_names) {
+            self.check_call(path, call, violations);
         }
     }
 }

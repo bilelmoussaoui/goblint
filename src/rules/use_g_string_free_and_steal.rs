@@ -22,22 +22,21 @@ impl Rule for UseGStringFreeAndSteal {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
         ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
+        if !func.is_definition {
+            return;
+        }
 
-                for call in func.find_calls(&["g_string_free"]) {
-                    self.check_call(path, call, &file.source, violations);
-                }
-            }
+        let source = &ast_context.project.files.get(path).unwrap().source;
+        for call in func.find_calls(&["g_string_free"]) {
+            self.check_call(path, call, source, violations);
         }
     }
 }

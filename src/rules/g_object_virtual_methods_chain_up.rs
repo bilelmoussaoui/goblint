@@ -18,50 +18,48 @@ impl Rule for GObjectVirtualMethodsChainUp {
         super::Category::Correctness
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
-        ast_context: &AstContext,
+        _ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
+        if !func.is_definition {
+            return;
+        }
 
-                // Check if function name ends with _dispose, _finalize, or _constructed
-                let method_type = if func.name.ends_with("_dispose") {
-                    "dispose"
-                } else if func.name.ends_with("_finalize") {
-                    "finalize"
-                } else if func.name.ends_with("_constructed") {
-                    "constructed"
-                } else {
-                    continue;
-                };
+        // Check if function name ends with _dispose, _finalize, or _constructed
+        let method_type = if func.name.ends_with("_dispose") {
+            "dispose"
+        } else if func.name.ends_with("_finalize") {
+            "finalize"
+        } else if func.name.ends_with("_constructed") {
+            "constructed"
+        } else {
+            return;
+        };
 
-                // Verify it's a GObject virtual method (has at least one pointer parameter)
-                // Most GObject virtual methods take a GObject* or derived type as first
-                // parameter
-                let has_pointer_param = func.parameters.iter().any(|p| p.type_name.contains("*"));
-                if !has_pointer_param {
-                    continue;
-                }
+        // Verify it's a GObject virtual method (has at least one pointer parameter)
+        // Most GObject virtual methods take a GObject* or derived type as first
+        // parameter
+        let has_pointer_param = func.parameters.iter().any(|p| p.type_name.contains("*"));
+        if !has_pointer_param {
+            return;
+        }
 
-                // Check if it chains up to parent class
-                if !self.has_chainup_call(&func.body_statements, method_type) {
-                    violations.push(self.violation(
-                        path,
-                        func.line,
-                        1,
-                        format!(
-                            "{} must chain up to parent class (e.g., G_OBJECT_CLASS (parent_class)->{} (object))",
-                            func.name, method_type
-                        ),
-                    ));
-                }
-            }
+        // Check if it chains up to parent class
+        if !self.has_chainup_call(&func.body_statements, method_type) {
+            violations.push(self.violation(
+                path,
+                func.line,
+                1,
+                format!(
+                    "{} must chain up to parent class (e.g., G_OBJECT_CLASS (parent_class)->{} (object))",
+                    func.name, method_type
+                ),
+            ));
         }
     }
 }

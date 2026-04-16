@@ -16,27 +16,25 @@ impl Rule for DeprecatedAddPrivate {
         super::Category::Restriction
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
-        ast_context: &AstContext,
+        _ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
+        if !func.is_definition {
+            return;
+        }
 
-                for call in func.find_calls(&["g_type_class_add_private"]) {
-                    violations.push(self.violation(
-                        path,
-                        call.location.line,
-                        call.location.column,
-                        "g_type_class_add_private is deprecated since GLib 2.58. Use G_DEFINE_TYPE_WITH_PRIVATE or G_ADD_PRIVATE instead".to_string(),
-                    ));
-                }
-            }
+        for call in func.find_calls(&["g_type_class_add_private"]) {
+            violations.push(self.violation(
+                path,
+                call.location.line,
+                call.location.column,
+                "g_type_class_add_private is deprecated since GLib 2.58. Use G_DEFINE_TYPE_WITH_PRIVATE or G_ADD_PRIVATE instead".to_string(),
+            ));
         }
     }
 }

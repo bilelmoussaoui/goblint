@@ -41,49 +41,48 @@ impl Rule for UseGAsciiFunctions {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
         ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
+        if !func.is_definition {
+            return;
+        }
 
-                for call in func.find_calls(&[
-                    "tolower", "toupper", "isdigit", "isalpha", "isalnum", "isspace", "isupper",
-                    "islower", "isxdigit", "ispunct", "isprint", "isgraph", "iscntrl",
-                ]) {
-                    if let Some(replacement) = g_ascii_replacement(&call.function) {
-                        let fix = Fix::new(
-                            call.location.start_byte,
-                            call.location.end_byte,
-                            format!(
-                                "{} ({})",
-                                replacement,
-                                call.arguments
-                                    .iter()
-                                    .filter_map(|arg| arg.to_source_string(&file.source))
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            ),
-                        );
+        let source = &ast_context.project.files.get(path).unwrap().source;
+        for call in func.find_calls(&[
+            "tolower", "toupper", "isdigit", "isalpha", "isalnum", "isspace", "isupper", "islower",
+            "isxdigit", "ispunct", "isprint", "isgraph", "iscntrl",
+        ]) {
+            if let Some(replacement) = g_ascii_replacement(&call.function) {
+                let fix = Fix::new(
+                    call.location.start_byte,
+                    call.location.end_byte,
+                    format!(
+                        "{} ({})",
+                        replacement,
+                        call.arguments
+                            .iter()
+                            .filter_map(|arg| arg.to_source_string(source))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                );
 
-                        violations.push(self.violation_with_fix(
-                            path,
-                            call.location.line,
-                            call.location.column,
-                            format!(
-                                "Use {}() instead of {}() — C ctype functions are locale-dependent",
-                                replacement, call.function
-                            ),
-                            fix,
-                        ));
-                    }
-                }
+                violations.push(self.violation_with_fix(
+                    path,
+                    call.location.line,
+                    call.location.column,
+                    format!(
+                        "Use {}() instead of {}() — C ctype functions are locale-dependent",
+                        replacement, call.function
+                    ),
+                    fix,
+                ));
             }
         }
     }

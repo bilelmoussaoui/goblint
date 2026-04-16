@@ -22,25 +22,20 @@ impl Rule for UseGStealPointer {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
         ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            // Read the source file
-            let source = std::fs::read(path).ok();
-            let source_slice = source.as_deref().unwrap_or(&[]);
-
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                self.check_function(func, path, source_slice, violations);
-            }
+        if !func.is_definition {
+            return;
         }
+
+        let source = &ast_context.project.files.get(path).unwrap().source;
+        self.check_function(func, path, source, violations);
     }
 }
 

@@ -174,8 +174,58 @@ pub trait Rule: Send + Sync {
         false
     }
 
+    /// Check a function implementation (from C files)
+    /// Override this to check function bodies and implementations
+    #[allow(unused_variables)]
+    fn check_func_impl(
+        &self,
+        ast_context: &AstContext,
+        config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
+        violations: &mut Vec<Violation>,
+    ) {
+        // Default: no-op
+    }
+
+    /// Check a function declaration (from header files)
+    /// Override this to check function declarations and signatures
+    #[allow(unused_variables)]
+    fn check_func_decl(
+        &self,
+        ast_context: &AstContext,
+        config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
+        violations: &mut Vec<Violation>,
+    ) {
+        // Default: no-op
+    }
+
     /// Check the AST and add violations to the provided vector
-    fn check_all(&self, ast_context: &AstContext, config: &Config, violations: &mut Vec<Violation>);
+    /// Default implementation calls check_func_impl for C files and
+    /// check_func_decl for headers Override this if you need custom
+    /// iteration logic beyond per-function checking
+    fn check_all(
+        &self,
+        ast_context: &AstContext,
+        config: &Config,
+        violations: &mut Vec<Violation>,
+    ) {
+        // Check function implementations in C files
+        for (path, file) in ast_context.iter_c_files() {
+            for func in &file.functions {
+                self.check_func_impl(ast_context, config, func, path, violations);
+            }
+        }
+
+        // Check function declarations in header files
+        for (path, file) in ast_context.iter_header_files() {
+            for func in &file.functions {
+                self.check_func_decl(ast_context, config, func, path, violations);
+            }
+        }
+    }
 
     /// Helper to create a violation with the rule name automatically filled in
     fn violation(

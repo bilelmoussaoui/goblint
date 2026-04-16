@@ -20,38 +20,36 @@ impl Rule for UseGObjectClassInstallProperties {
         false // Complex refactoring, needs manual intervention
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
-        ast_context: &AstContext,
+        _ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
+        if !func.is_definition {
+            return;
+        }
 
-                // Only check functions ending with _class_init
-                if !func.name.ends_with("_class_init") {
-                    continue;
-                }
+        // Only check functions ending with _class_init
+        if !func.name.ends_with("_class_init") {
+            return;
+        }
 
-                let install_property_calls = func.find_calls(&["g_object_class_install_property"]);
+        let install_property_calls = func.find_calls(&["g_object_class_install_property"]);
 
-                if install_property_calls.len() >= 2 {
-                    let first_call = install_property_calls[0];
-                    violations.push(self.violation(
-                        path,
-                        first_call.location.line,
-                        first_call.location.column,
-                        format!(
-                            "Consider using g_object_class_install_properties() instead of {} g_object_class_install_property() calls",
-                            install_property_calls.len()
-                        ),
-                    ));
-                }
-            }
+        if install_property_calls.len() >= 2 {
+            let first_call = install_property_calls[0];
+            violations.push(self.violation(
+                path,
+                first_call.location.line,
+                first_call.location.column,
+                format!(
+                    "Consider using g_object_class_install_properties() instead of {} g_object_class_install_property() calls",
+                    install_property_calls.len()
+                ),
+            ));
         }
     }
 }

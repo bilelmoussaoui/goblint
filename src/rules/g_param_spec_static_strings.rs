@@ -22,28 +22,26 @@ impl Rule for GParamSpecStaticStrings {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
-        ast_context: &AstContext,
+        _ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
+        if !func.is_definition {
+            return;
+        }
 
-                // Find all g_param_spec_* calls (but skip g_param_spec_override and
-                // g_param_spec_internal)
-                for call in func.find_calls_matching(|name| {
-                    name.starts_with("g_param_spec_")
-                        && name != "g_param_spec_override"
-                        && name != "g_param_spec_internal"
-                }) {
-                    self.check_call(path, call, violations);
-                }
-            }
+        // Find all g_param_spec_* calls (but skip g_param_spec_override and
+        // g_param_spec_internal)
+        for call in func.find_calls_matching(|name| {
+            name.starts_with("g_param_spec_")
+                && name != "g_param_spec_override"
+                && name != "g_param_spec_internal"
+        }) {
+            self.check_call(path, call, violations);
         }
     }
 }

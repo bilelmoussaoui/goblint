@@ -20,31 +20,18 @@ impl Rule for UseGAutofree {
         super::Category::Complexity
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
-        ast_context: &AstContext,
+        _ast_context: &AstContext,
         _config: &Config,
-        violations: &mut Vec<Violation>,
-    ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
-                self.check_function(func, path, violations);
-            }
-        }
-    }
-}
-
-impl UseGAutofree {
-    fn check_function(
-        &self,
         func: &gobject_ast::FunctionInfo,
-        file_path: &std::path::Path,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
+        if !func.is_definition {
+            return;
+        }
+
         // Find all local pointer declarations
         let local_vars = self.find_local_pointer_vars(&func.body_statements);
 
@@ -71,7 +58,7 @@ impl UseGAutofree {
             // 3. Variable is not returned (would need g_steal_pointer)
             if is_allocated && is_manually_freed && !is_returned {
                 violations.push(self.violation(
-                    file_path,
+                    path,
                     location.line,
                     location.column,
                     format!(
@@ -82,7 +69,9 @@ impl UseGAutofree {
             }
         }
     }
+}
 
+impl UseGAutofree {
     fn is_autofree_candidate(&self, var_type: &str) -> bool {
         let type_lower = var_type.to_lowercase();
 

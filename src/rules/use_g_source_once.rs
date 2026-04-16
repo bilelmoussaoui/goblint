@@ -22,65 +22,65 @@ impl Rule for UseGSourceOnce {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
         ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
+        if !func.is_definition {
+            return;
+        }
 
-                // Find g_idle_add and g_timeout_add calls
-                for call in func.find_calls(&["g_idle_add", "g_timeout_add"]) {
-                    // Get the callback name from the first argument
-                    if let Some(callback_name) = self.extract_callback_name(call, &file.source) {
-                        // Only proceed if callback is NOT used elsewhere
-                        if !self.is_callback_used_elsewhere(ast_context, &callback_name, path) {
-                            // Find the callback function definition and check if all returns are
-                            // FALSE/G_SOURCE_REMOVE
-                            if let Some(callback_fixes) =
-                                self.get_callback_fixes(ast_context, &callback_name, path)
-                            {
-                                let replacement = if call.function == "g_idle_add" {
-                                    "g_idle_add_once"
-                                } else {
-                                    "g_timeout_add_once"
-                                };
+        let source = &ast_context.project.files.get(path).unwrap().source;
 
-                                // Fix 1: Replace g_idle_add → g_idle_add_once
-                                let mut fixes = vec![Fix::new(
-                                    call.location.start_byte,
-                                    call.location.end_byte,
-                                    format!(
-                                        "{} ({})",
-                                        replacement,
-                                        call.arguments
-                                            .iter()
-                                            .filter_map(|arg| arg.to_source_string(&file.source))
-                                            .collect::<Vec<_>>()
-                                            .join(", ")
-                                    ),
-                                )];
+        // Find g_idle_add and g_timeout_add calls
+        for call in func.find_calls(&["g_idle_add", "g_timeout_add"]) {
+            // Get the callback name from the first argument
+            if let Some(callback_name) = self.extract_callback_name(call, source) {
+                // Only proceed if callback is NOT used elsewhere
+                if !self.is_callback_used_elsewhere(ast_context, &callback_name, path) {
+                    // Find the callback function definition and check if all returns are
+                    // FALSE/G_SOURCE_REMOVE
+                    if let Some(callback_fixes) =
+                        self.get_callback_fixes(ast_context, &callback_name, path)
+                    {
+                        let replacement = if call.function == "g_idle_add" {
+                            "g_idle_add_once"
+                        } else {
+                            "g_timeout_add_once"
+                        };
 
-                                // Add callback fixes (return type + return statements)
-                                fixes.extend(callback_fixes);
+                        // Fix 1: Replace g_idle_add → g_idle_add_once
+                        let mut fixes = vec![Fix::new(
+                            call.location.start_byte,
+                            call.location.end_byte,
+                            format!(
+                                "{} ({})",
+                                replacement,
+                                call.arguments
+                                    .iter()
+                                    .filter_map(|arg| arg.to_source_string(source))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ),
+                        )];
 
-                                violations.push(self.violation_with_fixes(
-                                    path,
-                                    call.location.line,
-                                    call.location.column,
-                                    format!(
-                                        "Callback '{}' always returns G_SOURCE_REMOVE. Use {} instead of {}",
-                                        callback_name, replacement, call.function
-                                    ),
-                                    fixes,
-                                ));
-                            }
-                        }
+                        // Add callback fixes (return type + return statements)
+                        fixes.extend(callback_fixes);
+
+                        violations.push(self.violation_with_fixes(
+                            path,
+                            call.location.line,
+                            call.location.column,
+                            format!(
+                                "Callback '{}' always returns G_SOURCE_REMOVE. Use {} instead of {}",
+                                callback_name, replacement, call.function
+                            ),
+                            fixes,
+                        ));
                     }
                 }
             }

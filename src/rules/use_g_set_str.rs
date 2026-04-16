@@ -22,29 +22,27 @@ impl Rule for UseGSetStr {
         true
     }
 
-    fn check_all(
+    fn check_func_impl(
         &self,
         ast_context: &AstContext,
         _config: &Config,
+        func: &gobject_ast::FunctionInfo,
+        path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
+        if !func.is_definition {
+            return;
+        }
 
-                // Get the source for this function to preserve comments
-                if let Some(func_source) = ast_context.get_function_source(path, func) {
-                    self.check_statements(
-                        &func.body_statements,
-                        path,
-                        func_source,
-                        func.start_byte.unwrap_or(0),
-                        violations,
-                    );
-                }
-            }
+        // Get the source for this function to preserve comments
+        if let Some(func_source) = ast_context.get_function_source(path, func) {
+            self.check_statements(
+                &func.body_statements,
+                path,
+                func_source,
+                func.start_byte.unwrap_or(0),
+                violations,
+            );
         }
     }
 }
