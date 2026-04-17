@@ -318,18 +318,16 @@ impl UseGClearSignalHandler {
         let mut found = false;
         expr.walk(&mut |e| {
             match e {
-                Expression::Identifier(id) => {
+                Expression::Identifier(id)
                     // Match both `target` and `&target`
-                    if id.name == target {
+                    if id.name == target => {
                         found = true;
                     }
-                }
-                Expression::FieldAccess(f) => {
+                Expression::FieldAccess(f)
                     // Match field access like `self->source`
-                    if f.text == target {
+                    if f.text == target => {
                         found = true;
                     }
-                }
                 _ => {}
             }
         });

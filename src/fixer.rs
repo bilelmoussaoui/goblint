@@ -26,7 +26,7 @@ pub fn apply_fixes(violations: &[Violation]) -> Result<usize> {
     for (file_path, mut fixes) in by_file {
         // Sort by start_byte descending - apply fixes from bottom to top
         // This way earlier fixes don't invalidate byte positions of later fixes
-        fixes.sort_by(|a, b| b.start_byte.cmp(&a.start_byte));
+        fixes.sort_by_key(|b| std::cmp::Reverse(b.start_byte));
 
         // Read file content as bytes
         let content = fs::read(file_path)

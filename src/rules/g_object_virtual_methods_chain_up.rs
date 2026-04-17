@@ -114,16 +114,15 @@ impl GObjectVirtualMethodsChainUp {
                 }
             }
             // Call expression: might contain field access as part of it
-            Expression::Call(call) => {
+            Expression::Call(call)
                 // Check if the function itself is a field access
                 if call.function.contains("->")
                     && call.function.ends_with(method_type)
                     && (self.looks_like_parent_class_variable(&call.function)
                         || self.looks_like_parent_class_cast(&call.function))
-                {
+                => {
                     return true;
                 }
-            }
             _ => {}
         }
 
