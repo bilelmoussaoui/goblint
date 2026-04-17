@@ -7,7 +7,7 @@ use serde::Deserialize;
 use crate::rules::*;
 
 /// Parse a GLib version string like "2.76" into (major, minor)
-fn parse_glib_version(version: &str) -> Option<(u32, u32)> {
+pub fn parse_glib_version(version: &str) -> Option<(u32, u32)> {
     let parts: Vec<&str> = version.split('.').collect();
     if parts.len() != 2 {
         return None;

@@ -62,6 +62,21 @@ struct Args {
     /// Print a summary table of violation counts grouped by rule
     #[arg(long)]
     summary: bool,
+
+    /// Set minimum GLib version (e.g., "2.76") - disables rules requiring newer
+    /// versions
+    #[arg(long, value_name = "VERSION", value_parser = parse_glib_version_arg)]
+    min_glib_version: Option<(u32, u32)>,
+}
+
+/// Parse GLib version string for clap
+fn parse_glib_version_arg(s: &str) -> Result<(u32, u32), String> {
+    config::parse_glib_version(s).ok_or_else(|| {
+        format!(
+            "Invalid GLib version format: '{}'. Expected format: 'major.minor' (e.g., '2.76')",
+            s
+        )
+    })
 }
 
 fn main() -> Result<()> {
@@ -84,6 +99,11 @@ fn main() -> Result<()> {
 
     // Merge CLI ignore patterns with config
     config.ignore.extend(args.ignore.clone());
+
+    // Apply --min-glib-version if specified (overrides config)
+    if let Some(version) = args.min_glib_version {
+        config.min_glib_version = Some(version);
+    }
 
     // Apply --only filter if specified
     if !args.only.is_empty() {

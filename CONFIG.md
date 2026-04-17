@@ -6,7 +6,7 @@ Create a `goblint.toml` file in your project root:
 
 ```toml
 # Set minimum GLib version (disables rules that require newer versions)
-min_glib_version = [2, 76]
+min_glib_version = "2.76"
 
 # Editor URL template for clickable links in output
 # {path}, {line}, {column} are replaced with actual values
