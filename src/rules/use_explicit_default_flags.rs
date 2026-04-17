@@ -82,14 +82,10 @@ impl Rule for UseExplicitDefaultFlags {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         // Collect all function names from FLAG_REPLACEMENTS
         let function_names: Vec<&str> = FLAG_REPLACEMENTS.iter().map(|(name, ..)| *name).collect();
 

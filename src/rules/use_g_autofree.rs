@@ -24,14 +24,10 @@ impl Rule for UseGAutofree {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         // Find all local pointer declarations
         let local_vars = self.find_local_pointer_vars(&func.body_statements);
 

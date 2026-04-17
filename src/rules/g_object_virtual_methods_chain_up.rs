@@ -22,14 +22,10 @@ impl Rule for GObjectVirtualMethodsChainUp {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         // Check if function name ends with _dispose, _finalize, or _constructed
         let method_type = if func.name.ends_with("_dispose") {
             "dispose"

@@ -26,14 +26,10 @@ impl Rule for GParamSpecNullNickBlurb {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         // Find all g_param_spec_* calls (but skip g_param_spec_internal)
         for call in func.find_calls_matching(|name| {
             name.starts_with("g_param_spec_") && name != "g_param_spec_internal"

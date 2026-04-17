@@ -51,20 +51,21 @@ impl Rule for MissingImplementation {
 
 impl MissingImplementation {
     /// Find functions declared in headers that have no implementation
-    /// Returns (file_path, function_info) tuples
+    /// Returns (file_path, function_decl) tuples
     pub fn find_declared_but_not_defined<'a>(
         &self,
         ast_context: &'a AstContext,
-    ) -> Vec<(&'a std::path::Path, &'a gobject_ast::FunctionInfo)> {
+    ) -> Vec<(
+        &'a std::path::Path,
+        &'a gobject_ast::top_level::FunctionDeclItem,
+    )> {
         ast_context
             .project
             .files
             .iter()
             .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "h"))
             .flat_map(|(path, file)| {
-                file.functions
-                    .iter()
-                    .filter(|f| !f.is_definition)
+                file.iter_function_declarations()
                     .filter(|f| {
                         // Check if there's a matching definition in any C file
                         !ast_context
@@ -72,8 +73,11 @@ impl MissingImplementation {
                             .files
                             .iter()
                             .filter(|(p, _)| p.extension().is_some_and(|ext| ext == "c"))
-                            .flat_map(|(_, file)| &file.functions)
-                            .any(|def| def.name == f.name && def.is_definition)
+                            .any(|(_, c_file)| {
+                                c_file
+                                    .iter_function_definitions()
+                                    .any(|def| def.name == f.name)
+                            })
                     })
                     .map(move |f| (path.as_path(), f))
             })

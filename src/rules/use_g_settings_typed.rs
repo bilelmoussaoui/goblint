@@ -26,14 +26,10 @@ impl Rule for UseGSettingsTyped {
         &self,
         ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         let source = &ast_context.project.files.get(path).unwrap().source;
 
         // Check for g_settings_set_value calls

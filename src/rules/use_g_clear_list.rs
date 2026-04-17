@@ -26,14 +26,10 @@ impl Rule for UseGClearList {
         &self,
         ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         let source = &ast_context.project.files.get(path).unwrap().source;
         self.check_statements(path, &func.body_statements, source, violations);
     }

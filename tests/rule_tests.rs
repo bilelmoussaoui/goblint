@@ -264,6 +264,7 @@ rule_test!(
     goblint::rules::GParamSpecStaticStrings
 );
 rule_test!(g_task_source_tag, goblint::rules::GTaskSourceTag);
+rule_test!(include_order, goblint::rules::IncludeOrder);
 rule_test!(
     matching_declare_define,
     goblint::rules::MatchingDeclareDefine

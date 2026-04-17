@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{FunctionInfo, Property, Signal, function::Parameter};
+use super::{Property, Signal, function::Parameter};
 use crate::SourceLocation;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,7 +79,10 @@ impl GObjectType {
 
     /// Extract properties from a class_init function
     /// Looks for *_param_spec_* calls and extracts property metadata
-    pub fn extract_properties(&self, class_init_func: &FunctionInfo) -> Vec<Property> {
+    pub fn extract_properties(
+        &self,
+        class_init_func: &crate::top_level::FunctionDefItem,
+    ) -> Vec<Property> {
         class_init_func
             .find_calls_matching(|name| {
                 // Match any function ending with _param_spec_* pattern
@@ -93,7 +96,11 @@ impl GObjectType {
 
     /// Extract signals from a class_init function
     /// Looks for g_signal_new* calls and extracts signal metadata
-    pub fn extract_signals(&self, class_init_func: &FunctionInfo, source: &[u8]) -> Vec<Signal> {
+    pub fn extract_signals(
+        &self,
+        class_init_func: &crate::top_level::FunctionDefItem,
+        source: &[u8],
+    ) -> Vec<Signal> {
         class_init_func
             .find_calls_matching(|name| {
                 // Match g_signal_new, g_signal_newv, etc.

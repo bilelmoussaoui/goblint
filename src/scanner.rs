@@ -102,6 +102,7 @@ macro_rules! for_each_rule {
     ($callback:ident) => {
         $callback! {
             (g_declare_semicolon, GDeclareSemicolon, 2, 0),
+            (include_order, IncludeOrder, 2, 0),
             (missing_implementation, MissingImplementation, 2, 0),
             (deprecated_add_private, DeprecatedAddPrivate, 2, 0),
             (matching_declare_define, MatchingDeclareDefine, 2, 70),

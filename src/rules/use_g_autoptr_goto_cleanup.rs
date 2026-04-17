@@ -24,14 +24,10 @@ impl Rule for UseGAutoptrGotoCleanup {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         self.check_function(func, path, violations);
     }
 }
@@ -39,7 +35,7 @@ impl Rule for UseGAutoptrGotoCleanup {
 impl UseGAutoptrGotoCleanup {
     fn check_function(
         &self,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         file_path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {

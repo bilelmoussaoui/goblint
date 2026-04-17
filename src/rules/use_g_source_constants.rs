@@ -32,11 +32,7 @@ impl Rule for UseGSourceConstants {
         let mut callbacks_to_check: Vec<String> = Vec::new();
 
         for (_path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
+            for func in file.iter_function_definitions() {
                 // Find all source add calls (exclude _once variants as they return void)
                 for call in func.find_calls(&[
                     "g_idle_add",
@@ -96,8 +92,8 @@ impl UseGSourceConstants {
     ) {
         // Find the function definition
         for (path, file) in ast_context.iter_all_files() {
-            for func in &file.functions {
-                if func.name == callback_name && func.is_definition {
+            for func in file.iter_function_definitions() {
+                if func.name == callback_name {
                     self.check_statements(path, &func.body_statements, &file.source, violations);
                 }
             }

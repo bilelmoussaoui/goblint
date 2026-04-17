@@ -26,27 +26,17 @@ impl Rule for UseGSetStr {
         &self,
         ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         let file = ast_context.project.files.get(path).unwrap();
 
-        if let (Some(start), Some(end)) = (func.start_byte, func.end_byte) {
-            // Get the source for this function to preserve comments
-            let func_source = &file.source[start..end];
-            self.check_statements(
-                &func.body_statements,
-                path,
-                func_source,
-                func.start_byte.unwrap_or(0),
-                violations,
-            );
-        }
+        let start = func.location.start_byte;
+        let end = func.location.end_byte;
+        // Get the source for this function to preserve comments
+        let func_source = &file.source[start..end];
+        self.check_statements(&func.body_statements, path, func_source, start, violations);
     }
 }
 

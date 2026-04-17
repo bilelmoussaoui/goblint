@@ -22,14 +22,10 @@ impl Rule for UseGObjectNewWithProperties {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         // Find all g_object_new calls with no properties
         let empty_new_calls: Vec<_> = func
             .find_calls(&["g_object_new"])

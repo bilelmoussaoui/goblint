@@ -143,13 +143,13 @@ fn main() -> Result<()> {
             .project
             .files
             .values()
-            .map(|f| f.functions.len())
+            .map(|f| f.iter_function_declarations().count() + f.iter_function_definitions().count())
             .sum();
         let total_gobject_types: usize = ast_context
             .project
             .files
             .values()
-            .map(|f| f.gobject_types.len())
+            .map(|f| f.iter_all_gobject_types().count())
             .sum();
         println!(
             "Parsed {} files, {} functions, {} GObject types",

@@ -31,7 +31,7 @@ impl Rule for MatchingDeclareDefine {
 
         // Scan all files for G_DECLARE_* macros (can be in headers or C files)
         for (_path, file) in ast_context.iter_all_files() {
-            for gt in &file.gobject_types {
+            for gt in file.iter_all_gobject_types() {
                 if gt.kind.is_declare() {
                     declared_types.insert(gt.type_name.clone(), gt.kind.clone());
                 }
@@ -40,7 +40,7 @@ impl Rule for MatchingDeclareDefine {
 
         // Scan C files for mismatched G_DEFINE_* macros
         for (path, file) in ast_context.iter_c_files() {
-            for gt in &file.gobject_types {
+            for gt in file.iter_all_gobject_types() {
                 if gt.kind.is_define() {
                     // Check if there's a matching declaration
                     if let Some(declare_kind) = declared_types.get(&gt.type_name)

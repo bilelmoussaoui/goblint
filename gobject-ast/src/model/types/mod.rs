@@ -8,7 +8,7 @@ mod struct_info;
 mod typedef;
 
 pub use enum_info::{EnumInfo, EnumValue};
-pub use function::{FunctionInfo, Parameter};
+pub use function::Parameter;
 pub use gobject_type::{
     ClassStruct, GObjectType, GObjectTypeKind, InterfaceImplementation, VirtualFunction,
 };

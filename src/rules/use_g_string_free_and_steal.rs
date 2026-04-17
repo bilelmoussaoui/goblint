@@ -26,14 +26,10 @@ impl Rule for UseGStringFreeAndSteal {
         &self,
         ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         let source = &ast_context.project.files.get(path).unwrap().source;
         for call in func.find_calls(&["g_string_free"]) {
             self.check_call(path, call, source, violations);

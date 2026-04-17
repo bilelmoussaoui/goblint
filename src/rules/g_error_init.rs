@@ -26,14 +26,10 @@ impl Rule for GErrorInit {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         // Walk all statements and check declarations
         for stmt in &func.body_statements {
             stmt.walk(&mut |s| {

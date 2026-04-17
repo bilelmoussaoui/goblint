@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use tree_sitter::{Node, Parser as TSParser};
 use walkdir::WalkDir;
 
-use crate::model::{top_level::*, *};
+use crate::model::*;
 
 pub struct Parser {
     parser: TSParser,
@@ -110,18 +110,48 @@ impl Parser {
         // Extract all content from this file
         self.visit_node(tree.root_node(), &source, &mut file_model);
 
-        // Second pass: extract class structs for derivable types
-        self.extract_class_structs_from_ast(
-            tree.root_node(),
-            &source,
-            &mut file_model.gobject_types,
-        );
-
         // Store the source for detailed pattern matching by rules
-        file_model.source = source;
+        file_model.source = source.clone();
+
+        // Post-processing: populate class_struct fields on GObjectType items
+        self.populate_class_structs(tree.root_node(), &source, &mut file_model);
 
         project.files.insert(path.to_path_buf(), file_model);
         Ok(())
+    }
+
+    fn populate_class_structs(&self, root: Node, source: &[u8], file_model: &mut FileModel) {
+        // Collect all GObjectType items (mutable references)
+        let mut gobject_types = Vec::new();
+        self.collect_gobject_types_mut(&mut file_model.top_level_items, &mut gobject_types);
+
+        // Extract class structs for each GObjectType
+        if !gobject_types.is_empty() {
+            self.extract_class_structs_from_ast(root, source, &mut gobject_types);
+        }
+    }
+
+    fn collect_gobject_types_mut<'a>(
+        &self,
+        items: &'a mut [crate::top_level::TopLevelItem],
+        gobject_types: &mut Vec<&'a mut crate::model::types::GObjectType>,
+    ) {
+        use crate::top_level::{PreprocessorDirective, TopLevelItem};
+
+        for item in items {
+            match item {
+                TopLevelItem::Preprocessor(PreprocessorDirective::GObjectType {
+                    gobject_type,
+                    ..
+                }) => {
+                    gobject_types.push(gobject_type.as_mut());
+                }
+                TopLevelItem::Preprocessor(PreprocessorDirective::Conditional { body, .. }) => {
+                    self.collect_gobject_types_mut(body, gobject_types);
+                }
+                _ => {}
+            }
+        }
     }
 
     fn find_export_macros_in_declaration<'a>(
@@ -160,146 +190,9 @@ impl Parser {
     fn visit_node(&self, node: Node, source: &[u8], file_model: &mut FileModel) {
         // Try to parse as a top-level item first
         if let Some(item) = self.parse_top_level_item(node, source) {
-            match item {
-                TopLevelItem::Preprocessor(PreprocessorDirective::Include {
-                    path,
-                    is_system,
-                    location,
-                }) => {
-                    file_model.includes.push(Include {
-                        path,
-                        is_system,
-                        location,
-                    });
-                    return; // Don't recurse into includes
-                }
-                TopLevelItem::Preprocessor(PreprocessorDirective::Call { directive, .. }) => {
-                    // Check if it's a GObject type declaration
-                    if directive.starts_with("G_DECLARE_") || directive.starts_with("G_DEFINE_") {
-                        if let Some(gobject_type) =
-                            self.extract_gobject_type_declaration(node, source)
-                        {
-                            file_model.gobject_types.push(gobject_type);
-                        }
-                    }
-                    return; // Don't recurse into preprocessor calls
-                }
-                TopLevelItem::Preprocessor(_) => {
-                    return; // Skip other preprocessor directives
-                }
-                TopLevelItem::TypeDefinition(TypeDefItem::Typedef {
-                    name,
-                    target_type,
-                    location,
-                }) => {
-                    file_model.typedefs.push(TypedefInfo {
-                        name,
-                        target_type,
-                        location,
-                    });
-
-                    // Also check for typedef enums
-                    if let Some(enum_info) = self.extract_enum(node, source) {
-                        file_model.enums.push(enum_info);
-                    }
-                }
-                TopLevelItem::FunctionDefinition(func_def) => {
-                    // Extract parameters and other details
-                    let parameters = node
-                        .child_by_field_name("declarator")
-                        .and_then(|d| self.find_function_declarator(d))
-                        .and_then(|fd| fd.child_by_field_name("parameters"))
-                        .map(|p| self.extract_parameters(p, source))
-                        .unwrap_or_default();
-
-                    let func_name = func_def.name;
-
-                    file_model.functions.push(FunctionInfo {
-                        name: func_name,
-                        location: func_def.location,
-                        is_static: func_def.is_static,
-                        export_macros: Vec::new(),
-                        is_definition: true,
-                        return_type: None,
-                        parameters,
-                        start_byte: Some(func_def.location.start_byte),
-                        end_byte: Some(func_def.location.end_byte),
-                        body_start_byte: func_def.body_location.as_ref().map(|l| l.start_byte),
-                        body_end_byte: func_def.body_location.as_ref().map(|l| l.end_byte),
-                        body_statements: func_def.body_statements,
-                    });
-
-                    // Only recurse into the declarator/type, NOT into the function body
-                    let mut cursor = node.walk();
-                    for child in node.children(&mut cursor) {
-                        if child.kind() != "compound_statement" {
-                            self.visit_node(child, source, file_model);
-                        }
-                    }
-                    return;
-                }
-                TopLevelItem::FunctionDeclaration(func_decl) => {
-                    // Function declaration - all info already extracted in parse_top_level_item
-                    if !is_macro_identifier(&func_decl.name) {
-                        let func_name = func_decl.name;
-                        file_model.functions.push(FunctionInfo {
-                            name: func_name,
-                            location: func_decl.location,
-                            is_static: func_decl.is_static,
-                            export_macros: func_decl.export_macros,
-                            is_definition: false,
-                            return_type: None,
-                            parameters: Vec::new(),
-                            start_byte: None,
-                            end_byte: None,
-                            body_start_byte: None,
-                            body_end_byte: None,
-                            body_statements: Vec::new(),
-                        });
-                    }
-                }
-                TopLevelItem::Declaration(_stmt) => {
-                    // Variable/type declaration - extract structs and enums
-                    if let Some(struct_info) = self.extract_struct(node, source) {
-                        file_model.structs.push(struct_info);
-                    }
-
-                    if let Some(enum_info) = self.extract_enum(node, source) {
-                        file_model.enums.push(enum_info);
-                    }
-                }
-                _ => {}
-            }
-        } else if node.kind() == "enum_specifier" {
-            // Handle standalone anonymous enum { ... };
-            // This is not wrapped in a declaration node, so extract_enum won't find it
-            if let Some(body) = node.child_by_field_name("body") {
-                let values = self.extract_enum_values(body, source);
-
-                // Try to get the name from the name field, or generate one for anonymous enums
-                let name = if let Some(name_node) = node.child_by_field_name("name") {
-                    if let Ok(n) = std::str::from_utf8(&source[name_node.byte_range()]) {
-                        n.to_owned()
-                    } else {
-                        return; // Invalid UTF-8
-                    }
-                } else {
-                    // Anonymous enum - generate a name based on the first value
-                    if let Some(first_value) = values.first() {
-                        format!("anonymous_{}", first_value.name)
-                    } else {
-                        "anonymous_enum".to_owned()
-                    }
-                };
-
-                file_model.enums.push(crate::model::types::EnumInfo {
-                    name,
-                    location: self.node_location(node),
-                    values,
-                    body_start_byte: body.start_byte(),
-                    body_end_byte: body.end_byte(),
-                });
-            }
+            // Simply push the item - the tree structure is already built
+            file_model.top_level_items.push(item);
+            return;
         }
 
         // Only recurse for nodes that may contain top-level items
@@ -322,7 +215,14 @@ impl Parser {
                             if let Some(gobject_type) =
                                 self.extract_gobject_from_identifier(child, node, source, text)
                             {
-                                file_model.gobject_types.push(gobject_type);
+                                use crate::top_level::{PreprocessorDirective, TopLevelItem};
+                                let location = self.node_location(node);
+                                file_model.top_level_items.push(TopLevelItem::Preprocessor(
+                                    PreprocessorDirective::GObjectType {
+                                        gobject_type: Box::new(gobject_type),
+                                        location,
+                                    },
+                                ));
                             }
                         }
                     }
@@ -355,7 +255,18 @@ impl Parser {
                                             func_node, child, source, func_name,
                                         )
                                     {
-                                        file_model.gobject_types.push(gobject_type);
+                                        use crate::top_level::{
+                                            PreprocessorDirective, TopLevelItem,
+                                        };
+                                        let location = self.node_location(node);
+                                        file_model.top_level_items.push(
+                                            TopLevelItem::Preprocessor(
+                                                PreprocessorDirective::GObjectType {
+                                                    gobject_type: Box::new(gobject_type),
+                                                    location,
+                                                },
+                                            ),
+                                        );
                                     }
                                 }
                             }
@@ -412,45 +323,4 @@ impl Default for Parser {
     fn default() -> Self {
         Self::new().expect("Failed to create parser")
     }
-}
-
-fn is_macro_identifier(name: &str) -> bool {
-    // Specific known macros and keywords
-    if name == "G_DECLARE_FINAL_TYPE"
-        || name == "G_DECLARE_DERIVABLE_TYPE"
-        || name == "G_DECLARE_INTERFACE"
-        || name == "void"
-        || name == "int"
-        || name.starts_with("META_TYPE_")
-        || name.starts_with("CLUTTER_TYPE_")
-        || name.starts_with("COGL_TYPE_")
-        || name.starts_with("GTK_TYPE_")
-        || name.starts_with("G_TYPE_")
-        || name == "COGL_PRIVATE"
-        || name.ends_with("_get_type")
-        || name.ends_with("_error_quark")
-        || name.ends_with("_END")
-        || name == "main"
-    {
-        return true;
-    }
-
-    // Heuristic: if the identifier is ALL_CAPS (with underscores), it's likely a
-    // macro Exception: single words like NULL, TRUE, FALSE are constants, not
-    // macro calls
-    if name
-        .chars()
-        .all(|c| c.is_uppercase() || c == '_' || c.is_numeric())
-    {
-        // But allow common constants/types that are legitimately all-caps
-        if name == "NULL" || name == "TRUE" || name == "FALSE" {
-            return false;
-        }
-        // If it contains an underscore or is longer than 4 chars, likely a macro
-        if name.contains('_') || name.len() > 4 {
-            return true;
-        }
-    }
-
-    false
 }

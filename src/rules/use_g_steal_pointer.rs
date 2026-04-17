@@ -26,14 +26,10 @@ impl Rule for UseGStealPointer {
         &self,
         ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         let source = &ast_context.project.files.get(path).unwrap().source;
         self.check_function(func, path, source, violations);
     }
@@ -42,7 +38,7 @@ impl Rule for UseGStealPointer {
 impl UseGStealPointer {
     fn check_function(
         &self,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         file_path: &std::path::Path,
         source: &[u8],
         violations: &mut Vec<Violation>,

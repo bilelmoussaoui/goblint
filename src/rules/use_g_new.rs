@@ -26,14 +26,10 @@ impl Rule for UseGNew {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         for call in func.find_calls(&["g_malloc", "g_malloc0"]) {
             self.check_call(path, call, violations);
         }

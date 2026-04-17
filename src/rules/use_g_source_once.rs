@@ -26,14 +26,10 @@ impl Rule for UseGSourceOnce {
         &self,
         ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         let source = &ast_context.project.files.get(path).unwrap().source;
 
         // Find g_idle_add and g_timeout_add calls
@@ -123,48 +119,53 @@ impl UseGSourceOnce {
                 continue;
             }
 
-            for func in &file.functions {
+            // Check function definitions
+            for func in file.iter_function_definitions() {
                 if func.name != callback_name {
                     continue;
                 }
 
-                if func.is_definition {
-                    // Check if all returns are FALSE/G_SOURCE_REMOVE/0
-                    let return_exprs = func.collect_return_values();
+                // Check if all returns are FALSE/G_SOURCE_REMOVE/0
+                let return_exprs = func.collect_return_values();
 
-                    // Must have at least one return statement
-                    if return_exprs.is_empty() {
-                        return None;
-                    }
+                // Must have at least one return statement
+                if return_exprs.is_empty() {
+                    return None;
+                }
 
-                    // All returns must be FALSE or G_SOURCE_REMOVE or 0
-                    if !return_exprs.iter().all(|expr| {
-                        expr.to_simple_string().is_some_and(|s| {
-                            s == "FALSE" || s == "G_SOURCE_REMOVE" || s == "0" || s == "false"
-                        })
-                    }) {
-                        return None;
-                    }
+                // All returns must be FALSE or G_SOURCE_REMOVE or 0
+                if !return_exprs.iter().all(|expr| {
+                    expr.to_simple_string().is_some_and(|s| {
+                        s == "FALSE" || s == "G_SOURCE_REMOVE" || s == "0" || s == "false"
+                    })
+                }) {
+                    return None;
+                }
 
-                    // Fix: Change return type from gboolean to void in definition
-                    // We need to find "gboolean" in the function and replace it
-                    if let Some(fix) = self.fix_definition_return_type(path, func, ast_context) {
-                        fixes.push(fix);
-                    }
+                // Fix: Change return type from gboolean to void in definition
+                // We need to find "gboolean" in the function and replace it
+                if let Some(fix) = self.fix_definition_return_type(path, func, ast_context) {
+                    fixes.push(fix);
+                }
 
-                    // Fix: Remove all return statements (entire lines)
-                    for ret_expr in func.collect_return_values() {
-                        let (line_start, line_end) =
-                            ret_expr.location().find_line_bounds(&file.source);
-                        fixes.push(Fix::new(line_start, line_end, String::new()));
-                    }
+                // Fix: Remove all return statements (entire lines)
+                for ret_expr in return_exprs {
+                    let (line_start, line_end) = ret_expr.location().find_line_bounds(&file.source);
+                    fixes.push(Fix::new(line_start, line_end, String::new()));
+                }
 
-                    found_definition = true;
-                } else {
-                    // This is a declaration - fix by searching the line in the file
-                    if let Some(fix) = self.fix_declaration_return_type(path, func, ast_context) {
-                        fixes.push(fix);
-                    }
+                found_definition = true;
+            }
+
+            // Check function declarations
+            for func in file.iter_function_declarations() {
+                if func.name != callback_name {
+                    continue;
+                }
+
+                // This is a declaration - fix by searching the line in the file
+                if let Some(fix) = self.fix_declaration_return_type(path, func, ast_context) {
+                    fixes.push(fix);
                 }
             }
         }
@@ -179,16 +180,16 @@ impl UseGSourceOnce {
     fn fix_definition_return_type(
         &self,
         file_path: &std::path::Path,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         ast_context: &AstContext,
     ) -> Option<Fix> {
         // Get the file source
         let file = ast_context.project.files.get(file_path)?;
         let source = &file.source;
 
-        // Find "gboolean" in the function signature
-        let func_start = func.start_byte?;
-        let func_end = func.end_byte?;
+        // Find "gboolean" in the function signature using location
+        let func_start = func.location.start_byte;
+        let func_end = func.location.end_byte;
 
         // Search for "gboolean" before the function body
         let func_text = std::str::from_utf8(&source[func_start..func_end]).ok()?;
@@ -210,7 +211,7 @@ impl UseGSourceOnce {
     fn fix_declaration_return_type(
         &self,
         file_path: &std::path::Path,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDeclItem,
         ast_context: &AstContext,
     ) -> Option<Fix> {
         // Get the file source
@@ -267,11 +268,7 @@ impl UseGSourceOnce {
                 continue;
             }
 
-            for func in &file.functions {
-                if !func.is_definition {
-                    continue;
-                }
-
+            for func in file.iter_function_definitions() {
                 // Walk through all statements looking for uses of the callback name
                 if self.has_non_source_add_usage(&func.body_statements, callback_name) {
                     return true;

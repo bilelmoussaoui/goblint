@@ -67,6 +67,7 @@ pub mod g_param_spec_null_nick_blurb;
 pub mod g_param_spec_static_name_canonical;
 pub mod g_param_spec_static_strings;
 pub mod g_task_source_tag;
+pub mod include_order;
 pub mod matching_declare_define;
 pub mod missing_implementation;
 pub mod property_enum_zero;
@@ -108,6 +109,7 @@ pub use g_param_spec_null_nick_blurb::GParamSpecNullNickBlurb;
 pub use g_param_spec_static_name_canonical::GParamSpecStaticNameCanonical;
 pub use g_param_spec_static_strings::GParamSpecStaticStrings;
 pub use g_task_source_tag::GTaskSourceTag;
+pub use include_order::IncludeOrder;
 pub use matching_declare_define::MatchingDeclareDefine;
 pub use missing_implementation::MissingImplementation;
 pub use property_enum_zero::PropertyEnumZero;
@@ -181,7 +183,7 @@ pub trait Rule: Send + Sync {
         &self,
         ast_context: &AstContext,
         config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
@@ -195,7 +197,7 @@ pub trait Rule: Send + Sync {
         &self,
         ast_context: &AstContext,
         config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDeclItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
@@ -214,14 +216,14 @@ pub trait Rule: Send + Sync {
     ) {
         // Check function implementations in C files
         for (path, file) in ast_context.iter_c_files() {
-            for func in &file.functions {
+            for func in file.iter_function_definitions() {
                 self.check_func_impl(ast_context, config, func, path, violations);
             }
         }
 
         // Check function declarations in header files
         for (path, file) in ast_context.iter_header_files() {
-            for func in &file.functions {
+            for func in file.iter_function_declarations() {
                 self.check_func_decl(ast_context, config, func, path, violations);
             }
         }

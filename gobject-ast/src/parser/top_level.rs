@@ -62,12 +62,82 @@ impl Parser {
                     location: self.node_location(node),
                 }))
             }
-            "preproc_if" | "preproc_ifdef" | "preproc_elif" | "preproc_else" => {
-                Some(TopLevelItem::Preprocessor(PreprocessorDirective::Other {
-                    location: self.node_location(node),
-                }))
+            "preproc_if" | "preproc_ifdef" | "preproc_ifndef" => {
+                // Parse conditional preprocessor directives with their body
+                let kind = match node.kind() {
+                    "preproc_ifdef" => super::top_level::ConditionalKind::Ifdef,
+                    "preproc_ifndef" => super::top_level::ConditionalKind::Ifndef,
+                    "preproc_if" => super::top_level::ConditionalKind::If,
+                    _ => unreachable!(),
+                };
+
+                // Get condition (for #ifdef/#ifndef, it's the name; for #if, it's the whole
+                // condition)
+                let condition = if let Some(name_node) = node.child_by_field_name("name") {
+                    Some(
+                        std::str::from_utf8(&source[name_node.byte_range()])
+                            .ok()?
+                            .to_owned(),
+                    )
+                } else if let Some(cond_node) = node.child_by_field_name("condition") {
+                    Some(
+                        std::str::from_utf8(&source[cond_node.byte_range()])
+                            .ok()?
+                            .to_owned(),
+                    )
+                } else {
+                    None
+                };
+
+                // Parse body items - recursively parse children that are not part of the
+                // preprocessor syntax
+                let body = self.parse_conditional_body(node, source);
+
+                Some(TopLevelItem::Preprocessor(
+                    PreprocessorDirective::Conditional {
+                        kind,
+                        condition,
+                        body,
+                        location: self.node_location(node),
+                    },
+                ))
+            }
+            "preproc_elif" => {
+                let condition = node
+                    .child_by_field_name("condition")
+                    .and_then(|c| std::str::from_utf8(&source[c.byte_range()]).ok())
+                    .map(|s| s.to_owned());
+
+                let body = self.parse_conditional_body(node, source);
+
+                Some(TopLevelItem::Preprocessor(
+                    PreprocessorDirective::Conditional {
+                        kind: super::top_level::ConditionalKind::Elif,
+                        condition,
+                        body,
+                        location: self.node_location(node),
+                    },
+                ))
+            }
+            "preproc_else" => {
+                let body = self.parse_conditional_body(node, source);
+
+                Some(TopLevelItem::Preprocessor(
+                    PreprocessorDirective::Conditional {
+                        kind: super::top_level::ConditionalKind::Else,
+                        condition: None,
+                        body,
+                        location: self.node_location(node),
+                    },
+                ))
             }
             "type_definition" => {
+                // Check for typedef enum
+                if let Some(enum_info) = self.extract_enum(node, source) {
+                    return Some(TopLevelItem::TypeDefinition(TypeDefItem::Enum {
+                        enum_info: Box::new(enum_info),
+                    }));
+                }
                 // Check for typedef
                 if let Some(typedef) = self.extract_typedef_from_type_definition(node, source) {
                     return Some(TopLevelItem::TypeDefinition(TypeDefItem::Typedef {
@@ -79,6 +149,13 @@ impl Parser {
                 None
             }
             "declaration" => {
+                // Check for enum declarations
+                if let Some(enum_info) = self.extract_enum(node, source) {
+                    return Some(TopLevelItem::TypeDefinition(TypeDefItem::Enum {
+                        enum_info: Box::new(enum_info),
+                    }));
+                }
+
                 // Check if this is a function declaration
                 let func_declarator = self.find_function_declarator_in_node(node);
 
@@ -107,8 +184,39 @@ impl Parser {
                 }
                 None
             }
+            "enum_specifier" => {
+                // Standalone enum (enum Name { ... } or anonymous enum { ... })
+                if let Some(enum_info) = self.extract_enum(node, source) {
+                    return Some(TopLevelItem::TypeDefinition(TypeDefItem::Enum {
+                        enum_info: Box::new(enum_info),
+                    }));
+                }
+                None
+            }
             "function_definition" => {
                 let (name, is_static) = self.extract_function_from_definition(node, source)?;
+
+                // Extract parameters - find parameter_list in declarator
+                let parameters = if let Some(declarator) = node.child_by_field_name("declarator") {
+                    // Find parameter_list recursively in the declarator tree
+                    let mut params = Vec::new();
+                    let mut cursor = declarator.walk();
+                    for child in declarator.children_by_field_name("parameters", &mut cursor) {
+                        params = self.extract_parameters(child, source);
+                        break;
+                    }
+                    if params.is_empty() {
+                        // Try finding it recursively
+                        if let Some(params_node) =
+                            self.find_node_by_kind(declarator, "parameter_list")
+                        {
+                            params = self.extract_parameters(params_node, source);
+                        }
+                    }
+                    params
+                } else {
+                    Vec::new()
+                };
 
                 // Find the function body
                 let body = node.child_by_field_name("body");
@@ -120,6 +228,7 @@ impl Parser {
                 Some(TopLevelItem::FunctionDefinition(FunctionDefItem {
                     name: name.to_owned(),
                     is_static,
+                    parameters,
                     body_statements,
                     location: self.node_location(node),
                     body_location,
@@ -149,40 +258,40 @@ impl Parser {
         })
     }
 
-    pub(super) fn extract_struct(&self, node: Node, source: &[u8]) -> Option<StructInfo> {
-        // Parse as declaration to use our AST types
-        if let Some(Statement::Declaration(decl)) = self.parse_statement(node, source) {
-            // Check if this is a struct declaration
-            let decl_text =
-                std::str::from_utf8(&source[decl.location.start_byte..decl.location.end_byte])
-                    .ok()?;
-            if decl_text.contains("struct ") {
-                // Extract struct name and check for body
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "struct_specifier" {
-                        if let Some(name_node) = child.child_by_field_name("name") {
-                            let name = std::str::from_utf8(&source[name_node.byte_range()]).ok()?;
-                            let has_body = child.child_by_field_name("body").is_some();
-                            return Some(StructInfo {
-                                name: name.to_owned(),
-                                location: self.node_location(child),
-                                fields: Vec::new(), // TODO: extract fields
-                                is_opaque: !has_body,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-
     pub(super) fn extract_enum(&self, node: Node, source: &[u8]) -> Option<EnumInfo> {
         // Check if this is a typedef or regular declaration containing an enum
         let node_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
-        if !node_text.contains("enum ") {
+        if !node_text.contains("enum") {
             return None;
+        }
+
+        // Handle direct enum_specifier node
+        if node.kind() == "enum_specifier" {
+            if let Some(body) = node.child_by_field_name("body") {
+                let values = self.extract_enum_values(body, source);
+
+                // Try to get the name from the name field, or generate one for anonymous enums
+                let name = if let Some(name_node) = node.child_by_field_name("name") {
+                    std::str::from_utf8(&source[name_node.byte_range()])
+                        .ok()?
+                        .to_owned()
+                } else {
+                    // Anonymous enum - generate a name based on the first value
+                    if let Some(first_value) = values.first() {
+                        format!("anonymous_{}", first_value.name)
+                    } else {
+                        "anonymous_enum".to_owned()
+                    }
+                };
+
+                return Some(EnumInfo {
+                    name,
+                    location: self.node_location(node),
+                    values,
+                    body_start_byte: body.start_byte(),
+                    body_end_byte: body.end_byte(),
+                });
+            }
         }
 
         // Handle typedef enum { ... } Name;
@@ -297,6 +406,19 @@ impl Parser {
         values
     }
 
+    fn find_node_by_kind<'a>(&self, node: Node<'a>, kind: &str) -> Option<Node<'a>> {
+        if node.kind() == kind {
+            return Some(node);
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(found) = self.find_node_by_kind(child, kind) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
     pub(super) fn extract_parameters(&self, params_node: Node, source: &[u8]) -> Vec<Parameter> {
         let mut parameters = Vec::new();
 
@@ -387,5 +509,29 @@ impl Parser {
         }
 
         None
+    }
+
+    /// Parse the body of a conditional preprocessor block (#ifdef, #if, etc.)
+    pub(super) fn parse_conditional_body(&self, node: Node, source: &[u8]) -> Vec<TopLevelItem> {
+        let mut body = Vec::new();
+        let mut cursor = node.walk();
+
+        for child in node.children(&mut cursor) {
+            // Skip preprocessor markers (#ifdef, #endif, etc.)
+            if !child.is_named()
+                || matches!(
+                    child.kind(),
+                    "#ifdef" | "#ifndef" | "#if" | "#elif" | "#else" | "#endif"
+                )
+            {
+                continue;
+            }
+
+            if let Some(item) = self.parse_top_level_item(child, source) {
+                body.push(item);
+            }
+        }
+
+        body
     }
 }

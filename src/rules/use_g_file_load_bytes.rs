@@ -28,14 +28,10 @@ impl Rule for UseGFileLoadBytes {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         self.check_function(func, path, violations);
     }
 }
@@ -43,7 +39,7 @@ impl Rule for UseGFileLoadBytes {
 impl UseGFileLoadBytes {
     fn check_function(
         &self,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         file_path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
@@ -61,7 +57,10 @@ impl UseGFileLoadBytes {
 
     /// Find all g_file_load_contents calls and return the set of variables they
     /// populate
-    fn find_load_contents_vars(&self, func: &gobject_ast::FunctionInfo) -> HashSet<String> {
+    fn find_load_contents_vars(
+        &self,
+        func: &gobject_ast::top_level::FunctionDefItem,
+    ) -> HashSet<String> {
         let mut result = HashSet::new();
 
         // Find all g_file_load_contents or g_file_load_contents_finish calls

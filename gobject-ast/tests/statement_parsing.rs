@@ -24,11 +24,12 @@ fn test_parse_call_expressions() {
     let file = project
         .get_file(&fixture_path)
         .expect("File should be parsed");
-    assert_eq!(file.functions.len(), 1, "Should find 1 function");
 
-    let func = &file.functions[0];
+    let func = file
+        .iter_function_definitions()
+        .next()
+        .expect("Should find a function");
     assert_eq!(func.name, "test_function");
-    assert!(func.is_definition, "Should be a definition");
 
     // Check we have statements parsed
     assert!(
@@ -69,7 +70,10 @@ fn test_parse_assignments() {
     let file = project
         .get_file(&fixture_path)
         .expect("File should be parsed");
-    let func = &file.functions[0];
+    let func = file
+        .iter_function_definitions()
+        .next()
+        .expect("Should find a function");
 
     // Count assignments
     let mut assignment_count = 0;
@@ -102,7 +106,10 @@ fn test_parse_return_statement() {
     let file = project
         .get_file(&fixture_path)
         .expect("File should be parsed");
-    let func = &file.functions[0];
+    let func = file
+        .iter_function_definitions()
+        .next()
+        .expect("Should find a function");
 
     // Should have a return statement
     assert!(!func.body_statements.is_empty(), "Should have statements");
@@ -128,12 +135,10 @@ fn test_parse_goto_statement() {
         .get_file(&fixture_path)
         .expect("File should be parsed");
 
-    assert!(
-        !file.functions.is_empty(),
-        "Should find at least one function"
-    );
-
-    let func = &file.functions[0];
+    let func = file
+        .iter_function_definitions()
+        .next()
+        .expect("Should find a function");
 
     // Should have a goto statement (either top-level or nested in if)
     let has_goto = find_goto_recursive(&func.body_statements);
@@ -178,7 +183,10 @@ fn test_statement_order() {
     let file = project
         .get_file(&fixture_path)
         .expect("File should be parsed");
-    let func = &file.functions[0];
+    let func = file
+        .iter_function_definitions()
+        .next()
+        .expect("Should find a function");
 
     // Verify order: should have declaration/call first, then call
     assert!(

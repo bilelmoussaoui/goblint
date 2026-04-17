@@ -26,14 +26,10 @@ impl Rule for UnnecessaryNullCheck {
         &self,
         ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         let source = &ast_context.project.files.get(path).unwrap().source;
         // Walk through function body looking for if statements
         self.check_statements(&func.body_statements, path, source, violations);

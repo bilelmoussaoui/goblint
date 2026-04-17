@@ -32,8 +32,7 @@ impl Rule for PropertyEnumZero {
         for (path, file) in ast_context.iter_all_files() {
             // First pass: collect all existing PROP_0 variants
             let existing_prop_zeros: HashSet<String> = file
-                .enums
-                .iter()
+                .iter_all_enums()
                 .flat_map(|enum_info| &enum_info.values)
                 .filter_map(|val| {
                     if val.name.ends_with("_PROP_0") || val.name == "PROP_0" {
@@ -47,7 +46,7 @@ impl Rule for PropertyEnumZero {
             let mut will_add_unprefixed_prop_zero = existing_prop_zeros.contains("PROP_0");
 
             // Second pass: check each enum
-            for enum_info in &file.enums {
+            for enum_info in file.iter_all_enums() {
                 if !self.is_property_enum(enum_info) {
                     continue;
                 }

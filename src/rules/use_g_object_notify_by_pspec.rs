@@ -26,14 +26,10 @@ impl Rule for UseGObjectNotifyByPspec {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         for call in func.find_calls(&["g_object_notify"]) {
             self.check_call(path, call, violations);
         }

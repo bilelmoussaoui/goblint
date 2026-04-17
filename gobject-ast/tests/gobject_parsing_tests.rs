@@ -8,13 +8,18 @@ fn parse_fixture(fixture_name: &str) -> gobject_ast::model::Project {
     parser.parse_file(&fixture_path).expect("Failed to parse")
 }
 
+fn extract_gobject_types(file: &gobject_ast::FileModel) -> Vec<&gobject_ast::GObjectType> {
+    file.iter_all_gobject_types().collect()
+}
+
 #[test]
 fn test_g_declare_final_type() {
     let project = parse_fixture("declare_final.h");
     let file = project.files.values().next().expect("No files parsed");
 
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobj = &file.gobject_types[0];
+    let gobject_types = extract_gobject_types(file);
+    assert_eq!(gobject_types.len(), 1);
+    let gobj = gobject_types[0];
 
     assert_eq!(gobj.type_name, "MyWidget");
     assert_eq!(gobj.type_macro, "MY_TYPE_WIDGET");
@@ -40,8 +45,8 @@ fn test_g_declare_derivable_type() {
     let project = parse_fixture("declare_derivable.h");
     let file = project.files.values().next().expect("No files parsed");
 
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobj = &file.gobject_types[0];
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    let gobj = &extract_gobject_types(file)[0];
 
     assert_eq!(gobj.type_name, "MyObject");
     assert_eq!(gobj.type_macro, "MY_TYPE_OBJECT");
@@ -67,8 +72,8 @@ fn test_g_declare_interface() {
     let project = parse_fixture("declare_interface.h");
     let file = project.files.values().next().expect("No files parsed");
 
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobj = &file.gobject_types[0];
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    let gobj = &extract_gobject_types(file)[0];
 
     assert_eq!(gobj.type_name, "MyInterface");
     assert_eq!(gobj.type_macro, "MY_TYPE_INTERFACE");
@@ -94,8 +99,8 @@ fn test_g_define_type() {
     let project = parse_fixture("define_type.c");
     let file = project.files.values().next().expect("No files parsed");
 
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobj = &file.gobject_types[0];
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    let gobj = &extract_gobject_types(file)[0];
 
     assert_eq!(gobj.type_name, "MyWidget");
     assert_eq!(gobj.type_macro, "TYPE_MYWIDGET");
@@ -117,8 +122,8 @@ fn test_g_define_type_with_private() {
     let project = parse_fixture("define_type_with_private.c");
     let file = project.files.values().next().expect("No files parsed");
 
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobj = &file.gobject_types[0];
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    let gobj = &extract_gobject_types(file)[0];
 
     assert_eq!(gobj.type_name, "MyObject");
 
@@ -139,8 +144,8 @@ fn test_class_struct_with_vfuncs() {
     let project = parse_fixture("class_with_vfuncs.h");
     let file = project.files.values().next().expect("No files parsed");
 
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobj = &file.gobject_types[0];
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    let gobj = &extract_gobject_types(file)[0];
 
     assert_eq!(gobj.type_name, "MyObject");
 
@@ -171,12 +176,15 @@ fn test_multiple_gobject_types_in_one_file() {
     let file = project.files.values().next().expect("No files parsed");
 
     assert!(
-        file.gobject_types.len() >= 2,
+        extract_gobject_types(file).len() >= 2,
         "Expected at least 2 GObject types, got {}",
-        file.gobject_types.len()
+        extract_gobject_types(file).len()
     );
 
-    let type_names: Vec<_> = file.gobject_types.iter().map(|g| &g.type_name).collect();
+    let type_names: Vec<_> = extract_gobject_types(file)
+        .iter()
+        .map(|g| &g.type_name)
+        .collect();
     assert!(type_names.contains(&&"MyWidget".to_string()));
     assert!(type_names.contains(&&"MyInterface".to_string()));
 }
@@ -186,7 +194,7 @@ fn test_vfunc_parameters_and_return_types() {
     let project = parse_fixture("class_with_vfuncs.h");
     let file = project.files.values().next().expect("No files parsed");
 
-    let gobj = &file.gobject_types[0];
+    let gobj = &extract_gobject_types(file)[0];
     let class_struct = gobj.class_struct.as_ref().expect("No class struct");
 
     // Find the do_something vfunc
@@ -227,8 +235,8 @@ fn test_property_extraction() {
     let file = project.files.values().next().expect("No files parsed");
 
     // Check that we parse the GObject type definition
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobject_type = &file.gobject_types[0];
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    let gobject_type = &extract_gobject_types(file)[0];
 
     // Get the class_init function name
     let class_init_name = gobject_type.class_init_function_name();
@@ -236,8 +244,7 @@ fn test_property_extraction() {
 
     // Find the class_init function
     let class_init = file
-        .functions
-        .iter()
+        .iter_function_definitions()
         .find(|f| f.name == class_init_name)
         .expect("class_init function not found");
 
@@ -286,8 +293,7 @@ fn test_property_installation() {
 
     // Find class_init function
     let class_init = file
-        .functions
-        .iter()
+        .iter_function_definitions()
         .find(|f| f.name == "my_object_class_init")
         .expect("No class_init found");
 
@@ -314,8 +320,7 @@ fn test_signals_enum() {
 
     // Check that we have the signals enum
     let signal_enum = file
-        .enums
-        .iter()
+        .iter_all_enums()
         .find(|e| e.values.iter().any(|v| v.name == "SIGNAL_CHANGED"));
     assert!(signal_enum.is_some(), "Signal enum not found");
 
@@ -341,8 +346,7 @@ fn test_signal_creation() {
     let file = project.files.values().next().expect("No files parsed");
 
     let class_init = file
-        .functions
-        .iter()
+        .iter_function_definitions()
         .find(|f| f.name == "my_object_class_init")
         .expect("No class_init found");
 
@@ -361,14 +365,13 @@ fn test_signal_extraction() {
     let file = project.files.values().next().expect("No files parsed");
 
     // Get the GObject type
-    let gobject_type = &file.gobject_types[0];
+    let gobject_type = &extract_gobject_types(file)[0];
     assert_eq!(gobject_type.type_name, "MyObject");
 
     // Find the class_init function
     let class_init_name = gobject_type.class_init_function_name();
     let class_init = file
-        .functions
-        .iter()
+        .iter_function_definitions()
         .find(|f| f.name == class_init_name)
         .expect("No class_init found");
 
@@ -410,8 +413,8 @@ fn test_interface_implementation() {
     let file = project.files.values().next().expect("No files parsed");
 
     // Should have a G_DEFINE_TYPE_WITH_CODE macro
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobj = &file.gobject_types[0];
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    let gobj = &extract_gobject_types(file)[0];
 
     // Check that it detected the interface implementation
     assert_eq!(
@@ -423,17 +426,11 @@ fn test_interface_implementation() {
     assert_eq!(gobj.interfaces[0].init_function, "my_interface_init");
 
     // Should have the interface init function (definition)
-    let iface_init_funcs: Vec<_> = file
-        .functions
-        .iter()
-        .filter(|f| f.name == "my_interface_init")
-        .collect();
+    let has_iface_init_def = file
+        .iter_function_definitions()
+        .any(|f| f.name == "my_interface_init");
 
-    assert!(!iface_init_funcs.is_empty(), "No interface init found");
-    assert!(
-        iface_init_funcs.iter().any(|f| f.is_definition),
-        "Expected at least one definition"
-    );
+    assert!(has_iface_init_def, "No interface init definition found");
 }
 
 #[test]
@@ -441,8 +438,8 @@ fn test_interface_impl_multiple() {
     let project = parse_fixture("multi_interface.c");
     let file = project.files.values().next().expect("No files parsed");
 
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobj = &file.gobject_types[0];
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    let gobj = &extract_gobject_types(file)[0];
 
     // Check type kind
     assert!(matches!(
@@ -477,11 +474,20 @@ fn test_boxed_type() {
 
     // Check that we found the boxed type definition
     // G_DEFINE_BOXED_TYPE should be parsed
-    assert!(!file.gobject_types.is_empty(), "No GObject types found");
+    assert!(
+        !extract_gobject_types(file).is_empty(),
+        "No GObject types found"
+    );
 
     // Should have copy and free functions
-    assert!(file.functions.iter().any(|f| f.name == "my_struct_copy"));
-    assert!(file.functions.iter().any(|f| f.name == "my_struct_free"));
+    assert!(
+        file.iter_all_function_names()
+            .any(|name| name == "my_struct_copy")
+    );
+    assert!(
+        file.iter_all_function_names()
+            .any(|name| name == "my_struct_free")
+    );
 }
 
 #[test]
@@ -490,22 +496,26 @@ fn test_gtk_doc_comments() {
     let file = project.files.values().next().expect("No files parsed");
 
     // Should have the declared type
-    assert_eq!(file.gobject_types.len(), 1);
-    assert_eq!(file.gobject_types[0].type_name, "MyObject");
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    assert_eq!(extract_gobject_types(file)[0].type_name, "MyObject");
 
     // Should have all the documented functions
-    assert!(file.functions.iter().any(|f| f.name == "my_object_new"));
     assert!(
-        file.functions
-            .iter()
-            .any(|f| f.name == "my_object_set_name")
+        file.iter_all_function_names()
+            .any(|name| name == "my_object_new")
     );
     assert!(
-        file.functions
-            .iter()
-            .any(|f| f.name == "my_object_get_children")
+        file.iter_all_function_names()
+            .any(|name| name == "my_object_set_name")
     );
-    assert!(file.functions.iter().any(|f| f.name == "my_object_process"));
+    assert!(
+        file.iter_all_function_names()
+            .any(|name| name == "my_object_get_children")
+    );
+    assert!(
+        file.iter_all_function_names()
+            .any(|name| name == "my_object_process")
+    );
 }
 
 #[test]
@@ -513,13 +523,12 @@ fn test_custom_param_spec() {
     let project = parse_fixture("custom_param_spec.c");
     let file = project.files.values().next().expect("No files parsed");
 
-    assert_eq!(file.gobject_types.len(), 1);
-    let gobject_type = &file.gobject_types[0];
+    assert_eq!(extract_gobject_types(file).len(), 1);
+    let gobject_type = &extract_gobject_types(file)[0];
 
     let class_init_name = gobject_type.class_init_function_name();
     let class_init = file
-        .functions
-        .iter()
+        .iter_function_definitions()
         .find(|f| f.name == class_init_name)
         .expect("class_init function not found");
 

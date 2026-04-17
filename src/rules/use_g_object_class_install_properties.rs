@@ -24,14 +24,10 @@ impl Rule for UseGObjectClassInstallProperties {
         &self,
         _ast_context: &AstContext,
         _config: &Config,
-        func: &gobject_ast::FunctionInfo,
+        func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        if !func.is_definition {
-            return;
-        }
-
         // Only check functions ending with _class_init
         if !func.name.ends_with("_class_init") {
             return;
