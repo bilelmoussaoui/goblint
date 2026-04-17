@@ -35,7 +35,7 @@ impl Rule for UseGAutofree {
         for (var_name, (var_type, location)) in &local_vars {
             // Only suggest g_autofree for simple types (char*, guint8*, void*, etc.)
             // Not for GObject* types (those should use g_autoptr)
-            if !self.is_autofree_candidate(var_type) {
+            if !var_type.contains('*') {
                 continue;
             }
 
@@ -68,51 +68,6 @@ impl Rule for UseGAutofree {
 }
 
 impl UseGAutofree {
-    fn is_autofree_candidate(&self, var_type: &str) -> bool {
-        let type_lower = var_type.to_lowercase();
-
-        // g_autofree is for simple pointer types: char*, guint8*, void*, etc.
-        // Not for GObject-derived types (those use g_autoptr)
-
-        // Simple types that should use g_autofree
-        if type_lower.contains("char")
-            || type_lower.contains("guint8")
-            || type_lower.contains("gint8")
-            || type_lower.contains("guchar")
-            || type_lower.contains("gchar")
-            || type_lower.contains("uint8_t")
-            || type_lower.contains("int8_t")
-            || type_lower.contains("void")
-        {
-            return true;
-        }
-
-        // Skip GObject types - these should use g_autoptr instead
-        // Common GObject patterns: GType*, GObject*, anything with G[A-Z][a-z]*
-        if var_type.contains("GError")
-            || var_type.contains("GObject")
-            || var_type.contains("GList")
-            || var_type.contains("GSList")
-            || var_type.contains("GHashTable")
-            || var_type.contains("GBytes")
-            || var_type.contains("GVariant")
-            || var_type.contains("GArray")
-        {
-            return false;
-        }
-
-        // Check for custom types (like CoglTexture, MetaWindow, etc.)
-        // These should use g_autoptr
-        if var_type.chars().next().is_some_and(|c| c.is_uppercase()) {
-            // If starts with uppercase and contains mixed case, likely an object type
-            if var_type.chars().any(|c| c.is_lowercase()) {
-                return false;
-            }
-        }
-
-        false
-    }
-
     fn find_local_pointer_vars(
         &self,
         statements: &[Statement],
@@ -189,6 +144,8 @@ impl UseGAutofree {
                 | "g_try_malloc"
                 | "g_try_malloc0"
                 | "g_memdup"
+                | "g_new"
+                | "g_new0"
         )
     }
 

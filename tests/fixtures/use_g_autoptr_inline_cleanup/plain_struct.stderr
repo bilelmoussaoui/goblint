@@ -1,0 +1,1 @@
+plain_struct.c:20:5: use_g_autoptr_inline_cleanup: Consider using g_autoptr(GObject) obj to avoid manual cleanup

@@ -1,0 +1,2 @@
+struct.c:16:5: use_g_autofree: Consider using g_autofree p to avoid manual g_free
+struct.c:22:5: use_g_autofree: Consider using g_autofree person to avoid manual g_free

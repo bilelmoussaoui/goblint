@@ -53,11 +53,16 @@ impl UseGAutoptrInlineCleanup {
             // Check if variable is returned without being freed
             let is_returned = self.is_var_returned(&func.body_statements, var_name);
 
+            // Check if variable is freed with g_free (should use g_autofree instead)
+            let is_freed_with_g_free =
+                self.is_var_freed_with_g_free(&func.body_statements, var_name);
+
             // Suggest g_autoptr if:
             // 1. Variable is allocated
             // 2. Variable is manually freed at least once
             // 3. Variable is not returned directly (would need g_steal_pointer)
-            if is_allocated && is_manually_freed && !is_returned {
+            // 4. Variable is NOT freed with g_free (those should use g_autofree)
+            if is_allocated && is_manually_freed && !is_returned && !is_freed_with_g_free {
                 let base_type = self.extract_base_type(var_type);
                 violations.push(self.violation(
                     file_path,
@@ -106,8 +111,8 @@ impl UseGAutoptrInlineCleanup {
                         return;
                     }
 
-                    // Only track pointer types for GObject types
-                    if self.is_autoptr_candidate(&decl.type_name) {
+                    // Track all pointer types - we'll filter later based on cleanup function
+                    if decl.type_name.contains('*') {
                         // Skip field access names
                         if !decl.name.contains("->") && !decl.name.contains('.') {
                             result
@@ -117,40 +122,6 @@ impl UseGAutoptrInlineCleanup {
                 }
             });
         }
-    }
-
-    fn is_autoptr_candidate(&self, type_name: &str) -> bool {
-        // g_autoptr is for GObject-derived types, not simple pointers
-        // Check if it contains a pointer and is a likely GObject type
-
-        if !type_name.contains('*') {
-            return false;
-        }
-
-        // Common GObject types that should use g_autoptr
-        if type_name.contains("GObject")
-            || type_name.contains("GError")
-            || type_name.contains("GList")
-            || type_name.contains("GSList")
-            || type_name.contains("GHashTable")
-            || type_name.contains("GBytes")
-            || type_name.contains("GVariant")
-            || type_name.contains("GArray")
-            || type_name.contains("GFile")
-            || type_name.contains("GInputStream")
-            || type_name.contains("GOutputStream")
-        {
-            return true;
-        }
-
-        // Custom object types (likely if starts with uppercase and contains mixed case)
-        if type_name.chars().next().is_some_and(|c| c.is_uppercase())
-            && type_name.chars().any(|c| c.is_lowercase())
-        {
-            return true;
-        }
-
-        false
     }
 
     fn is_var_allocated(&self, statements: &[Statement], var_name: &str) -> bool {
@@ -201,6 +172,29 @@ impl UseGAutoptrInlineCleanup {
                     && call.is_cleanup_call()
                     && let Some(arg_expr) = call.get_arg(0)
                     // Check for var or &var
+                    && let Some(arg_var) = arg_expr.extract_variable_name()
+                    && arg_var == var_name
+                {
+                    found = true;
+                }
+            });
+            if found {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn is_var_freed_with_g_free(&self, statements: &[Statement], var_name: &str) -> bool {
+        use gobject_ast::Expression;
+
+        for stmt in statements {
+            let mut found = false;
+            stmt.walk(&mut |s| {
+                if let Statement::Expression(expr_stmt) = s
+                    && let Expression::Call(call) = &expr_stmt.expr
+                    && call.function == "g_free"
+                    && let Some(arg_expr) = call.get_arg(0)
                     && let Some(arg_var) = arg_expr.extract_variable_name()
                     && arg_var == var_name
                 {
