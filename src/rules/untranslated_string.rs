@@ -67,9 +67,10 @@ impl UntranslatedString {
 
             // Check if this is a GTK/Adwaita function that takes user-visible text
             if let Some(arg_index) = self.get_translatable_param(func_name)
-                && let Some(arg) = call.arguments.get(arg_index) {
-                    self.check_argument(arg, func_name, file_path, violations);
-                }
+                && let Some(arg) = call.arguments.get(arg_index)
+            {
+                self.check_argument(arg, func_name, file_path, violations);
+            }
         }
     }
 
@@ -141,8 +142,10 @@ impl UntranslatedString {
             "gtk_message_dialog_set_markup" => Some(1),
 
             // AdwMessageDialog
-            "adw_message_dialog_new" | "adw_message_dialog_set_heading"
-            | "adw_message_dialog_set_body" | "adw_message_dialog_set_body_use_markup" => Some(1),
+            "adw_message_dialog_new"
+            | "adw_message_dialog_set_heading"
+            | "adw_message_dialog_set_body"
+            | "adw_message_dialog_set_body_use_markup" => Some(1),
             "adw_message_dialog_add_response" => Some(2),
 
             // AdwStatusPage
