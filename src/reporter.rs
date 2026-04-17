@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path};
+use std::{collections::HashMap, env};
 
 use colored::*;
 
@@ -167,37 +167,6 @@ pub fn report_summary(violations: &[Violation], fixable: &HashMap<&str, bool>) {
         rows.len().to_string().yellow().bold(),
     );
 }
-
-/// Report violations in GCC-compatible format for Emacs, Vim, and other tools
-/// Format: path/to/file.c:line:column: level: message [rule_name]
-pub fn report_violations_gcc(violations: &[Violation], project_root: &Path) {
-    for violation in violations {
-        // Make path relative to project root for cleaner output
-        let relative_path = violation
-            .file
-            .strip_prefix(project_root)
-            .unwrap_or(&violation.file);
-
-        let level = match violation.level {
-            crate::config::RuleLevel::Error => "error",
-            crate::config::RuleLevel::Warn => "warning",
-            crate::config::RuleLevel::Ignore => {
-                unreachable!("Ignored violations should not be reported")
-            }
-        };
-
-        println!(
-            "{}:{}:{}: {}: {} [{}]",
-            relative_path.display(),
-            violation.line,
-            violation.column,
-            level,
-            violation.message,
-            violation.rule
-        );
-    }
-}
-
 fn create_clickable_link(
     file_path: &std::path::Path,
     line: usize,

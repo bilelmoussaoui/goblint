@@ -215,7 +215,7 @@ fn main() -> Result<()> {
             println!("{}", sarif_output);
         }
         OutputFormat::Gcc => {
-            reporter::report_violations_gcc(&violations, &project_root);
+            output::gcc::generate_gcc(&violations);
         }
     }
 
