@@ -27,7 +27,7 @@ struct Args {
     #[arg(short, long, value_name = "FILE", default_value = concat!(env!("CARGO_PKG_NAME"), ".toml"))]
     config: PathBuf,
 
-    /// Additional ignore patterns (can be specified multiple times)
+    /// Ignore files matching glob patterns (e.g., "tests/**", "vendor/**")
     #[arg(short, long, value_name = "PATTERN")]
     ignore: Vec<String>,
 
@@ -47,7 +47,7 @@ struct Args {
     #[arg(long, value_name = "RULE")]
     exclude: Vec<String>,
 
-    /// Filter rules by category
+    /// Enable only rules from this category (e.g., correctness, style, perf)
     #[arg(long, value_name = "CATEGORY")]
     category: Option<Category>,
 
