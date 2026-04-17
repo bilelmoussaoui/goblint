@@ -106,10 +106,15 @@ impl IncludeOrder {
                 pos += 1;
             }
 
-            // Check if next line is already blank or is a preprocessor directive
-            let next_is_blank_or_preprocessor = (pos < source.len() && source[pos] == b'\n')
-                || (pos < source.len() && source[pos] == b'#');
-            let skip_trailing_newline = next_is_blank_or_preprocessor;
+            // Skip trailing newline if:
+            // - Next line is already blank, OR
+            // - Next line is #endif (end of conditional block)
+            let next_is_blank = pos < source.len() && source[pos] == b'\n';
+            let next_is_endif = pos < source.len()
+                && source[pos] == b'#'
+                && pos + 5 < source.len()
+                && &source[pos..pos + 6] == b"#endif";
+            let skip_trailing_newline = next_is_blank || next_is_endif;
 
             // Generate sorted includes text
             let sorted_text = self.generate_sorted_includes_text(
@@ -174,14 +179,12 @@ impl IncludeOrder {
             Project,
         }
 
-        let associated_headers = self.get_associated_headers(file_path);
-
         let grouped_includes: Vec<(&&str, IncludeGroup)> = expected_order
             .iter()
             .map(|path| {
                 let group = if *path == "config.h" {
                     IncludeGroup::Config
-                } else if associated_headers.contains(&path.to_string()) {
+                } else if self.is_associated_header(path, file_path) {
                     IncludeGroup::Associated
                 } else {
                     let original = includes.iter().find(|inc| inc.path == *path).unwrap();
@@ -241,14 +244,12 @@ impl IncludeOrder {
             Project = 4,    // "..."
         }
 
-        let associated_headers = self.get_associated_headers(file_path);
-
         let mut grouped: Vec<(&gobject_ast::Include, IncludeGroup)> = includes
             .iter()
             .map(|inc| {
                 let group = if inc.path == "config.h" {
                     IncludeGroup::Config
-                } else if associated_headers.contains(&inc.path) {
+                } else if self.is_associated_header(&inc.path, file_path) {
                     IncludeGroup::Associated
                 } else if inc.is_system && self.is_standard_c_header(&inc.path) {
                     IncludeGroup::StandardC
@@ -304,10 +305,9 @@ impl IncludeOrder {
     }
 
     /// Get all possible associated headers for a C file
+    /// Returns the basenames to check (without directory prefix)
     /// foo.c -> ["foo.h", "foo-private.h", "fooprivate.h"]
-    /// wayland/foo.c -> ["foo.h", "wayland/foo.h", "foo-private.h",
-    /// "wayland/foo-private.h", ...]
-    fn get_associated_headers(&self, file_path: &Path) -> Vec<String> {
+    fn get_associated_header_basenames(&self, file_path: &Path) -> Vec<String> {
         if file_path.extension() != Some(std::ffi::OsStr::new("c")) {
             return Vec::new();
         }
@@ -316,28 +316,22 @@ impl IncludeOrder {
             return Vec::new();
         };
 
-        let mut headers = Vec::new();
-
-        // Common patterns for associated headers (basename only)
-        let base_patterns = vec![
+        vec![
             format!("{}.h", stem),         // foo.c -> foo.h
             format!("{}-private.h", stem), // foo.c -> foo-private.h
             format!("{}private.h", stem),  // foo.c -> fooprivate.h
-        ];
+        ]
+    }
 
-        // Add basename patterns
-        headers.extend(base_patterns.iter().cloned());
+    /// Check if an include path is an associated header for the given file
+    /// Checks the basename of the include, so "meta-test/meta-test-monitor.h"
+    /// matches for "meta-test-monitor.c"
+    fn is_associated_header(&self, include_path: &str, file_path: &Path) -> bool {
+        let basenames = self.get_associated_header_basenames(file_path);
 
-        // Also add patterns with parent directory prefix if present
-        // e.g., src/wayland/foo.c -> wayland/foo.h
-        if let Some(parent) = file_path.parent()
-            && let Some(parent_name) = parent.file_name().and_then(|s| s.to_str())
-        {
-            for pattern in &base_patterns {
-                headers.push(format!("{}/{}", parent_name, pattern));
-            }
-        }
+        // Extract basename from include path (part after last '/')
+        let include_basename = include_path.rsplit('/').next().unwrap_or(include_path);
 
-        headers
+        basenames.iter().any(|pattern| pattern == include_basename)
     }
 }
