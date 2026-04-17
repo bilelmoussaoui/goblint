@@ -6,8 +6,8 @@ mod top_level;
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
+use ignore::WalkBuilder;
 use tree_sitter::{Node, Parser as TSParser};
-use walkdir::WalkDir;
 
 use crate::model::*;
 
@@ -77,8 +77,14 @@ impl Parser {
         let mut project = Project::new();
 
         // Parse all files (.h and .c)
-        for entry in WalkDir::new(path)
-            .into_iter()
+        // WalkBuilder respects .gitignore by default
+        for entry in WalkBuilder::new(path)
+            .hidden(false)
+            .git_ignore(true)
+            .git_global(true)
+            .git_exclude(true)
+            .require_git(false)
+            .build()
             .filter_map(|e| e.ok())
             .filter(|e| {
                 e.path()

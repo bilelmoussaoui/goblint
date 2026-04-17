@@ -6,9 +6,9 @@ use std::{
 use anyhow::Result;
 use globset::GlobSet;
 use gobject_ast::{Parser, Project};
+use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use rayon::prelude::*;
-use walkdir::WalkDir;
 
 /// AST-based project context that replaces the old tree-sitter based
 /// ProjectContext
@@ -24,8 +24,15 @@ impl AstContext {
         spinner: Option<&ProgressBar>,
     ) -> Result<Self> {
         // Collect all files first to get count
-        let files: Vec<_> = WalkDir::new(directory)
-            .into_iter()
+        // WalkBuilder respects .gitignore, .ignore, and other ignore files
+        // automatically
+        let files: Vec<_> = WalkBuilder::new(directory)
+            .hidden(false) // Include hidden files/dirs
+            .git_ignore(true) // Respect .gitignore
+            .git_global(true) // Respect global gitignore
+            .git_exclude(true) // Respect .git/info/exclude
+            .require_git(false) // Work in non-git directories too
+            .build()
             .filter_map(|e| e.ok())
             .filter(|e| {
                 e.path()
