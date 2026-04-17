@@ -94,7 +94,12 @@ impl UntranslatedString {
         }
 
         // Check if it's a raw string literal
-        if matches!(&**arg_expr, Expression::StringLiteral(_)) {
+        if let Expression::StringLiteral(string_lit) = &**arg_expr {
+            // Skip empty strings - they don't need translation
+            if string_lit.value.is_empty() {
+                return;
+            }
+
             let location = arg_expr.location();
             violations.push(self.violation(
                 file_path,
