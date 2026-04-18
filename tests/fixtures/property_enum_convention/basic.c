@@ -1,21 +1,102 @@
 #include <glib-object.h>
 
-/* First enum: missing PROP_0, has = 0 */
+/* Case 1: Old pattern with PROP_0 and N_PROPS */
 typedef enum {
-  PROP_NAME = 0,
+  PROP_0,
+  PROP_NAME,
   PROP_TITLE,
-  PROP_DESCRIPTION
-} MyObjectProps;
+  PROP_DESCRIPTION,
+  N_PROPS
+} MyObjectProperty;
 
-/* Second enum: missing PROP_0 - will conflict with first when fixed */
-typedef enum {
-  PROP_FOO,
-  PROP_BAR
-} MyObjectProps2;
+static GParamSpec *my_props[N_PROPS] = { NULL, };
 
-/* Third enum: already correct with prefix */
+static void
+my_object_class_init (MyObjectClass *klass)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  my_props[PROP_NAME] = g_param_spec_string ("name", NULL, NULL, NULL, G_PARAM_READWRITE);
+  my_props[PROP_TITLE] = g_param_spec_string ("title", NULL, NULL, NULL, G_PARAM_READWRITE);
+  my_props[PROP_DESCRIPTION] = g_param_spec_string ("description", NULL, NULL, NULL, G_PARAM_READWRITE);
+
+  g_object_class_install_properties (object_class, N_PROPS, my_props);
+}
+
+/* Case 2: Old pattern with prefix */
 typedef enum {
-  WIDGET_PROPS_PROP_0,
-  PROP_WIDTH,
-  PROP_HEIGHT
-} WidgetProps;
+  WIDGET_PROP_0,
+  WIDGET_PROP_WIDTH,
+  WIDGET_PROP_HEIGHT,
+  WIDGET_N_PROPS
+} WidgetProperty;
+
+static GParamSpec *widget_props[WIDGET_N_PROPS] = { NULL, };
+
+static void
+widget_class_init (WidgetClass *klass)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  widget_props[WIDGET_PROP_WIDTH] = g_param_spec_int ("width", NULL, NULL, 0, 100, 0, G_PARAM_READWRITE);
+  widget_props[WIDGET_PROP_HEIGHT] = g_param_spec_int ("height", NULL, NULL, 0, 100, 0, G_PARAM_READWRITE);
+
+  g_object_class_install_properties (object_class, WIDGET_N_PROPS, widget_props);
+}
+
+/* Case 3: Already using modern pattern - should NOT be flagged */
+typedef enum {
+  MODERN_PROP_FOO = 1,
+  MODERN_PROP_BAR,
+  MODERN_PROP_BAZ
+} ModernProperty;
+
+static GParamSpec *modern_props[MODERN_PROP_BAZ + 1] = { NULL, };
+
+static void
+modern_class_init (ModernClass *klass)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  modern_props[MODERN_PROP_FOO] = g_param_spec_string ("foo", NULL, NULL, NULL, G_PARAM_READWRITE);
+  modern_props[MODERN_PROP_BAR] = g_param_spec_string ("bar", NULL, NULL, NULL, G_PARAM_READWRITE);
+  modern_props[MODERN_PROP_BAZ] = g_param_spec_string ("baz", NULL, NULL, NULL, G_PARAM_READWRITE);
+
+  g_object_class_install_properties (object_class, G_N_ELEMENTS (modern_props), modern_props);
+}
+
+/* Case 4: Non-GParamSpec array using N_PROPS - should NOT be touched */
+static int counts[N_PROPS];
+
+/* Case 5: GParamSpec array in conditional block */
+#ifdef ENABLE_FEATURE
+typedef enum {
+  FEATURE_PROP_0,
+  FEATURE_PROP_ENABLED,
+  FEATURE_PROP_VALUE,
+  FEATURE_N_PROPS
+} FeatureProperty;
+
+static GParamSpec *feature_props[FEATURE_N_PROPS] = { NULL, };
+
+static void
+feature_class_init (FeatureClass *klass)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  feature_props[FEATURE_PROP_ENABLED] = g_param_spec_boolean ("enabled", NULL, NULL, FALSE, G_PARAM_READWRITE);
+  feature_props[FEATURE_PROP_VALUE] = g_param_spec_int ("value", NULL, NULL, 0, 100, 0, G_PARAM_READWRITE);
+
+  g_object_class_install_properties (object_class, FEATURE_N_PROPS, feature_props);
+}
+#endif
+
+/* Case 6: install_properties call that doesn't use the right array - should NOT be touched */
+static void
+wrong_usage (void)
+{
+  GObjectClass *object_class = NULL;
+
+  /* This uses N_PROPS but passes a different array that we don't track */
+  g_object_class_install_properties (object_class, N_PROPS, some_other_props);
+}

@@ -12,7 +12,6 @@ Rules that detect code that is outright wrong or very useless.
 
 - **g_error_init** - Ensure GError* variables are initialized to NULL
 - **g_error_leak** - Check for GError variables that are neither freed nor propagated
-- **property_enum_convention** - Ensure property enums start with PROP_0, not PROP_NAME = 0
 - **g_param_spec_static_name_canonical** - Ensure property names are canonical (use dashes, not underscores). Critical with G_PARAM_STATIC_NAME
 - **g_object_virtual_methods_chain_up** - Ensure dispose/finalize/constructed methods chain up to parent class
 - **strcmp_explicit_comparison** - Require explicit comparison with 0 for strcmp/g_strcmp0 (returns 0 for equality, not TRUE)
@@ -30,6 +29,7 @@ Rules that detect code that is most likely wrong or useless.
 
 Rules that suggest more idiomatic ways to write code.
 
+- **property_enum_convention** - Modernize property enum pattern: remove PROP_0/N_PROPS sentinels, start from = 1, use LAST_PROP + 1 for array size, and G_N_ELEMENTS for install_properties.
 - **include_order** - Enforce consistent include ordering: config.h, associated header, standard C headers, system headers (<>), project headers ("") (all alphabetically sorted within each group, blank line between groups)
   - **Per-rule config option `config_header`**: Customize the config header filename (default: `"config.h"`). Example:
     ```toml
