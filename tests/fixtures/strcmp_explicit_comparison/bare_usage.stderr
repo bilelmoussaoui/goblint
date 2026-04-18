@@ -1,0 +1,4 @@
+bare_usage.c:7:7: strcmp_explicit_comparison: strcmp() returns 0 for equality — add explicit comparison: 'strcmp(...) != 0'
+bare_usage.c:11:8: strcmp_explicit_comparison: strcmp() returns 0 for equality — use 'strcmp(...) == 0' instead of '!strcmp(...)'
+bare_usage.c:15:7: strcmp_explicit_comparison: g_strcmp0() returns 0 for equality — add explicit comparison: 'g_strcmp0(...) != 0'
+bare_usage.c:19:8: strcmp_explicit_comparison: g_strcmp0() returns 0 for equality — use 'g_strcmp0(...) == 0' instead of '!g_strcmp0(...)'

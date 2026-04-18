@@ -111,6 +111,7 @@ macro_rules! for_each_rule {
             (use_g_settings_typed, UseGSettingsTyped, 2, 26),
             (use_g_value_set_static_string, UseGValueSetStaticString, 2, 0),
             (use_g_variant_new_typed, UseGVariantNewTyped, 2, 24),
+            (strcmp_explicit_comparison, StrcmpExplicitComparison, 2, 0),
             (use_g_strcmp0, UseGStrcmp0, 2, 16),
             (use_clear_functions, UseClearFunctions, 2, 28),
             (use_explicit_default_flags, UseExplicitDefaultFlags, 2, 0),

@@ -333,6 +333,10 @@ rule_test!(
 );
 rule_test!(use_g_ascii_functions, goblint::rules::UseGAsciiFunctions);
 rule_test!(use_g_strlcpy, goblint::rules::UseGStrlcpy);
+rule_test!(
+    strcmp_explicit_comparison,
+    goblint::rules::StrcmpExplicitComparison
+);
 rule_test!(use_g_strcmp0, goblint::rules::UseGStrcmp0);
 rule_test!(
     use_g_string_free_and_steal,

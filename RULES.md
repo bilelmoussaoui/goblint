@@ -24,6 +24,7 @@ Rules that detect code that is most likely wrong or useless.
 
 - **missing_implementation** - Report functions declared in headers but not implemented
 - **g_task_source_tag** - Ensure g_task_set_source_tag is called after g_task_new
+- **strcmp_explicit_comparison** - Require explicit comparison with 0 for strcmp/g_strcmp0 (returns 0 for equality, not TRUE)
 - **unnecessary_null_check** - Detect unnecessary NULL checks before g_free/g_clear_* functions
 
 ## Style
@@ -39,7 +40,7 @@ Rules that suggest more idiomatic ways to write code.
     ```
 - **use_g_settings_typed** - Prefer g_settings_get/set_string/boolean/etc over g_settings_get/set_value with g_variant
 - **use_g_variant_new_typed** - Prefer g_variant_new_string/boolean/etc over g_variant_new with format strings
-- **use_g_strcmp0** - Suggest g_strcmp0 instead of strcmp if arguments can be NULL (NULL-safe); also detects misuse of strcmp/g_strcmp0 as bare boolean checks
+- **use_g_strcmp0** - Suggest g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)
 - **use_explicit_default_flags** - Use explicit default flag constants (e.g., G_APPLICATION_DEFAULT_FLAGS) instead of 0
 - **use_g_string_free_and_steal** - Suggests g_string_free_and_steal instead of g_string_free (..., FALSE) for better readability
 - **use_g_source_once** - Suggest using g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE

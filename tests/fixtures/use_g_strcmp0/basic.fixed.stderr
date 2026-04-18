@@ -1,1 +1,0 @@
-basic.c:16:7: use_g_strcmp0: Consider g_strcmp0 or check for NULL first instead of strncmp (if NULL-safety needed)
