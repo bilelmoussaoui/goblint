@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::{Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -89,6 +89,8 @@ impl RuleLevel {
 pub struct RuleConfig {
     pub level: RuleLevel,
     pub ignore: Vec<String>,
+    /// Rule-specific options (e.g., config_header for include_order)
+    pub options: HashMap<String, toml::Value>,
 }
 
 impl Default for RuleConfig {
@@ -96,6 +98,7 @@ impl Default for RuleConfig {
         Self {
             level: RuleLevel::Warn,
             ignore: Vec::new(),
+            options: HashMap::new(),
         }
     }
 }
@@ -130,6 +133,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
                         RuleLevel::Ignore
                     },
                     ignore: Vec::new(),
+                    options: HashMap::new(),
                 })
             }
 
@@ -151,6 +155,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
                 Ok(RuleConfig {
                     level,
                     ignore: Vec::new(),
+                    options: HashMap::new(),
                 })
             }
 
@@ -160,6 +165,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
             {
                 let mut level = None;
                 let mut ignore = None;
+                let mut options = HashMap::new();
 
                 while let Some(key) = map.next_key::<String>()? {
                     match key.as_str() {
@@ -187,7 +193,9 @@ impl<'de> Deserialize<'de> for RuleConfig {
                             ignore = Some(map.next_value()?);
                         }
                         _ => {
-                            let _: serde::de::IgnoredAny = map.next_value()?;
+                            // Capture unknown fields as rule-specific options
+                            let value: toml::Value = map.next_value()?;
+                            options.insert(key, value);
                         }
                     }
                 }
@@ -195,6 +203,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
                 Ok(RuleConfig {
                     level: level.unwrap_or(RuleLevel::Error),
                     ignore: ignore.unwrap_or_default(),
+                    options,
                 })
             }
         }
@@ -265,6 +274,22 @@ impl Config {
         }
 
         builder.build().context("Failed to build ignore matcher")
+    }
+
+    /// Get reference to a rule config by field name
+    pub fn get_rule_config(&self, field_name: &str) -> Option<&RuleConfig> {
+        macro_rules! impl_get_rule_config {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+                match field_name {
+                    $(
+                        stringify!($config_field) => Some(&self.rules.$config_field),
+                    )*
+                    _ => None,
+                }
+            };
+        }
+
+        crate::for_each_rule!(impl_get_rule_config)
     }
 
     /// Get mutable reference to a rule config by field name

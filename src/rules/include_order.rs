@@ -11,7 +11,7 @@ impl Rule for IncludeOrder {
     }
 
     fn description(&self) -> &'static str {
-        "Enforce consistent include ordering: config.h, associated header, system headers, project headers"
+        "Enforce consistent include ordering: config header (configurable), associated header, system headers, project headers"
     }
 
     fn category(&self) -> super::Category {
@@ -25,11 +25,23 @@ impl Rule for IncludeOrder {
     fn check_all(
         &self,
         ast_context: &AstContext,
-        _config: &Config,
+        config: &Config,
         violations: &mut Vec<Violation>,
     ) {
+        let config_header = config
+            .get_rule_config("include_order")
+            .and_then(|rc| rc.options.get("config_header"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("config.h");
+
         for (path, file) in ast_context.iter_all_files() {
-            self.check_include_groups(&file.top_level_items, path, &file.source, violations);
+            self.check_include_groups(
+                &file.top_level_items,
+                path,
+                &file.source,
+                config_header,
+                violations,
+            );
         }
     }
 }
@@ -43,6 +55,7 @@ impl IncludeOrder {
         items: &[gobject_ast::top_level::TopLevelItem],
         file_path: &Path,
         source: &[u8],
+        config_header: &str,
         violations: &mut Vec<Violation>,
     ) {
         use gobject_ast::top_level::{PreprocessorDirective, TopLevelItem};
@@ -65,7 +78,7 @@ impl IncludeOrder {
                 }
                 TopLevelItem::Preprocessor(PreprocessorDirective::Conditional { body, .. }) => {
                     // Recursively check includes within the conditional block
-                    self.check_include_groups(body, file_path, source, violations);
+                    self.check_include_groups(body, file_path, source, config_header, violations);
                 }
                 _ => {}
             }
@@ -73,7 +86,13 @@ impl IncludeOrder {
 
         // Check and fix all top-level includes as one group
         if !top_level_includes.is_empty() {
-            self.check_and_fix_group_scattered(&top_level_includes, file_path, source, violations);
+            self.check_and_fix_group_scattered(
+                &top_level_includes,
+                file_path,
+                source,
+                config_header,
+                violations,
+            );
         }
     }
 
@@ -84,82 +103,86 @@ impl IncludeOrder {
         includes: &[gobject_ast::Include],
         file_path: &Path,
         source: &[u8],
+        config_header: &str,
         violations: &mut Vec<Violation>,
     ) {
         if includes.is_empty() {
             return;
         }
 
-        let expected_order = self.compute_expected_order(file_path, includes);
+        // Step 1: Compute expected vs actual order
+        let expected_order = self.compute_expected_order(file_path, includes, config_header);
         let current_order: Vec<_> = includes.iter().map(|inc| &inc.path).collect();
 
-        if expected_order != current_order {
-            let mut fixes = Vec::new();
-
-            // Check what comes after the LAST include in source order
-            // (this is what will come after the sorted includes after deletions)
-            let last_inc = &includes[includes.len() - 1];
-            let mut pos = last_inc.location.end_byte;
-
-            // Skip the newline at end of include line
-            if pos < source.len() && source[pos] == b'\n' {
-                pos += 1;
-            }
-
-            // Skip trailing newline if:
-            // - Next line is already blank, OR
-            // - Next line is #endif (end of conditional block)
-            let next_is_blank = pos < source.len() && source[pos] == b'\n';
-            let next_is_endif = pos < source.len()
-                && source[pos] == b'#'
-                && pos + 5 < source.len()
-                && &source[pos..pos + 6] == b"#endif";
-            let skip_trailing_newline = next_is_blank || next_is_endif;
-
-            // Generate sorted includes text
-            let sorted_text = self.generate_sorted_includes_text(
-                &expected_order,
-                includes,
-                file_path,
-                skip_trailing_newline,
-            );
-
-            // Check if there's a blank line after the first include that we need to consume
-            let first_inc = &includes[0];
-            let mut first_end = first_inc.location.end_byte;
-            if first_end < source.len() && source[first_end] == b'\n' {
-                first_end += 1;
-                // If there's a blank line, include it in the replacement
-                if first_end < source.len() && source[first_end] == b'\n' {
-                    first_end += 1;
-                }
-            }
-
-            // Replace first include (and any blank line after it) with all sorted includes
-            fixes.push(Fix::new(
-                includes[0].location.start_byte,
-                first_end,
-                sorted_text,
-            ));
-
-            // Remove all other includes
-            for inc in &includes[1..] {
-                let mut end_byte = inc.location.end_byte;
-                // Remove the include line and its newline
-                if end_byte < source.len() && source[end_byte] == b'\n' {
-                    end_byte += 1;
-                }
-                fixes.push(Fix::new(inc.location.start_byte, end_byte, String::new()));
-            }
-
-            violations.push(self.violation_with_fixes(
-                file_path,
-                includes[0].location.line,
-                1,
-                "Includes are not in the correct order. Expected: config.h (if present), associated header, standard C headers, system headers (<>), project headers (\"\") (all alphabetically sorted within each group, blank line between groups)".to_string(),
-                fixes,
-            ));
+        if expected_order == current_order {
+            return; // Already in correct order
         }
+
+        // Step 2: Gather information about the include block
+        let first_inc = &includes[0];
+        let last_inc = includes
+            .iter()
+            .max_by_key(|inc| inc.location.end_byte)
+            .unwrap();
+
+        // Step 3: Determine spacing after the last include (to preserve it)
+        // The last include's end_byte points right after its newline
+        let pos_after_last = last_inc.location.end_byte;
+        let trailing_newlines = {
+            let mut count = 0;
+            let mut check_pos = pos_after_last;
+            while check_pos < source.len() && source[check_pos] == b'\n' {
+                count += 1;
+                check_pos += 1;
+            }
+            count
+        };
+
+        // Step 4: Generate sorted includes with preserved trailing spacing
+        let sorted_text = self.generate_sorted_includes_text(
+            &expected_order,
+            includes,
+            file_path,
+            config_header,
+            trailing_newlines,
+        );
+
+        // Step 5: Build fixes
+        let mut fixes = Vec::new();
+
+        // Replace first include with all sorted includes (including trailing newlines)
+        // Also consume any blank lines immediately after the first include
+        let mut first_end = first_inc.location.end_byte;
+        while first_end < source.len() && source[first_end] == b'\n' {
+            first_end += 1;
+        }
+        fixes.push(Fix::new(
+            first_inc.location.start_byte,
+            first_end,
+            sorted_text,
+        ));
+
+        // Delete all other includes
+        // Consume any blank lines immediately after each deleted include
+        for inc in includes.iter().skip(1) {
+            let mut end = inc.location.end_byte;
+            // Consume blank lines after this include
+            while end < source.len() && source[end] == b'\n' {
+                end += 1;
+            }
+            fixes.push(Fix::new(inc.location.start_byte, end, String::new()));
+        }
+
+        violations.push(self.violation_with_fixes(
+            file_path,
+            first_inc.location.line,
+            1,
+            format!(
+                "Includes are not in the correct order. Expected: {} (if present), associated header, standard C headers, system headers (<>), project headers (\"\") (all alphabetically sorted within each group, blank line between groups)",
+                config_header
+            ),
+            fixes,
+        ));
     }
 
     /// Generate the text for sorted includes with proper grouping
@@ -168,7 +191,8 @@ impl IncludeOrder {
         expected_order: &[&str],
         includes: &[gobject_ast::Include],
         file_path: &Path,
-        skip_trailing_newline: bool,
+        config_header: &str,
+        trailing_newlines: usize,
     ) -> String {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         enum IncludeGroup {
@@ -182,7 +206,7 @@ impl IncludeOrder {
         let grouped_includes: Vec<(&&str, IncludeGroup)> = expected_order
             .iter()
             .map(|path| {
-                let group = if *path == "config.h" {
+                let group = if *path == config_header {
                     IncludeGroup::Config
                 } else if self.is_associated_header(path, file_path) {
                     IncludeGroup::Associated
@@ -221,8 +245,8 @@ impl IncludeOrder {
             result.push_str(&format!("#include {}{}{}\n", bracket.0, path, bracket.1));
         }
 
-        // Add trailing blank line unless we should skip it
-        if !skip_trailing_newline {
+        // Add trailing newlines to preserve original spacing
+        for _ in 0..trailing_newlines {
             result.push('\n');
         }
 
@@ -234,6 +258,7 @@ impl IncludeOrder {
         &self,
         file_path: &Path,
         includes: &'a [gobject_ast::Include],
+        config_header: &str,
     ) -> Vec<&'a str> {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         enum IncludeGroup {
@@ -247,7 +272,7 @@ impl IncludeOrder {
         let mut grouped: Vec<(&gobject_ast::Include, IncludeGroup)> = includes
             .iter()
             .map(|inc| {
-                let group = if inc.path == "config.h" {
+                let group = if inc.path == config_header {
                     IncludeGroup::Config
                 } else if self.is_associated_header(&inc.path, file_path) {
                     IncludeGroup::Associated

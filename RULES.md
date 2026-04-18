@@ -2,6 +2,10 @@
 
 All rules are enabled by default. Run `goblint --list-rules` to see their current status.
 
+## Per-Rule Configuration
+
+Some rules support additional configuration options beyond `level` and `ignore`. These are documented in the rule descriptions below.
+
 ## Correctness
 
 Rules that detect code that is outright wrong or very useless.
@@ -27,6 +31,12 @@ Rules that detect code that is most likely wrong or useless.
 Rules that suggest more idiomatic ways to write code.
 
 - **include_order** - Enforce consistent include ordering: config.h, associated header, standard C headers, system headers (<>), project headers ("") (all alphabetically sorted within each group, blank line between groups)
+  - **Per-rule config option `config_header`**: Customize the config header filename (default: `"config.h"`). Example:
+    ```toml
+    [rules.include_order]
+    level = "error"
+    config_header = "myproject-config.h"
+    ```
 - **use_g_settings_typed** - Prefer g_settings_get/set_string/boolean/etc over g_settings_get/set_value with g_variant
 - **use_g_variant_new_typed** - Prefer g_variant_new_string/boolean/etc over g_variant_new with format strings
 - **use_g_strcmp0** - Suggest g_strcmp0 instead of strcmp if arguments can be NULL (NULL-safe); also detects misuse of strcmp/g_strcmp0 as bare boolean checks
