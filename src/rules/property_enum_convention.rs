@@ -27,6 +27,44 @@ impl Rule for PropertyEnumConvention {
         violations: &mut Vec<Violation>,
     ) {
         for (path, file) in ast_context.iter_all_files() {
+            // Collect sentinel names from enums that will be transformed
+            // (skip override pattern enums and already-modern enums)
+            let sentinel_usage: std::collections::HashMap<String, usize> = file
+                .iter_all_enums()
+                .filter(|e| self.is_property_enum(e))
+                .filter(|e| {
+                    // Apply same checks as main loop to see if this enum will be transformed
+                    let has_prop_0 = e
+                        .values
+                        .first()
+                        .map(|v| v.name.ends_with("_PROP_0") || v.name == "PROP_0")
+                        .unwrap_or(false);
+
+                    let has_n_props_at_end = e
+                        .values
+                        .last()
+                        .map(|v| Self::is_sentinel_name(&v.name))
+                        .unwrap_or(false);
+
+                    let has_n_props_in_middle = e.values.iter().enumerate().any(|(idx, v)| {
+                        idx < e.values.len() - 1 && Self::is_sentinel_name(&v.name)
+                    });
+
+                    // Only count if it will be transformed (not override pattern, not already
+                    // modern)
+                    !has_n_props_in_middle && (has_prop_0 || has_n_props_at_end)
+                })
+                .filter_map(|e| {
+                    e.values
+                        .iter()
+                        .find(|v| Self::is_sentinel_name(&v.name))
+                        .map(|v| v.name.clone())
+                })
+                .fold(std::collections::HashMap::new(), |mut map, name| {
+                    *map.entry(name).or_insert(0) += 1;
+                    map
+                });
+
             for enum_info in file.iter_all_enums() {
                 if !self.is_property_enum(enum_info) {
                     continue;
@@ -42,13 +80,20 @@ impl Rule for PropertyEnumConvention {
                 let has_n_props = enum_info
                     .values
                     .last()
-                    .map(|v| {
-                        v.name.ends_with("_N_PROPS")
-                            || v.name == "N_PROPS"
-                            || v.name.ends_with("_PROP_LAST")
-                            || v.name == "PROP_LAST"
-                    })
+                    .map(|v| Self::is_sentinel_name(&v.name))
                     .unwrap_or(false);
+
+                // Check if N_PROPS appears in the middle (not last) - this is the override
+                // properties pattern
+                let has_n_props_in_middle = enum_info.values.iter().enumerate().any(|(idx, v)| {
+                    idx < enum_info.values.len() - 1 && Self::is_sentinel_name(&v.name)
+                });
+
+                if has_n_props_in_middle {
+                    // Skip: N_PROPS in the middle means override properties follow
+                    // This is a legitimate pattern for interface implementations
+                    continue;
+                }
 
                 if !has_prop_0 && !has_n_props {
                     // Already using new pattern, skip
@@ -79,12 +124,25 @@ impl Rule for PropertyEnumConvention {
                 // Fix 2: Add " = 1" to the first real property (second value)
                 if has_prop_0 && enum_info.values.len() >= 2 {
                     let first_real = &enum_info.values[1];
-                    // Insert " = 1" right after the property name
-                    fixes.push(Fix::new(
-                        first_real.name_end_byte,
-                        first_real.name_end_byte,
-                        " = 1".to_string(),
-                    ));
+
+                    // If the property already has a value (e.g., "= 0"), remove it first
+                    if first_real.value == Some(0)
+                        && let Some(value_end) = first_real.value_end_byte
+                    {
+                        // Remove existing " = 0" or "= 0" and replace with " = 1"
+                        fixes.push(Fix::new(
+                            first_real.name_end_byte,
+                            value_end,
+                            " = 1".to_string(),
+                        ));
+                    } else {
+                        // Just insert " = 1" right after the property name
+                        fixes.push(Fix::new(
+                            first_real.name_end_byte,
+                            first_real.name_end_byte,
+                            " = 1".to_string(),
+                        ));
+                    }
                 }
 
                 // Fix 3: Remove N_PROPS line entirely, and remove trailing comma from previous
@@ -116,7 +174,8 @@ impl Rule for PropertyEnumConvention {
 
                 // Fix 4 & 5: Find GParamSpec arrays and fix both their declarations and
                 // install_properties calls
-                if has_n_props {
+                // Only fix if this sentinel name is unique in the file (avoid ambiguity)
+                if has_n_props && sentinel_usage.get(&n_props_name).copied().unwrap_or(0) == 1 {
                     let array_names = self.find_and_fix_param_spec_arrays(
                         file,
                         &n_props_name,
@@ -180,6 +239,16 @@ impl PropertyEnumConvention {
             .values
             .iter()
             .any(|v| v.name.contains("_PROP_") || v.name.starts_with("PROP_"))
+    }
+
+    /// Check if a name is a sentinel (N_PROPS, PROP_LAST, NUM_PROPERTIES, etc.)
+    fn is_sentinel_name(name: &str) -> bool {
+        name.ends_with("_N_PROPS")
+            || name == "N_PROPS"
+            || name.ends_with("_PROP_LAST")
+            || name == "PROP_LAST"
+            || name.ends_with("_NUM_PROPERTIES")
+            || name == "NUM_PROPERTIES"
     }
 
     /// Find the line bounds (start and end byte positions) for a given byte

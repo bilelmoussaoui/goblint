@@ -1,0 +1,2 @@
+edge_cases.c:4:1: property_enum_convention: Use modern property enum pattern (remove PROP_0, N_PROPS, start from = 1)
+edge_cases.c:25:1: property_enum_convention: Use modern property enum pattern (remove LEGACY_PROP_0, LEGACY_NUM_PROPERTIES, start from = 1)
