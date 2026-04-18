@@ -1,0 +1,5 @@
+multiple_same_line.c:7:7: use_g_strcmp0: Consider g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)
+multiple_same_line.c:7:34: use_g_strcmp0: Consider g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)
+multiple_same_line.c:11:7: use_g_strcmp0: Consider g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)
+multiple_same_line.c:11:34: use_g_strcmp0: Consider g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)
+multiple_same_line.c:11:61: use_g_strcmp0: Consider g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)

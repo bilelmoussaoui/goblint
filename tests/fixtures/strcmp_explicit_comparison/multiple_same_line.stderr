@@ -1,0 +1,6 @@
+multiple_same_line.c:7:7: strcmp_explicit_comparison: strcmp() returns 0 for equality — add explicit comparison: 'strcmp(...) != 0'
+multiple_same_line.c:7:24: strcmp_explicit_comparison: strcmp() returns 0 for equality — add explicit comparison: 'strcmp(...) != 0'
+multiple_same_line.c:11:8: strcmp_explicit_comparison: strcmp() returns 0 for equality — use 'strcmp(...) == 0' instead of '!strcmp(...)'
+multiple_same_line.c:11:26: strcmp_explicit_comparison: strcmp() returns 0 for equality — use 'strcmp(...) == 0' instead of '!strcmp(...)'
+multiple_same_line.c:15:7: strcmp_explicit_comparison: strcmp() returns 0 for equality — add explicit comparison: 'strcmp(...) != 0'
+multiple_same_line.c:15:25: strcmp_explicit_comparison: strcmp() returns 0 for equality — use 'strcmp(...) == 0' instead of '!strcmp(...)'

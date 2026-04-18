@@ -42,10 +42,13 @@ impl UseGStrcmp0 {
         violations: &mut Vec<Violation>,
     ) {
         for stmt in statements {
-            stmt.walk(&mut |s| {
-                // Walk all expressions in the statement
-                s.walk_expressions(&mut |expr| {
-                    self.check_expression(expr, file_path, violations);
+            // Walk all expressions in the statement tree (recursively)
+            // walk_expressions visits each expression in the statement tree,
+            // but does not recurse into nested expressions within those expressions
+            stmt.walk_expressions(&mut |expr| {
+                // Walk this expression and all its nested expressions
+                expr.walk(&mut |e| {
+                    self.check_expression(e, file_path, violations);
                 });
             });
         }
@@ -76,12 +79,5 @@ impl UseGStrcmp0 {
                     fix,
                 ));
         }
-
-        // Recursively check nested expressions
-        expr.walk(&mut |e| {
-            if !std::ptr::eq(e, expr) {
-                self.check_expression(e, file_path, violations);
-            }
-        });
     }
 }
