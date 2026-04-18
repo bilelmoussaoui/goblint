@@ -25,11 +25,23 @@ impl Rule for GParamSpecStaticStrings {
     fn check_func_impl(
         &self,
         _ast_context: &AstContext,
-        _config: &Config,
+        config: &Config,
         func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
+        // Get custom flags that already include static strings
+        let static_flags = config
+            .get_rule_config("g_param_spec_static_strings")
+            .and_then(|rc| rc.options.get("static_flags"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
         // Find all g_param_spec_* calls (but skip g_param_spec_override and
         // g_param_spec_internal)
         for call in func.find_calls_matching(|name| {
@@ -37,7 +49,7 @@ impl Rule for GParamSpecStaticStrings {
                 && name != "g_param_spec_override"
                 && name != "g_param_spec_internal"
         }) {
-            self.check_call(path, call, violations);
+            self.check_call(path, call, &static_flags, violations);
         }
     }
 }
@@ -47,6 +59,7 @@ impl GParamSpecStaticStrings {
         &self,
         file_path: &std::path::Path,
         call: &CallExpression,
+        custom_static_flags: &[String],
         violations: &mut Vec<Violation>,
     ) {
         // g_param_spec_*(name, nick, blurb, ..., flags) — need at least 4 args
@@ -71,9 +84,18 @@ impl GParamSpecStaticStrings {
         let has_static_nick = property.flags.contains(&ParamFlag::StaticNick);
         let has_static_blurb = property.flags.contains(&ParamFlag::StaticBlurb);
 
+        // Check if any custom flags that include static strings are present
+        let has_custom_static_flag = property.flags.iter().any(|flag| {
+            if let ParamFlag::Unknown(name) = flag {
+                custom_static_flags.contains(name)
+            } else {
+                false
+            }
+        });
+
         // Is the minimal required set of static flags already present?
-        let is_satisfied = if has_static_strings {
-            // G_PARAM_STATIC_STRINGS covers everything — always satisfied
+        let is_satisfied = if has_static_strings || has_custom_static_flag {
+            // G_PARAM_STATIC_STRINGS or custom flag covers everything — always satisfied
             true
         } else if nick_is_literal && blurb_is_literal {
             // All three strings are literals — need NAME + NICK + BLURB

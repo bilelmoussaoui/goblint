@@ -72,6 +72,14 @@ Rules that suggest simpler alternatives to complex patterns.
 Rules that suggest changes for better performance.
 
 - **g_param_spec_static_strings** - Ensure g_param_spec_* calls use G_PARAM_STATIC_STRINGS flag for string literals
+  - **Per-rule config option `static_flags`**: List of custom flag constants that already include `G_PARAM_STATIC_STRINGS` (default: `[]`). Use this if your project has custom macros like `ST_PARAM_READWRITE` that already include the static strings flag. Example:
+
+    ```toml
+    [rules.g_param_spec_static_strings]
+    level = "error"
+    static_flags = ["ST_PARAM_READWRITE", "ST_PARAM_READABLE"]
+    ```
+
 - **use_g_value_set_static_string** - Use g_value_set_static_string for string literals instead of g_value_set_string
 - **use_g_object_notify_by_pspec** - Suggest g_object_notify_by_pspec instead of g_object_notify for better performance
 
