@@ -13,7 +13,7 @@ impl Rule for UseGObjectClassInstallProperties {
     }
 
     fn category(&self) -> super::Category {
-        super::Category::Pedantic
+        super::Category::Complexity
     }
 
     fn fixable(&self) -> bool {

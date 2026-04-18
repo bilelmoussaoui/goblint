@@ -15,7 +15,7 @@ impl Rule for UseGSourceOnce {
     }
 
     fn category(&self) -> super::Category {
-        super::Category::Style
+        super::Category::Complexity
     }
 
     fn fixable(&self) -> bool {

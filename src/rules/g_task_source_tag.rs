@@ -15,7 +15,7 @@ impl Rule for GTaskSourceTag {
     }
 
     fn category(&self) -> super::Category {
-        super::Category::Suspicious
+        super::Category::Pedantic
     }
 
     fn fixable(&self) -> bool {

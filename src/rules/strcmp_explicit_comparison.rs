@@ -15,7 +15,7 @@ impl Rule for StrcmpExplicitComparison {
     }
 
     fn category(&self) -> super::Category {
-        super::Category::Suspicious
+        super::Category::Correctness
     }
 
     fn fixable(&self) -> bool {

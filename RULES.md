@@ -15,6 +15,7 @@ Rules that detect code that is outright wrong or very useless.
 - **property_enum_convention** - Ensure property enums start with PROP_0, not PROP_NAME = 0
 - **g_param_spec_static_name_canonical** - Ensure property names are canonical (use dashes, not underscores). Critical with G_PARAM_STATIC_NAME
 - **g_object_virtual_methods_chain_up** - Ensure dispose/finalize/constructed methods chain up to parent class
+- **strcmp_explicit_comparison** - Require explicit comparison with 0 for strcmp/g_strcmp0 (returns 0 for equality, not TRUE)
 - **use_g_ascii_functions** - Use g_ascii_* functions instead of locale-dependent C ctype functions (tolower, toupper, isdigit, etc.)
 - **use_g_strlcpy** - Avoid unsafe string functions (strcpy, strcat, strncat); use g_strlcpy/g_strlcat instead
 
@@ -23,8 +24,6 @@ Rules that detect code that is outright wrong or very useless.
 Rules that detect code that is most likely wrong or useless.
 
 - **missing_implementation** - Report functions declared in headers but not implemented
-- **g_task_source_tag** - Ensure g_task_set_source_tag is called after g_task_new
-- **strcmp_explicit_comparison** - Require explicit comparison with 0 for strcmp/g_strcmp0 (returns 0 for equality, not TRUE)
 - **unnecessary_null_check** - Detect unnecessary NULL checks before g_free/g_clear_* functions
 
 ## Style
@@ -43,7 +42,6 @@ Rules that suggest more idiomatic ways to write code.
 - **use_g_strcmp0** - Suggest g_strcmp0 instead of strcmp if arguments can be NULL (g_strcmp0 is NULL-safe)
 - **use_explicit_default_flags** - Use explicit default flag constants (e.g., G_APPLICATION_DEFAULT_FLAGS) instead of 0
 - **use_g_string_free_and_steal** - Suggests g_string_free_and_steal instead of g_string_free (..., FALSE) for better readability
-- **use_g_source_once** - Suggest using g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE
 - **use_g_source_constants** - Use G_SOURCE_CONTINUE/G_SOURCE_REMOVE instead of TRUE/FALSE in GSourceFunc callbacks
 - **use_g_steal_pointer** - Use g_steal_pointer() instead of manually copying a pointer and setting it to NULL
 - **use_g_str_has_prefix_suffix** - Use g_str_has_prefix/g_str_has_suffix() instead of manual strncmp/strcmp comparisons
@@ -65,7 +63,9 @@ Rules that suggest simpler alternatives to complex patterns.
 - **use_g_clear_list** - Suggest g_clear_list/g_clear_slist instead of manual g_list_free/g_slist_free and NULL assignment
 - **use_g_clear_weak_pointer** - Suggest g_clear_weak_pointer instead of manual g_object_remove_weak_pointer and NULL assignment
 - **use_g_file_load_bytes** - Suggest g_file_load_bytes instead of g_file_load_contents + g_bytes_new_take
+- **use_g_source_once** - Suggest using g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE
 - **use_g_object_new_with_properties** - Suggest setting properties in g_object_new instead of separate g_object_set calls
+- **use_g_object_class_install_properties** - Suggest g_object_class_install_properties for multiple g_object_class_install_property calls
 
 ## Perf
 
@@ -88,7 +88,6 @@ Rules that suggest changes for better performance.
 Rules that are rather strict or have occasional false positives.
 
 - **g_declare_semicolon** - Enforce semicolons after G_DECLARE_* and G_DEFINE_* macros (including multi-line variants)
-- **matching_declare_define** - Ensure G_DECLARE_* and G_DEFINE_* macros are used consistently
 - **g_param_spec_null_nick_blurb** - Ensure g_param_spec_* functions have NULL for nick and blurb parameters
   - **Per-rule config option `static_flags`**: List of custom flag constants that include `G_PARAM_STATIC_STRINGS`. If your project uses custom flags like `ST_PARAM_READWRITE` with non-NULL nick/blurb, this rule will skip those calls. Example:
 
@@ -98,7 +97,8 @@ Rules that are rather strict or have occasional false positives.
     static_flags = ["ST_PARAM_READWRITE"]
     ```
 
-- **use_g_object_class_install_properties** - Suggest g_object_class_install_properties for multiple g_object_class_install_property calls
+- **g_task_source_tag** - Ensure g_task_set_source_tag is called after g_task_new (useful for debugging, but not required)
+- **matching_declare_define** - Ensure G_DECLARE_* and G_DEFINE_* macros are used consistently
 - **untranslated_string** - Detect user-visible strings in GTK/Adwaita functions that should be wrapped with gettext (use inline ignore for strings that don't need translation)
 
 ## Restriction
