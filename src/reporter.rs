@@ -65,26 +65,37 @@ pub fn report_summary(violations: &[Violation], fixable: &HashMap<&str, bool>) {
         return;
     }
 
-    // Aggregate counts per rule.
+    // Aggregate counts per rule and capture level (all violations of same rule
+    // should have same level)
     let mut counts: HashMap<&str, usize> = HashMap::new();
+    let mut levels: HashMap<&str, crate::config::RuleLevel> = HashMap::new();
     for v in violations {
         *counts.entry(v.rule).or_insert(0) += 1;
+        levels.entry(v.rule).or_insert(v.level);
     }
 
-    // Build sorted rows: (rule, count, fixable), descending by count.
-    let mut rows: Vec<(&str, usize, bool)> = counts
+    // Build sorted rows: (rule, count, level, fixable), descending by count.
+    let mut rows: Vec<(&str, usize, crate::config::RuleLevel, bool)> = counts
         .iter()
-        .map(|(&rule, &count)| (rule, count, *fixable.get(rule).unwrap_or(&false)))
+        .map(|(&rule, &count)| {
+            (
+                rule,
+                count,
+                *levels.get(rule).unwrap(),
+                *fixable.get(rule).unwrap_or(&false),
+            )
+        })
         .collect();
     rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
 
     // Column widths — at least wide enough for the header labels.
     let count_w = rows
         .iter()
-        .map(|(_, c, _)| c.to_string().len())
+        .map(|(_, c, ..)| c.to_string().len())
         .max()
         .unwrap_or(0)
         .max("Count".len());
+    let level_w = "Level".len(); // "warn " / "error" all fit within this
     let rule_w = rows
         .iter()
         .map(|(r, ..)| r.len())
@@ -95,47 +106,62 @@ pub fn report_summary(violations: &[Violation], fixable: &HashMap<&str, bool>) {
 
     // Helper closures for border rows.
     let top = format!(
-        "┌{:─<cw$}┬{:─<rw$}┬{:─<fw$}┐",
+        "┌{:─<cw$}┬{:─<rw$}┬{:─<lw$}┬{:─<fw$}┐",
+        "",
         "",
         "",
         "",
         cw = count_w + 2,
         rw = rule_w + 2,
+        lw = level_w + 2,
         fw = fix_w + 2,
     );
     let sep = format!(
-        "├{:─<cw$}┼{:─<rw$}┼{:─<fw$}┤",
+        "├{:─<cw$}┼{:─<rw$}┼{:─<lw$}┼{:─<fw$}┤",
+        "",
         "",
         "",
         "",
         cw = count_w + 2,
         rw = rule_w + 2,
+        lw = level_w + 2,
         fw = fix_w + 2,
     );
     let bot = format!(
-        "└{:─<cw$}┴{:─<rw$}┴{:─<fw$}┘",
+        "└{:─<cw$}┴{:─<rw$}┴{:─<lw$}┴{:─<fw$}┘",
+        "",
         "",
         "",
         "",
         cw = count_w + 2,
         rw = rule_w + 2,
+        lw = level_w + 2,
         fw = fix_w + 2,
     );
 
     println!("{}", top);
     println!(
-        "│ {:<cw$} │ {:<rw$} │ {:<fw$} │",
+        "│ {:<cw$} │ {:<rw$} │ {:<lw$} │ {:<fw$} │",
         "Count".bold(),
         "Rule".bold(),
+        "Level".bold(),
         "Autofix".bold(),
         cw = count_w,
         rw = rule_w,
+        lw = level_w,
         fw = fix_w,
     );
     println!("{}", sep);
 
-    for (rule, count, is_fixable) in &rows {
+    for (rule, count, level, is_fixable) in &rows {
         let count_str = count.to_string().yellow().to_string();
+        let (level_str, level_len) = match level {
+            crate::config::RuleLevel::Error => ("error".red().to_string(), 5),
+            crate::config::RuleLevel::Warn => ("warn".yellow().to_string(), 4),
+            crate::config::RuleLevel::Ignore => {
+                unreachable!("Ignored violations should not be in summary")
+            }
+        };
         let rule_str = rule.cyan().to_string();
         let fix_str = if *is_fixable {
             "Yes".green().to_string()
@@ -146,15 +172,18 @@ pub fn report_summary(violations: &[Violation], fixable: &HashMap<&str, bool>) {
         // ANSI escape codes inflate the byte length of colored strings, so we
         // pad the *visible* widths by computing the difference and adding it.
         let count_pad = count_w - count.to_string().len();
+        let level_pad = level_w - level_len;
         let rule_pad = rule_w - rule.len();
         let fix_pad = fix_w - if *is_fixable { 3 } else { 2 };
 
         println!(
-            "│ {}{} │ {}{} │ {}{} │",
+            "│ {}{} │ {}{} │ {}{} │ {}{} │",
             count_str,
             " ".repeat(count_pad),
             rule_str,
             " ".repeat(rule_pad),
+            level_str,
+            " ".repeat(level_pad),
             fix_str,
             " ".repeat(fix_pad),
         );
