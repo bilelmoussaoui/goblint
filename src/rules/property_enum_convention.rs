@@ -727,35 +727,13 @@ impl PropertyEnumConvention {
                 let mut found = false;
                 stmt.walk(&mut |s| {
                     if let gobject_ast::Statement::Switch(switch_stmt) = s {
-                        // Check the source text directly for N_PROPS usage
-                        let switch_source = std::str::from_utf8(
-                            &file.source
-                                [switch_stmt.location.start_byte..switch_stmt.location.end_byte],
-                        )
-                        .unwrap_or("");
-
-                        // Check if n_props_name appears as a whole identifier (not as substring)
-                        if let Some(pos) = switch_source.find(n_props_name) {
-                            let before = if pos > 0 {
-                                switch_source.as_bytes()[pos - 1] as char
-                            } else {
-                                ' '
-                            };
-                            let after_pos = pos + n_props_name.len();
-                            let after = if after_pos < switch_source.len() {
-                                switch_source.as_bytes()[after_pos] as char
-                            } else {
-                                ' '
-                            };
-
-                            // Check if surrounded by non-identifier characters
-                            let is_whole_identifier = !before.is_alphanumeric()
-                                && before != '_'
-                                && !after.is_alphanumeric()
-                                && after != '_';
-
-                            if is_whole_identifier {
+                        // Check if any case label uses n_props_name
+                        for case in &switch_stmt.cases {
+                            if let Some(value_expr) = &case.value
+                                && self.expression_uses_identifier(value_expr, n_props_name)
+                            {
                                 found = true;
+                                break;
                             }
                         }
                     }
@@ -766,5 +744,37 @@ impl PropertyEnumConvention {
             }
         }
         false
+    }
+
+    /// Check if an expression uses a specific identifier
+    fn expression_uses_identifier(&self, expr: &gobject_ast::Expression, identifier: &str) -> bool {
+        use gobject_ast::Expression;
+        match expr {
+            Expression::Identifier(ident) => ident.name == identifier,
+            Expression::Binary(binary) => {
+                self.expression_uses_identifier(&binary.left, identifier)
+                    || self.expression_uses_identifier(&binary.right, identifier)
+            }
+            Expression::Unary(unary) => self.expression_uses_identifier(&unary.operand, identifier),
+            Expression::Call(call) => call.arguments.iter().any(|arg| {
+                let gobject_ast::Argument::Expression(expr) = arg;
+                self.expression_uses_identifier(expr, identifier)
+            }),
+            Expression::Cast(cast) => self.expression_uses_identifier(&cast.operand, identifier),
+            Expression::Conditional(cond) => {
+                self.expression_uses_identifier(&cond.condition, identifier)
+                    || self.expression_uses_identifier(&cond.then_expr, identifier)
+                    || self.expression_uses_identifier(&cond.else_expr, identifier)
+            }
+            Expression::FieldAccess(_) => {
+                // FieldAccessExpression only stores text, not parsed sub-expressions
+                false
+            }
+            Expression::Subscript(sub) => {
+                self.expression_uses_identifier(&sub.array, identifier)
+                    || self.expression_uses_identifier(&sub.index, identifier)
+            }
+            _ => false,
+        }
     }
 }

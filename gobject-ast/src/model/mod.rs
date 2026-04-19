@@ -17,7 +17,7 @@ pub use operators::{AssignmentOp, BinaryOp, UnaryOp, UpdateOp};
 pub use project::{FileModel, Project};
 pub use source_location::SourceLocation;
 pub use statement::{
-    CompoundStatement, ExpressionStmt, GotoStatement, IfStatement, LabeledStatement,
+    CaseLabel, CompoundStatement, ExpressionStmt, GotoStatement, IfStatement, LabeledStatement,
     ReturnStatement, Statement, SwitchStatement, VariableDecl,
 };
 pub use types::*;

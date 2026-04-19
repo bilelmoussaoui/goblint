@@ -14,7 +14,7 @@ pub use if_stmt::IfStatement;
 pub use labeled_stmt::LabeledStatement;
 pub use return_stmt::ReturnStatement;
 use serde::{Deserialize, Serialize};
-pub use switch_stmt::SwitchStatement;
+pub use switch_stmt::{CaseLabel, SwitchStatement};
 pub use variable_decl::VariableDecl;
 
 use crate::model::{CallExpression, Expression, SourceLocation};
