@@ -58,6 +58,12 @@ Rules that suggest simpler alternatives to complex patterns.
 - **use_g_autoptr_error** - Suggest g_autoptr(GError) instead of manual g_error_free
 - **use_g_autoptr_goto_cleanup** - Suggest g_autoptr instead of goto error cleanup pattern
 - **use_g_autoptr_inline_cleanup** - Suggest g_autoptr instead of inline manual cleanup (g_object_unref/g_free)
+  - **Per-rule config option `ignore_types`**: List of glob patterns for types to ignore (default: `[]`). Use this to skip types that don't work well with g_autoptr (e.g., Cairo, Pango types). Example:
+    ```toml
+    [rules.use_g_autoptr_inline_cleanup]
+    level = "error"
+    ignore_types = ["cairo_*", "Pango*", "RsvgHandle"]
+    ```
 - **use_g_autofree** - Suggest g_autofree for string/buffer types instead of manual g_free
 - **use_g_clear_handle_id** - Suggest g_clear_handle_id instead of manual cleanup and zero assignment
 - **use_g_clear_signal_handler** - Use g_clear_signal_handler() instead of g_signal_handler_disconnect() and zeroing the ID

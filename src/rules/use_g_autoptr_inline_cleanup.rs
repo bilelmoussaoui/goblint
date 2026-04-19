@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use gobject_ast::Statement;
 
 use super::Rule;
@@ -23,21 +24,43 @@ impl Rule for UseGAutoptrInlineCleanup {
     fn check_func_impl(
         &self,
         _ast_context: &AstContext,
-        _config: &Config,
+        config: &Config,
         func: &gobject_ast::top_level::FunctionDefItem,
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        self.check_function(func, path, violations);
+        // Build ignore matcher from config
+        let ignore_types = self.build_ignore_types_matcher(config);
+        self.check_function(func, path, violations, &ignore_types);
     }
 }
 
 impl UseGAutoptrInlineCleanup {
+    /// Build a GlobSet matcher for types to ignore from config
+    fn build_ignore_types_matcher(&self, config: &Config) -> GlobSet {
+        let mut builder = GlobSetBuilder::new();
+
+        if let Some(rule_config) = config.get_rule_config(self.name())
+            && let Some(toml::Value::Array(patterns)) = rule_config.options.get("ignore_types")
+        {
+            for pattern in patterns {
+                if let toml::Value::String(s) = pattern
+                    && let Ok(glob) = Glob::new(s)
+                {
+                    builder.add(glob);
+                }
+            }
+        }
+
+        builder.build().unwrap_or_else(|_| GlobSet::empty())
+    }
+
     fn check_function(
         &self,
         func: &gobject_ast::top_level::FunctionDefItem,
         file_path: &std::path::Path,
         violations: &mut Vec<Violation>,
+        ignore_types: &GlobSet,
     ) {
         // Find all local pointer declarations
         let local_vars = self.find_local_pointer_vars(&func.body_statements);
@@ -64,6 +87,12 @@ impl UseGAutoptrInlineCleanup {
             // 4. Variable is NOT freed with g_free (those should use g_autofree)
             if is_allocated && is_manually_freed && !is_returned && !is_freed_with_g_free {
                 let base_type = self.extract_base_type(var_type);
+
+                // Skip if type matches ignore patterns
+                if ignore_types.is_match(&base_type) {
+                    continue;
+                }
+
                 violations.push(self.violation(
                     file_path,
                     location.line,

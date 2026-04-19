@@ -29,7 +29,7 @@ impl Rule for IncludeOrder {
         violations: &mut Vec<Violation>,
     ) {
         let config_header = config
-            .get_rule_config("include_order")
+            .get_rule_config(self.name())
             .and_then(|rc| rc.options.get("config_header"))
             .and_then(|v| v.as_str())
             .unwrap_or("config.h");
