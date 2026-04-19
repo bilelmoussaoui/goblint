@@ -72,8 +72,8 @@ impl UseGAutoptrError {
     ) {
         for stmt in statements {
             for decl in stmt.iter_declarations() {
-                // Check if type contains "GError"
-                if decl.type_name.contains("GError") {
+                // Check if type is GError pointer
+                if decl.type_info.is_base_type("GError") && decl.type_info.is_pointer() {
                     result.push((decl.name.clone(), decl.location));
                 }
             }

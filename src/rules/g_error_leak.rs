@@ -37,7 +37,8 @@ impl Rule for GErrorLeak {
         for stmt in &func.body_statements {
             for decl in stmt.iter_declarations() {
                 // Check if it's a GError* variable initialized to NULL
-                if is_gerror_pointer(&decl.type_name)
+                if decl.type_info.is_base_type("GError")
+                    && decl.type_info.is_pointer()
                     && decl.initializer.as_ref().is_some_and(|init| init.is_null())
                 {
                     gerror_vars.push((decl.name.clone(), decl.location));
@@ -75,12 +76,6 @@ impl Rule for GErrorLeak {
             }
         }
     }
-}
-
-/// Check if a type is a GError pointer
-fn is_gerror_pointer(type_name: &str) -> bool {
-    let normalized = type_name.replace(' ', "");
-    normalized.contains("GError*") || normalized == "GError**"
 }
 
 /// Check if the function calls a non-returning function (g_error, g_assert,

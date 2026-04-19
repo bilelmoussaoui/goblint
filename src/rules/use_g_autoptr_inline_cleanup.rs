@@ -66,7 +66,7 @@ impl UseGAutoptrInlineCleanup {
         let local_vars = self.find_local_pointer_vars(&func.body_statements);
 
         // For each variable, check if it's a candidate for g_autoptr
-        for (var_name, (var_type, location)) in &local_vars {
+        for (var_name, (type_info, location)) in &local_vars {
             // Check if variable is allocated
             let is_allocated = self.is_var_allocated(&func.body_statements, var_name);
 
@@ -86,10 +86,10 @@ impl UseGAutoptrInlineCleanup {
             // 3. Variable is not returned directly (would need g_steal_pointer)
             // 4. Variable is NOT freed with g_free (those should use g_autofree)
             if is_allocated && is_manually_freed && !is_returned && !is_freed_with_g_free {
-                let base_type = self.extract_base_type(var_type);
+                let base_type = &type_info.base_type;
 
                 // Skip if type matches ignore patterns
-                if ignore_types.is_match(&base_type) {
+                if ignore_types.is_match(base_type) {
                     continue;
                 }
 
@@ -106,21 +106,10 @@ impl UseGAutoptrInlineCleanup {
         }
     }
 
-    fn extract_base_type(&self, type_name: &str) -> String {
-        // Extract base type from "const Foo *" -> "Foo"
-        type_name
-            .trim()
-            .trim_start_matches("const")
-            .trim()
-            .trim_end_matches('*')
-            .trim()
-            .to_string()
-    }
-
     fn find_local_pointer_vars(
         &self,
         statements: &[Statement],
-    ) -> HashMap<String, (String, gobject_ast::SourceLocation)> {
+    ) -> HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)> {
         let mut result = HashMap::new();
         self.collect_local_vars(statements, &mut result);
         result
@@ -129,27 +118,20 @@ impl UseGAutoptrInlineCleanup {
     fn collect_local_vars(
         &self,
         statements: &[Statement],
-        result: &mut HashMap<String, (String, gobject_ast::SourceLocation)>,
+        result: &mut HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)>,
     ) {
         for stmt in statements {
-            stmt.walk(&mut |s| {
-                if let Statement::Declaration(decl) = s {
-                    // Skip variables already using g_autoptr/g_autofree
-                    if decl.type_name.contains("g_autoptr") || decl.type_name.contains("g_autofree")
-                    {
-                        return;
-                    }
-
-                    // Track all pointer types - we'll filter later based on cleanup function
-                    if decl.type_name.contains('*') {
-                        // Skip field access names
-                        if !decl.name.contains("->") && !decl.name.contains('.') {
-                            result
-                                .insert(decl.name.clone(), (decl.type_name.clone(), decl.location));
-                        }
-                    }
+            for decl in stmt.iter_declarations() {
+                // Skip variables already using g_autoptr/g_autofree
+                if decl.type_info.contains("g_autoptr") || decl.type_info.contains("g_autofree") {
+                    continue;
                 }
-            });
+
+                // Track all pointer types that are simple identifiers
+                if decl.type_info.is_pointer() && decl.is_simple_identifier() {
+                    result.insert(decl.name.clone(), (decl.type_info.clone(), decl.location));
+                }
+            }
         }
     }
 

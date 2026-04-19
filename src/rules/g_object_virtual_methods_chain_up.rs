@@ -44,16 +44,16 @@ impl Rule for GObjectVirtualMethodsChainUp {
             return;
         }
 
-        let first_param_type = &func.parameters[0].type_name;
+        let first_param = &func.parameters[0];
 
         // Must be a pointer type
-        if !first_param_type.contains("*") {
+        if !first_param.type_info.is_pointer() {
             return;
         }
 
         // Must be GObject or a type ending in "Object"
         // This matches: GObject*, MyObject*, FooBarObject*, etc.
-        if !first_param_type.contains("GObject") && !first_param_type.contains("Object *") {
+        if !first_param.type_info.is_base_type("GObject") {
             return;
         }
 

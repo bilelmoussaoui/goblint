@@ -32,10 +32,10 @@ impl Rule for UseGAutofree {
         let local_vars = self.find_local_pointer_vars(&func.body_statements);
 
         // For each variable, check if it's a candidate for g_autofree
-        for (var_name, (var_type, location)) in &local_vars {
+        for (var_name, (type_info, location)) in &local_vars {
             // Only suggest g_autofree for simple types (char*, guint8*, void*, etc.)
             // Not for GObject* types (those should use g_autoptr)
-            if !var_type.contains('*') {
+            if !type_info.is_pointer() {
                 continue;
             }
 
@@ -71,7 +71,7 @@ impl UseGAutofree {
     fn find_local_pointer_vars(
         &self,
         statements: &[Statement],
-    ) -> HashMap<String, (String, gobject_ast::SourceLocation)> {
+    ) -> HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)> {
         let mut result = HashMap::new();
         self.collect_local_vars(statements, &mut result);
         result
@@ -80,13 +80,12 @@ impl UseGAutofree {
     fn collect_local_vars(
         &self,
         statements: &[Statement],
-        result: &mut HashMap<String, (String, gobject_ast::SourceLocation)>,
+        result: &mut HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)>,
     ) {
         for stmt in statements {
             for decl in stmt.iter_declarations() {
-                // Skip if var name contains -> or . (field access)
-                if !decl.name.contains("->") && !decl.name.contains('.') {
-                    result.insert(decl.name.clone(), (decl.type_name.clone(), decl.location));
+                if decl.is_simple_identifier() {
+                    result.insert(decl.name.clone(), (decl.type_info.clone(), decl.location));
                 }
             }
         }

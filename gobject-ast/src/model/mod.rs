@@ -4,6 +4,7 @@ mod project;
 mod source_location;
 pub mod statement;
 pub mod top_level;
+mod type_info;
 pub mod types;
 
 pub use expression::{
@@ -20,4 +21,5 @@ pub use statement::{
     CaseLabel, CompoundStatement, ExpressionStmt, GotoStatement, IfStatement, LabeledStatement,
     ReturnStatement, Statement, SwitchStatement, VariableDecl,
 };
+pub use type_info::TypeInfo;
 pub use types::*;

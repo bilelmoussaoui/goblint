@@ -455,7 +455,7 @@ impl Parser {
             }
 
             let type_node = child.child_by_field_name("type");
-            let mut type_name = type_node
+            let base_type = type_node
                 .and_then(|t| std::str::from_utf8(&source[t.byte_range()]).ok())
                 .unwrap_or_default()
                 .to_owned();
@@ -465,17 +465,41 @@ impl Parser {
                 .as_ref()
                 .and_then(|d| self.extract_declarator_name(*d, source));
 
-            // If declarator is a pointer_declarator, append * to type_name
-            if let Some(decl) = declarator {
-                let pointer_count = self.count_pointer_levels(decl);
-                for _ in 0..pointer_count {
-                    type_name.push('*');
-                }
+            // Count pointer levels from declarator
+            let pointer_depth = if let Some(decl) = declarator {
+                self.count_pointer_levels(decl)
+            } else {
+                0
+            };
+
+            // Check for const qualifier
+            let is_const = base_type.starts_with("const ");
+            let base_type_clean = if is_const {
+                base_type
+                    .strip_prefix("const ")
+                    .unwrap_or(&base_type)
+                    .trim()
+                    .to_string()
+            } else {
+                base_type.clone()
+            };
+
+            // Build full type text
+            let mut full_text = base_type;
+            if pointer_depth > 0 {
+                full_text.push_str(&"*".repeat(pointer_depth));
             }
+
+            let type_info = super::TypeInfo {
+                base_type: base_type_clean,
+                is_const,
+                pointer_depth,
+                full_text,
+            };
 
             parameters.push(Parameter {
                 name: name.map(ToOwned::to_owned),
-                type_name,
+                type_info,
             });
         }
 

@@ -1,27 +1,34 @@
 use tree_sitter::Node;
 
-use crate::{model::VariableDecl, parser::Parser};
+use crate::{
+    model::{TypeInfo, VariableDecl},
+    parser::Parser,
+};
 
 impl Parser {
     pub(crate) fn parse_variable_decl(&self, node: Node, source: &[u8]) -> Option<VariableDecl> {
         // declaration contains declarator and optionally type_specifier
-        let mut type_name = String::new();
+        let mut type_parts = Vec::new();
+        let mut is_const = false;
         let mut declarator = None;
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             match child.kind() {
-                "type_qualifier"
-                | "storage_class_specifier"
+                "type_qualifier" => {
+                    let qualifier = std::str::from_utf8(&source[child.byte_range()]).ok()?;
+                    if qualifier == "const" {
+                        is_const = true;
+                    }
+                    type_parts.push(qualifier);
+                }
+                "storage_class_specifier"
                 | "type_specifier"
                 | "type_identifier"
                 | "primitive_type"
                 | "sized_type_specifier"
                 | "struct_specifier" => {
-                    if !type_name.is_empty() {
-                        type_name.push(' ');
-                    }
-                    type_name.push_str(std::str::from_utf8(&source[child.byte_range()]).ok()?);
+                    type_parts.push(std::str::from_utf8(&source[child.byte_range()]).ok()?);
                 }
                 // Declarations with initializer: int x = 5;
                 "init_declarator" => {
@@ -43,11 +50,9 @@ impl Parser {
         let mut var_name = None;
         let mut initializer = None;
 
-        // For pointer types like "GError *error", check if this is a pointer declarator
+        // Count pointer depth from declarator
         let declarator_text = std::str::from_utf8(&source[declarator.byte_range()]).ok()?;
-        if declarator_text.contains('*') && !type_name.contains('*') {
-            type_name.push('*');
-        }
+        let pointer_depth = declarator_text.chars().filter(|&c| c == '*').count();
 
         let mut dec_cursor = declarator.walk();
         let mut has_equals = false;
@@ -75,8 +80,29 @@ impl Parser {
             }
         }
 
+        // Build full type text and extract base type
+        let mut full_text = type_parts.join(" ");
+        if pointer_depth > 0 {
+            full_text.push_str(&"*".repeat(pointer_depth));
+        }
+
+        // Extract base type (type without qualifiers or pointers)
+        let base_type = type_parts
+            .iter()
+            .filter(|&&part| part != "const" && part != "static" && part != "extern")
+            .copied()
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let type_info = TypeInfo {
+            base_type,
+            is_const,
+            pointer_depth,
+            full_text,
+        };
+
         Some(VariableDecl {
-            type_name,
+            type_info,
             name: var_name?.to_owned(),
             initializer,
             location: self.node_location(node),

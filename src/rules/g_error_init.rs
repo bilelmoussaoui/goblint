@@ -51,7 +51,7 @@ impl GErrorInit {
         };
 
         // Check if this is a GError* declaration
-        if !decl.type_name.contains("GError") || !decl.type_name.contains('*') {
+        if !decl.type_info.is_base_type("GError") || !decl.type_info.is_pointer() {
             return;
         }
 

@@ -49,20 +49,19 @@ impl UseGAutoptrGotoCleanup {
         let cleanup_labels = self.find_cleanup_labels(&func.body_statements);
 
         // Match: if allocated var has goto to cleanup label that frees it
-        for (var_name, (var_type, location)) in &allocated_vars {
+        for (var_name, (type_info, location)) in &allocated_vars {
             for goto_label in &goto_labels {
                 if let Some(cleanup_vars) = cleanup_labels.get(goto_label)
                     && cleanup_vars.contains(var_name)
                 {
                     // Extract base type name (strip pointer and qualifiers)
-                    let base_type = self.extract_base_type(var_type);
                     violations.push(self.violation(
                         file_path,
                         location.line,
                         location.column,
                         format!(
                             "Consider using g_autoptr({}) {} and g_steal_pointer to avoid goto cleanup",
-                            base_type, var_name
+                            type_info.base_type, var_name
                         ),
                     ));
                 }
@@ -70,23 +69,12 @@ impl UseGAutoptrGotoCleanup {
         }
     }
 
-    fn extract_base_type(&self, type_name: &str) -> String {
-        // Extract base type from "const Foo *" -> "Foo"
-        type_name
-            .trim()
-            .trim_start_matches("const")
-            .trim()
-            .trim_end_matches('*')
-            .trim()
-            .to_string()
-    }
-
     /// Find variables allocated with g_object_new, g_new, etc.
     /// Returns map of var_name -> (type_name, location)
     fn find_allocated_variables(
         &self,
         statements: &[Statement],
-    ) -> HashMap<String, (String, gobject_ast::SourceLocation)> {
+    ) -> HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)> {
         let mut result = HashMap::new();
 
         // First pass: find all local pointer declarations
@@ -102,16 +90,13 @@ impl UseGAutoptrGotoCleanup {
     fn collect_local_pointer_declarations(
         &self,
         statements: &[Statement],
-        result: &mut HashMap<String, (String, gobject_ast::SourceLocation)>,
+        result: &mut HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)>,
     ) {
         for stmt in statements {
             for decl in stmt.iter_declarations() {
                 // Only track pointer types
-                if decl.type_name.contains('*') {
-                    // Skip field access names
-                    if !decl.name.contains("->") && !decl.name.contains('.') {
-                        result.insert(decl.name.clone(), (decl.type_name.clone(), decl.location));
-                    }
+                if decl.type_info.is_pointer() && decl.is_simple_identifier() {
+                    result.insert(decl.name.clone(), (decl.type_info.clone(), decl.location));
                 }
             }
         }
@@ -120,8 +105,8 @@ impl UseGAutoptrGotoCleanup {
     fn collect_allocated_vars(
         &self,
         statements: &[Statement],
-        local_vars: &HashMap<String, (String, gobject_ast::SourceLocation)>,
-        result: &mut HashMap<String, (String, gobject_ast::SourceLocation)>,
+        local_vars: &HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)>,
+        result: &mut HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)>,
     ) {
         use gobject_ast::Expression;
 
@@ -132,9 +117,9 @@ impl UseGAutoptrGotoCleanup {
                     Statement::Declaration(decl) => {
                         if let Some(Expression::Call(call)) = &decl.initializer
                             && call.is_allocation_call()
-                            && let Some((type_text, location)) = local_vars.get(&decl.name)
+                            && let Some((type_info, location)) = local_vars.get(&decl.name)
                         {
-                            result.insert(decl.name.clone(), (type_text.clone(), *location));
+                            result.insert(decl.name.clone(), (type_info.clone(), *location));
                         }
                     }
                     // Pattern 2: var = allocation_call();
@@ -146,9 +131,9 @@ impl UseGAutoptrGotoCleanup {
                             // Only simple identifiers, not field expressions
                             if !assign.lhs.contains("->")
                                 && !assign.lhs.contains('.')
-                                && let Some((type_text, location)) = local_vars.get(&assign.lhs)
+                                && let Some((type_info, location)) = local_vars.get(&assign.lhs)
                             {
-                                result.insert(assign.lhs.clone(), (type_text.clone(), *location));
+                                result.insert(assign.lhs.clone(), (type_info.clone(), *location));
                             }
                         }
                     }

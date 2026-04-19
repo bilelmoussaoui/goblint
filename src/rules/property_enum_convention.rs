@@ -6,7 +6,7 @@ pub struct PropertyEnumConvention;
 /// Context about which class owns a property enum
 #[derive(Debug)]
 struct ClassContext {
-    class_type: String,
+    class_type_info: gobject_ast::TypeInfo,
     get_property_func: Option<String>,
     set_property_func: Option<String>,
 }
@@ -139,7 +139,7 @@ impl Rule for PropertyEnumConvention {
                 let derived_enum_name = if enum_info.name.is_none() {
                     class_context
                         .as_ref()
-                        .and_then(|ctx| self.derive_enum_name_from_class_type(&ctx.class_type))
+                        .and_then(|ctx| self.derive_enum_name_from_class_type(&ctx.class_type_info))
                 } else {
                     None
                 };
@@ -271,7 +271,7 @@ impl Rule for PropertyEnumConvention {
                         derived.clone()
                     } else {
                         // Try to derive from class type if we have it
-                        self.derive_enum_name_from_class_type(&ctx.class_type)
+                        self.derive_enum_name_from_class_type(&ctx.class_type_info)
                             .unwrap_or_else(|| "UnknownProps".to_string())
                     };
 
@@ -387,8 +387,7 @@ impl PropertyEnumConvention {
         match item {
             TopLevelItem::Declaration(Statement::Declaration(decl))
                 // Check if this is a GParamSpec pointer array
-                if ((decl.type_name.contains("GParamSpec") && decl.type_name.contains('*'))
-                    || decl.type_name == "GParamSpec*")
+                if decl.type_info.is_base_type("GParamSpec") && decl.type_info.is_pointer()
                 => {
                     // Check if it's an array declaration by looking at the source
                     let decl_text = std::str::from_utf8(
@@ -464,7 +463,7 @@ impl PropertyEnumConvention {
         let already_cast = match &switch_stmt.condition {
             Expression::Cast(cast) => {
                 // Check if cast type contains the enum name
-                cast.type_name.contains(enum_name)
+                cast.type_info.contains(enum_name)
             }
             _ => false,
         };
@@ -480,15 +479,15 @@ impl PropertyEnumConvention {
         }
     }
 
-    /// Derive enum name from class type parameter
-    /// e.g., "ClutterActorClass *" -> Some("ClutterActorProps")
-    /// e.g., "MyObjectClass *" -> Some("MyObjectProps")
-    fn derive_enum_name_from_class_type(&self, class_type: &str) -> Option<String> {
-        // Remove pointer and whitespace
-        let class_type = class_type.trim().trim_end_matches('*').trim();
-
-        // Check if it ends with "Class"
-        class_type
+    /// Derive enum name from class type base
+    /// e.g., "ClutterActorClass" -> Some("ClutterActorProps")
+    /// e.g., "MyObjectClass" -> Some("MyObjectProps")
+    fn derive_enum_name_from_class_type(
+        &self,
+        type_info: &gobject_ast::TypeInfo,
+    ) -> Option<String> {
+        type_info
+            .base_type
             .strip_suffix("Class")
             .map(|base_name| format!("{}Props", base_name))
     }
@@ -605,11 +604,7 @@ impl PropertyEnumConvention {
             }
 
             // Extract class type from parameter
-            let class_type = func
-                .parameters
-                .first()
-                .map(|p| p.type_name.clone())
-                .unwrap_or_default();
+            let class_type_info = func.parameters.first().map(|p| p.type_info.clone())?;
 
             // Extract get_property and set_property function names from assignments
             let mut get_property_func = None;
@@ -638,7 +633,7 @@ impl PropertyEnumConvention {
             }
 
             return Some(ClassContext {
-                class_type,
+                class_type_info,
                 get_property_func,
                 set_property_func,
             });
@@ -681,8 +676,7 @@ impl PropertyEnumConvention {
 
         match item {
             TopLevelItem::Declaration(Statement::Declaration(decl))
-                if ((decl.type_name.contains("GParamSpec") && decl.type_name.contains('*'))
-                    || decl.type_name == "GParamSpec*") =>
+                if decl.type_info.is_base_type("GParamSpec") && decl.type_info.is_pointer() =>
             {
                 let decl_text =
                     std::str::from_utf8(&source[decl.location.start_byte..decl.location.end_byte])
