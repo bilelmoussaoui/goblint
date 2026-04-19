@@ -149,27 +149,12 @@ impl Rule for PropertyEnumConvention {
                 // property
                 if has_n_props && enum_info.values.len() >= 2 {
                     let n_props = enum_info.values.last().unwrap();
-                    let prev_prop = &enum_info.values[enum_info.values.len() - 2];
 
                     // Remove the N_PROPS line
                     let (line_start, line_end) =
                         self.find_line_bounds(&file.source, n_props.start_byte, n_props.end_byte);
                     fixes.push(Fix::new(line_start, line_end, String::new()));
 
-                    // Remove trailing comma from previous property
-                    // Look for comma between prev_prop.end_byte and the newline
-                    let mut search_pos = prev_prop.end_byte;
-                    while search_pos < line_start && search_pos < file.source.len() {
-                        if file.source[search_pos] == b',' {
-                            // Found the comma, remove it
-                            fixes.push(Fix::new(search_pos, search_pos + 1, String::new()));
-                            break;
-                        } else if file.source[search_pos] == b'\n' {
-                            // Reached newline without finding comma
-                            break;
-                        }
-                        search_pos += 1;
-                    }
                 }
 
                 // Fix 4 & 5: Find GParamSpec arrays and fix both their declarations and

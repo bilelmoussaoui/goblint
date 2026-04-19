@@ -3,7 +3,7 @@
 /* Case 1: First property already has = 0 with bad spacing */
 typedef enum {
   PROP_BOUNDING_BOX = 1,
-  PROP_CHILD
+  PROP_CHILD,
 } BadSpacingProperty;
 
 static GParamSpec *bad_spacing_props[PROP_CHILD + 1] = { NULL, };
@@ -22,7 +22,7 @@ bad_spacing_class_init (BadSpacingClass *klass)
 /* Case 2: Very old code using NUM_PROPERTIES */
 typedef enum {
   LEGACY_PROP_FOO = 1,
-  LEGACY_PROP_BAR
+  LEGACY_PROP_BAR,
 } LegacyProperty;
 
 static GParamSpec *legacy_props[LEGACY_PROP_BAR + 1] = { NULL, };

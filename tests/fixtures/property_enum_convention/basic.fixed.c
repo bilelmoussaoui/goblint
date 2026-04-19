@@ -4,7 +4,7 @@
 typedef enum {
   PROP_NAME = 1,
   PROP_TITLE,
-  PROP_DESCRIPTION
+  PROP_DESCRIPTION,
 } MyObjectProperty;
 
 static GParamSpec *my_props[PROP_DESCRIPTION + 1] = { NULL, };
@@ -24,7 +24,7 @@ my_object_class_init (MyObjectClass *klass)
 /* Case 2: Old pattern with prefix */
 typedef enum {
   WIDGET_PROP_WIDTH = 1,
-  WIDGET_PROP_HEIGHT
+  WIDGET_PROP_HEIGHT,
 } WidgetProperty;
 
 static GParamSpec *widget_props[WIDGET_PROP_HEIGHT + 1] = { NULL, };
@@ -68,7 +68,7 @@ static int counts[N_PROPS];
 #ifdef ENABLE_FEATURE
 typedef enum {
   FEATURE_PROP_ENABLED = 1,
-  FEATURE_PROP_VALUE
+  FEATURE_PROP_VALUE,
 } FeatureProperty;
 
 static GParamSpec *feature_props[FEATURE_PROP_VALUE + 1] = { NULL, };
