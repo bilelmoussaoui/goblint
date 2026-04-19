@@ -123,6 +123,7 @@ impl Parser {
             | "unary_expression"
             | "assignment_expression"
             | "update_expression"
+            | "parenthesized_expression"
             | "type_identifier"
             | "true"
             | "false" => {
