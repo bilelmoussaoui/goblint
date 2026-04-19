@@ -64,7 +64,7 @@ Rules that suggest simpler alternatives to complex patterns.
 - **use_g_clear_list** - Suggest g_clear_list/g_clear_slist instead of manual g_list_free/g_slist_free and NULL assignment
 - **use_g_clear_weak_pointer** - Suggest g_clear_weak_pointer instead of manual g_object_remove_weak_pointer and NULL assignment
 - **use_g_file_load_bytes** - Suggest g_file_load_bytes instead of g_file_load_contents + g_bytes_new_take
-- **use_g_source_once** - Suggest using g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE
+- **use_g_source_once** - Suggest using g_idle_add_once/g_timeout_add_once/g_timeout_add_seconds_once when callback always returns G_SOURCE_REMOVE
 - **use_g_object_new_with_properties** - Suggest setting properties in g_object_new instead of separate g_object_set calls
 - **use_g_object_class_install_properties** - Suggest g_object_class_install_properties for multiple g_object_class_install_property calls
 

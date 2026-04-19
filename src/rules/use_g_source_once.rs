@@ -11,7 +11,7 @@ impl Rule for UseGSourceOnce {
     }
 
     fn description(&self) -> &'static str {
-        "Suggest using g_idle_add_once/g_timeout_add_once when callback always returns G_SOURCE_REMOVE"
+        "Suggest using g_idle_add_once/g_timeout_add_once/g_timeout_add_seconds_once when callback always returns G_SOURCE_REMOVE"
     }
 
     fn category(&self) -> super::Category {
@@ -32,8 +32,8 @@ impl Rule for UseGSourceOnce {
     ) {
         let source = &ast_context.project.files.get(path).unwrap().source;
 
-        // Find g_idle_add and g_timeout_add calls
-        for call in func.find_calls(&["g_idle_add", "g_timeout_add"]) {
+        // Find g_idle_add, g_timeout_add, and g_timeout_add_seconds calls
+        for call in func.find_calls(&["g_idle_add", "g_timeout_add", "g_timeout_add_seconds"]) {
             // Get the callback name from the first argument
             if let Some(callback_name) = self.extract_callback_name(call, source) {
                 // Only proceed if callback is NOT used elsewhere
@@ -43,10 +43,10 @@ impl Rule for UseGSourceOnce {
                     if let Some(callback_fixes) =
                         self.get_callback_fixes(ast_context, &callback_name, path)
                     {
-                        let replacement = if call.function == "g_idle_add" {
-                            "g_idle_add_once"
-                        } else {
-                            "g_timeout_add_once"
+                        let replacement = match call.function.as_str() {
+                            "g_idle_add" => "g_idle_add_once",
+                            "g_timeout_add_seconds" => "g_timeout_add_seconds_once",
+                            _ => "g_timeout_add_once",
                         };
 
                         // Fix 1: Replace g_idle_add → g_idle_add_once
@@ -335,10 +335,13 @@ impl UseGSourceOnce {
     }
 
     fn is_source_add_statement(&self, stmt: &Statement, callback_name: &str) -> bool {
-        // Check if this statement is a g_idle_add/g_timeout_add call with our callback
+        // Check if this statement is a g_idle_add/g_timeout_add/g_timeout_add_seconds
+        // call with our callback
         if let Statement::Expression(expr_stmt) = stmt
             && let Expression::Call(call) = &expr_stmt.expr
-            && (call.function == "g_idle_add" || call.function == "g_timeout_add")
+            && (call.function == "g_idle_add"
+                || call.function == "g_timeout_add"
+                || call.function == "g_timeout_add_seconds")
             && let Some(arg_expr) = call.get_arg(0)
             && let Expression::Identifier(id) = arg_expr
         {
