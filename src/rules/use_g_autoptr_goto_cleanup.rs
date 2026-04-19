@@ -105,18 +105,15 @@ impl UseGAutoptrGotoCleanup {
         result: &mut HashMap<String, (String, gobject_ast::SourceLocation)>,
     ) {
         for stmt in statements {
-            stmt.walk(&mut |s| {
-                if let Statement::Declaration(decl) = s {
-                    // Only track pointer types
-                    if decl.type_name.contains('*') {
-                        // Skip field access names
-                        if !decl.name.contains("->") && !decl.name.contains('.') {
-                            result
-                                .insert(decl.name.clone(), (decl.type_name.clone(), decl.location));
-                        }
+            for decl in stmt.iter_declarations() {
+                // Only track pointer types
+                if decl.type_name.contains('*') {
+                    // Skip field access names
+                    if !decl.name.contains("->") && !decl.name.contains('.') {
+                        result.insert(decl.name.clone(), (decl.type_name.clone(), decl.location));
                     }
                 }
-            });
+            }
         }
     }
 
@@ -195,20 +192,16 @@ impl UseGAutoptrGotoCleanup {
     }
 
     fn find_cleanup_calls(&self, stmt: &Statement) -> HashSet<String> {
-        use gobject_ast::Expression;
-
         let mut cleanup_vars = HashSet::new();
-        stmt.walk(&mut |s| {
-            if let Statement::Expression(expr_stmt) = s
-                && let Expression::Call(call) = &expr_stmt.expr
-                && call.is_cleanup_call()
+        for call in stmt.iter_calls() {
+            if call.is_cleanup_call()
                 && let Some(arg_expr) = call.get_arg(0)
                 // Extract variable name (handle &var or var)
                 && let Some(var_name) = arg_expr.extract_variable_name()
             {
                 cleanup_vars.insert(var_name.to_string());
             }
-        });
+        }
         cleanup_vars
     }
 }

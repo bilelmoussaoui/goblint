@@ -35,16 +35,14 @@ impl Rule for GErrorLeak {
         let mut gerror_vars = Vec::new();
 
         for stmt in &func.body_statements {
-            stmt.walk(&mut |s| {
-                if let Statement::Declaration(decl) = s {
-                    // Check if it's a GError* variable initialized to NULL
-                    if is_gerror_pointer(&decl.type_name)
-                        && decl.initializer.as_ref().is_some_and(|init| init.is_null())
-                    {
-                        gerror_vars.push((decl.name.clone(), decl.location));
-                    }
+            for decl in stmt.iter_declarations() {
+                // Check if it's a GError* variable initialized to NULL
+                if is_gerror_pointer(&decl.type_name)
+                    && decl.initializer.as_ref().is_some_and(|init| init.is_null())
+                {
+                    gerror_vars.push((decl.name.clone(), decl.location));
                 }
-            });
+            }
         }
 
         // For each GError* variable, check if it's properly handled
@@ -101,18 +99,10 @@ fn calls_noreturn_function(statements: &[Statement]) -> bool {
     ];
 
     for stmt in statements {
-        let mut found = false;
-        stmt.walk_expressions(&mut |expr| {
-            expr.walk(&mut |nested_expr| {
-                if let Expression::Call(call) = nested_expr
-                    && noreturn_functions.contains(&call.function.as_str())
-                {
-                    found = true;
-                }
-            });
-        });
-        if found {
-            return true;
+        for call in stmt.iter_calls() {
+            if noreturn_functions.contains(&call.function.as_str()) {
+                return true;
+            }
         }
     }
     false
@@ -166,29 +156,21 @@ fn is_error_propagated(statements: &[Statement], var_name: &str) -> bool {
     // Check for common naming patterns that indicate ownership transfer or
     // termination Functions like *_terminate_with_error, *_set_error, etc.
     for stmt in statements {
-        let mut found = false;
-        stmt.walk_expressions(&mut |expr| {
-            expr.walk(&mut |nested_expr| {
-                if let Expression::Call(call) = nested_expr {
-                    let func_name = call.function.as_str();
-                    // Common patterns for functions that take ownership or terminate
-                    if func_name.contains("_terminate_") && func_name.contains("error")
-                        || func_name.ends_with("_set_error")
-                        || func_name.contains("_set_g_error")
-                    {
-                        // Check if the error variable is in the arguments
-                        for arg in &call.arguments {
-                            let gobject_ast::expression::Argument::Expression(arg_expr) = arg;
-                            if arg_expr.contains_identifier(var_name) {
-                                found = true;
-                            }
-                        }
+        for call in stmt.iter_calls() {
+            let func_name = call.function.as_str();
+            // Common patterns for functions that take ownership or terminate
+            if func_name.contains("_terminate_") && func_name.contains("error")
+                || func_name.ends_with("_set_error")
+                || func_name.contains("_set_g_error")
+            {
+                // Check if the error variable is in the arguments
+                for arg in &call.arguments {
+                    let gobject_ast::expression::Argument::Expression(arg_expr) = arg;
+                    if arg_expr.contains_identifier(var_name) {
+                        return true;
                     }
                 }
-            });
-        });
-        if found {
-            return true;
+            }
         }
     }
 
@@ -198,26 +180,17 @@ fn is_error_propagated(statements: &[Statement], var_name: &str) -> bool {
 /// Check if the error variable is handled by specific functions
 fn check_error_handled(statements: &[Statement], var_name: &str, functions: &[&str]) -> bool {
     for stmt in statements {
-        let mut found = false;
-        stmt.walk_expressions(&mut |expr| {
-            // Recursively walk ALL nested expressions
-            expr.walk(&mut |nested_expr| {
-                if let Expression::Call(call) = nested_expr
-                    && functions.contains(&call.function.as_str())
-                {
-                    // Check if the error variable is in the arguments
-                    for arg in &call.arguments {
-                        let gobject_ast::expression::Argument::Expression(arg_expr) = arg;
-                        // Could be passed as `error` or `&error`
-                        if arg_expr.contains_identifier(var_name) {
-                            found = true;
-                        }
+        for call in stmt.iter_calls() {
+            if functions.contains(&call.function.as_str()) {
+                // Check if the error variable is in the arguments
+                for arg in &call.arguments {
+                    let gobject_ast::expression::Argument::Expression(arg_expr) = arg;
+                    // Could be passed as `error` or `&error`
+                    if arg_expr.contains_identifier(var_name) {
+                        return true;
                     }
                 }
-            });
-        });
-        if found {
-            return true;
+            }
         }
     }
     false

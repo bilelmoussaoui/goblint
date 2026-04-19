@@ -442,13 +442,11 @@ impl PropertyEnumConvention {
                 continue;
             }
 
-            // Find switch statements using walk to handle nested cases
+            // Find switch statements using iterator to handle nested cases
             for stmt in &func.body_statements {
-                stmt.walk(&mut |s| {
-                    if let gobject_ast::Statement::Switch(switch_stmt) = s {
-                        self.add_switch_cast_if_needed(switch_stmt, enum_name, fixes);
-                    }
-                });
+                for switch_stmt in stmt.iter_switches() {
+                    self.add_switch_cast_if_needed(switch_stmt, enum_name, fixes);
+                }
             }
         }
     }
@@ -724,22 +722,15 @@ impl PropertyEnumConvention {
 
             // Check all switch statements in the function
             for stmt in &func.body_statements {
-                let mut found = false;
-                stmt.walk(&mut |s| {
-                    if let gobject_ast::Statement::Switch(switch_stmt) = s {
-                        // Check if any case label uses n_props_name
-                        for case in &switch_stmt.cases {
-                            if let Some(value_expr) = &case.value
-                                && self.expression_uses_identifier(value_expr, n_props_name)
-                            {
-                                found = true;
-                                break;
-                            }
+                for switch_stmt in stmt.iter_switches() {
+                    // Check if any case label uses n_props_name
+                    for case in &switch_stmt.cases {
+                        if let Some(value_expr) = &case.value
+                            && self.expression_uses_identifier(value_expr, n_props_name)
+                        {
+                            return true;
                         }
                     }
-                });
-                if found {
-                    return true;
                 }
             }
         }

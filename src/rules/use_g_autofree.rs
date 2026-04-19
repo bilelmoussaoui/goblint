@@ -83,14 +83,12 @@ impl UseGAutofree {
         result: &mut HashMap<String, (String, gobject_ast::SourceLocation)>,
     ) {
         for stmt in statements {
-            stmt.walk(&mut |s| {
-                if let Statement::Declaration(decl) = s {
-                    // Skip if var name contains -> or . (field access)
-                    if !decl.name.contains("->") && !decl.name.contains('.') {
-                        result.insert(decl.name.clone(), (decl.type_name.clone(), decl.location));
-                    }
+            for decl in stmt.iter_declarations() {
+                // Skip if var name contains -> or . (field access)
+                if !decl.name.contains("->") && !decl.name.contains('.') {
+                    result.insert(decl.name.clone(), (decl.type_name.clone(), decl.location));
                 }
-            });
+            }
         }
     }
 
@@ -150,23 +148,15 @@ impl UseGAutofree {
     }
 
     fn is_var_manually_freed(&self, statements: &[Statement], var_name: &str) -> bool {
-        use gobject_ast::Expression;
-
         for stmt in statements {
-            let mut found = false;
-            stmt.walk(&mut |s| {
-                if let Statement::Expression(expr_stmt) = s
-                    && let Expression::Call(call) = &expr_stmt.expr
-                    && call.function == "g_free"
+            for call in stmt.iter_calls() {
+                if call.function == "g_free"
                     && let Some(arg_expr) = call.get_arg(0)
                     && let Some(arg_var) = arg_expr.extract_variable_name()
                     && arg_var == var_name
                 {
-                    found = true;
+                    return true;
                 }
-            });
-            if found {
-                return true;
             }
         }
         false
@@ -176,17 +166,12 @@ impl UseGAutofree {
         use gobject_ast::Expression;
 
         for stmt in statements {
-            let mut found = false;
-            stmt.walk(&mut |s| {
-                if let Statement::Return(ret) = s
-                    && let Some(Expression::Identifier(id)) = &ret.value
+            for ret in stmt.iter_returns() {
+                if let Some(Expression::Identifier(id)) = &ret.value
                     && id.name == var_name
                 {
-                    found = true;
+                    return true;
                 }
-            });
-            if found {
-                return true;
             }
         }
         false
