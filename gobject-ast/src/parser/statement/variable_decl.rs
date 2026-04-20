@@ -1,7 +1,7 @@
 use tree_sitter::Node;
 
 use crate::{
-    model::{SourceLocation, TypeInfo, VariableDecl},
+    model::{Expression, SourceLocation, TypeInfo, VariableDecl},
     parser::Parser,
 };
 
@@ -60,6 +60,10 @@ impl Parser {
         let declarator_text = std::str::from_utf8(&source[declarator.byte_range()]).ok()?;
         let pointer_depth = declarator_text.chars().filter(|&c| c == '*').count();
 
+        // Extract array size from declarator (searches recursively for
+        // array_declarator)
+        let array_size = self.extract_array_size(declarator, source);
+
         let mut dec_cursor = declarator.walk();
         let mut has_equals = false;
         for child in declarator.children(&mut dec_cursor) {
@@ -109,6 +113,7 @@ impl Parser {
             type_info,
             name: var_name?.to_owned(),
             initializer,
+            array_size,
             location: self.node_location(node),
         })
     }
@@ -122,6 +127,47 @@ impl Parser {
         for child in node.children(&mut cursor) {
             if let Some(id) = self.find_identifier(child, source) {
                 return Some(id);
+            }
+        }
+
+        None
+    }
+
+    /// Extract array size expression from a declarator (recursively searches
+    /// for array_declarator) e.g., for "int arr[N_PROPS]", extracts N_PROPS
+    /// as an expression
+    pub(super) fn extract_array_size(&self, declarator: Node, source: &[u8]) -> Option<Expression> {
+        // Recursively find array_declarator and extract its size
+        self.find_array_size_recursive(declarator, source)
+    }
+
+    fn find_array_size_recursive(&self, node: Node, source: &[u8]) -> Option<Expression> {
+        if node.kind() == "array_declarator" {
+            let mut cursor = node.walk();
+            let mut found_bracket = false;
+            for child in node.children(&mut cursor) {
+                // Skip everything until we find "["
+                if child.kind() == "[" {
+                    found_bracket = true;
+                    continue;
+                }
+                // Stop at "]"
+                if child.kind() == "]" {
+                    break;
+                }
+                // After "[", look for the size expression
+                if found_bracket && child.is_named() && Parser::is_expression_node(&child) {
+                    return self.parse_expression(child, source);
+                }
+            }
+            return None;
+        }
+
+        // Recursively search children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(size) = self.find_array_size_recursive(child, source) {
+                return Some(size);
             }
         }
 

@@ -7,6 +7,8 @@ pub struct VariableDecl {
     pub type_info: TypeInfo,
     pub name: String,
     pub initializer: Option<Expression>,
+    /// Array size expression for array declarators (e.g., [N_PROPS])
+    pub array_size: Option<Expression>,
     pub location: SourceLocation,
 }
 

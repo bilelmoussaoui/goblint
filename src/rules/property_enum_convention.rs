@@ -1,3 +1,5 @@
+use gobject_ast::Expression;
+
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
@@ -378,7 +380,6 @@ impl PropertyEnumConvention {
                 item,
                 n_props_name,
                 last_prop_name,
-                &file.source,
                 &mut array_names,
                 fixes,
             );
@@ -392,7 +393,6 @@ impl PropertyEnumConvention {
         item: &'a gobject_ast::top_level::TopLevelItem,
         n_props_name: &str,
         last_prop_name: &str,
-        source: &[u8],
         array_names: &mut Vec<&'a str>,
         fixes: &mut Vec<Fix>,
     ) {
@@ -406,22 +406,18 @@ impl PropertyEnumConvention {
                 // Check if this is a GParamSpec pointer array
                 if decl.type_info.is_base_type("GParamSpec") && decl.type_info.is_pointer()
                 => {
-                    // Check if it's an array declaration by looking at the source
-                    let decl_text = std::str::from_utf8(
-                        &source[decl.location.start_byte..decl.location.end_byte],
-                    )
-                    .unwrap_or("");
-
-                    // Look for [N_PROPS] in the declaration
-                    let pattern = format!("[{}]", n_props_name);
-                    if let Some(bracket_pos) = decl_text.find(&pattern) {
+                    // Check if it's an array declaration using N_PROPS
+                    if let Some(Expression::Identifier(size_id)) = &decl.array_size
+                        && size_id.name == n_props_name
+                    {
                         // Found it! This is a GParamSpec array using N_PROPS
-                        let bracket_start = decl.location.start_byte + bracket_pos;
-                        let bracket_end = bracket_start + pattern.len();
-
-                        // Fix: Replace [N_PROPS] with [LAST_PROP + 1]
-                        let replacement = format!("[{} + 1]", last_prop_name);
-                        fixes.push(Fix::new(bracket_start, bracket_end, replacement));
+                        // Fix: Replace N_PROPS with LAST_PROP + 1
+                        let replacement = format!("{} + 1", last_prop_name);
+                        fixes.push(Fix::new(
+                            size_id.location.start_byte,
+                            size_id.location.end_byte,
+                            replacement,
+                        ));
 
                         // Remember this array name
                         array_names.push(&decl.name);
@@ -434,7 +430,6 @@ impl PropertyEnumConvention {
                         nested_item,
                         n_props_name,
                         last_prop_name,
-                        source,
                         array_names,
                         fixes,
                     );
@@ -665,12 +660,7 @@ impl PropertyEnumConvention {
         let mut array_names = Vec::new();
 
         for item in &file.top_level_items {
-            self.find_param_spec_arrays_in_item_for_sentinel(
-                item,
-                sentinel_name,
-                &file.source,
-                &mut array_names,
-            );
+            self.find_param_spec_arrays_in_item_for_sentinel(item, sentinel_name, &mut array_names);
         }
 
         array_names
@@ -680,7 +670,6 @@ impl PropertyEnumConvention {
         &self,
         item: &'a gobject_ast::top_level::TopLevelItem,
         sentinel_name: &str,
-        source: &[u8],
         array_names: &mut Vec<&'a str>,
     ) {
         use gobject_ast::{
@@ -692,12 +681,10 @@ impl PropertyEnumConvention {
             TopLevelItem::Declaration(Statement::Declaration(decl))
                 if decl.type_info.is_base_type("GParamSpec") && decl.type_info.is_pointer() =>
             {
-                let decl_text =
-                    std::str::from_utf8(&source[decl.location.start_byte..decl.location.end_byte])
-                        .unwrap_or("");
-
-                let pattern = format!("[{}]", sentinel_name);
-                if decl_text.contains(&pattern) {
+                // Check if it's an array declaration using the sentinel name
+                if let Some(Expression::Identifier(size_id)) = &decl.array_size
+                    && size_id.name == sentinel_name
+                {
                     array_names.push(&decl.name);
                 }
             }
@@ -706,7 +693,6 @@ impl PropertyEnumConvention {
                     self.find_param_spec_arrays_in_item_for_sentinel(
                         nested_item,
                         sentinel_name,
-                        source,
                         array_names,
                     );
                 }
