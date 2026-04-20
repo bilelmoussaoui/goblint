@@ -7,9 +7,8 @@ pub struct EnumInfo {
     pub name: Option<String>,
     pub location: SourceLocation,
     pub values: Vec<EnumValue>,
-    /// Byte range of the enum body for inserting fixes
-    pub body_start_byte: usize,
-    pub body_end_byte: usize,
+    /// Location of the enum body for inserting fixes
+    pub body_location: SourceLocation,
 }
 
 impl EnumInfo {
@@ -30,15 +29,12 @@ impl EnumInfo {
 pub struct EnumValue {
     pub name: String,
     pub value: Option<i64>,
-    /// Byte range of this enumerator node
-    pub start_byte: usize,
-    pub end_byte: usize,
-    /// Byte range of just the name
-    pub name_start_byte: usize,
-    pub name_end_byte: usize,
-    /// Byte range of the value (if present)
-    pub value_start_byte: Option<usize>,
-    pub value_end_byte: Option<usize>,
+    /// Location of this enumerator node
+    pub location: SourceLocation,
+    /// Location of just the name
+    pub name_location: SourceLocation,
+    /// Location of the value (if present)
+    pub value_location: Option<SourceLocation>,
 }
 
 impl EnumValue {
@@ -96,12 +92,9 @@ impl EnumValue {
     /// Extract the value text from source (e.g., for `N_PROPS =
     /// PROP_ORIENTATION`, returns "PROP_ORIENTATION")
     pub fn value_text<'a>(&self, source: &'a [u8]) -> Option<&'a str> {
-        if let (Some(start), Some(end)) = (self.value_start_byte, self.value_end_byte) {
-            std::str::from_utf8(&source[start..end])
-                .ok()
-                .map(|s| s.trim())
-        } else {
-            None
-        }
+        self.value_location
+            .as_ref()
+            .and_then(|loc| loc.as_str(source))
+            .map(|s| s.trim())
     }
 }

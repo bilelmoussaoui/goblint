@@ -128,7 +128,7 @@ impl Rule for PropertyEnumConvention {
 
                     // Also check if N_PROPS = PROP_X where PROP_X is an override
                     let n_props_value = enum_info.values.last().unwrap();
-                    let n_props_points_to_override = if n_props_value.value_start_byte.is_some()
+                    let n_props_points_to_override = if n_props_value.value_location.is_some()
                         && n_props_value.value.is_none()
                     {
                         n_props_value
@@ -194,7 +194,7 @@ impl Rule for PropertyEnumConvention {
 
                     // Add enum name and semicolon after the closing brace
                     // Find the semicolon after the enum body
-                    let mut semicolon_pos = enum_info.body_end_byte;
+                    let mut semicolon_pos = enum_info.body_location.end_byte;
                     while semicolon_pos < file.source.len() && file.source[semicolon_pos] != b';' {
                         semicolon_pos += 1;
                     }
@@ -214,10 +214,9 @@ impl Rule for PropertyEnumConvention {
                     let prop_0 = &enum_info.values[0];
 
                     // Use SourceLocation's find_line_bounds_with_following_blank
-                    let location =
-                        gobject_ast::SourceLocation::new(0, 0, prop_0.start_byte, prop_0.end_byte);
-                    let (line_start, line_end) =
-                        location.find_line_bounds_with_following_blank(&file.source);
+                    let (line_start, line_end) = prop_0
+                        .location
+                        .find_line_bounds_with_following_blank(&file.source);
                     fixes.push(Fix::new(line_start, line_end, String::new()));
                 }
 
@@ -227,19 +226,19 @@ impl Rule for PropertyEnumConvention {
 
                     // If the property already has a value (e.g., "= 0"), remove it first
                     if first_real.value == Some(0)
-                        && let Some(value_end) = first_real.value_end_byte
+                        && let Some(value_loc) = &first_real.value_location
                     {
                         // Remove existing " = 0" or "= 0" and replace with " = 1"
                         fixes.push(Fix::new(
-                            first_real.name_end_byte,
-                            value_end,
+                            first_real.name_location.end_byte,
+                            value_loc.end_byte,
                             " = 1".to_string(),
                         ));
                     } else {
                         // Just insert " = 1" right after the property name
                         fixes.push(Fix::new(
-                            first_real.name_end_byte,
-                            first_real.name_end_byte,
+                            first_real.name_location.end_byte,
+                            first_real.name_location.end_byte,
                             " = 1".to_string(),
                         ));
                     }
@@ -251,13 +250,7 @@ impl Rule for PropertyEnumConvention {
 
                     // Use SourceLocation's find_line_bounds which already handles preceding blank
                     // lines
-                    let location = gobject_ast::SourceLocation::new(
-                        0,
-                        0,
-                        n_props.start_byte,
-                        n_props.end_byte,
-                    );
-                    let (line_start, line_end) = location.find_line_bounds(&file.source);
+                    let (line_start, line_end) = n_props.location.find_line_bounds(&file.source);
                     fixes.push(Fix::new(line_start, line_end, String::new()));
                 }
 

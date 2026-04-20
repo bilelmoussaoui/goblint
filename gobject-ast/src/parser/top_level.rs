@@ -414,8 +414,7 @@ impl Parser {
                     name,
                     location: self.node_location(node),
                     values,
-                    body_start_byte: body.start_byte(),
-                    body_end_byte: body.end_byte(),
+                    body_location: self.node_location(body),
                 });
             }
         }
@@ -433,8 +432,7 @@ impl Parser {
                                 name: Some(name.to_owned()),
                                 location: self.node_location(node),
                                 values,
-                                body_start_byte: body.start_byte(),
-                                body_end_byte: body.end_byte(),
+                                body_location: self.node_location(body),
                             });
                         }
                     }
@@ -463,8 +461,7 @@ impl Parser {
                             name,
                             location: self.node_location(child),
                             values,
-                            body_start_byte: body.start_byte(),
-                            body_end_byte: body.end_byte(),
+                            body_location: self.node_location(body),
                         });
                     }
                 }
@@ -484,12 +481,9 @@ impl Parser {
                         .unwrap_or("")
                         .to_owned();
 
-                    let (value, value_start, value_end) = if let Some(value_node) =
+                    let (value, value_location) = if let Some(value_node) =
                         child.child_by_field_name("value")
                     {
-                        let value_start = value_node.start_byte();
-                        let value_end = value_node.end_byte();
-
                         // Parse as expression (only if it's actually an expression node)
                         let parsed_value = if Parser::is_expression_node(&value_node) {
                             self.parse_expression(value_node, source)
@@ -502,20 +496,17 @@ impl Parser {
                             None
                         };
 
-                        (parsed_value, Some(value_start), Some(value_end))
+                        (parsed_value, Some(self.node_location(value_node)))
                     } else {
-                        (None, None, None)
+                        (None, None)
                     };
 
                     values.push(EnumValue {
                         name,
                         value,
-                        start_byte: child.start_byte(),
-                        end_byte: child.end_byte(),
-                        name_start_byte: name_node.start_byte(),
-                        name_end_byte: name_node.end_byte(),
-                        value_start_byte: value_start,
-                        value_end_byte: value_end,
+                        location: self.node_location(child),
+                        name_location: self.node_location(name_node),
+                        value_location,
                     });
                 }
             }
@@ -580,6 +571,7 @@ impl Parser {
             parameters.push(Parameter {
                 name: name.map(ToOwned::to_owned),
                 type_info,
+                location: self.node_location(child),
             });
         }
 
