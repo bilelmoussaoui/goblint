@@ -382,6 +382,7 @@ impl IncludeOrder {
                 | "sys/un.h"
                 | "sys/utsname.h"
                 | "sys/wait.h"
+                | "sysexits.h"
                 | "syslog.h"
                 | "tar.h"
                 | "termios.h"
