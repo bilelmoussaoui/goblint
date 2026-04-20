@@ -58,8 +58,9 @@ impl Rule for PropertyEnumConvention {
                         idx < e.values.len() - 1 && Self::is_sentinel_name(&v.name)
                     });
 
-                        // Only count if it will be transformed (not in-middle pattern, not already modern)
-                    // Note: N_PROPS = PROP_X where PROP_X is override is still transformable
+                    // Only count if it will be transformed (not in-middle pattern, not already
+                    // modern) Note: N_PROPS = PROP_X where PROP_X is override
+                    // is still transformable
                     !has_n_props_in_middle && (has_prop_0 || has_n_props_at_end)
                 })
                 .filter_map(|e| {
@@ -120,16 +121,21 @@ impl Rule for PropertyEnumConvention {
                 let property_map = self.build_property_override_map(file);
 
                 // Get the name of the last REAL property (the one before N_PROPS)
-                // If N_PROPS = PROP_X and PROP_X is an override, find the last non-override property
+                // If N_PROPS = PROP_X and PROP_X is an override, find the last non-override
+                // property
                 let last_real_prop_name = if has_n_props && enum_info.values.len() >= 2 {
                     // Check if the value before N_PROPS is an override
                     let second_to_last = &enum_info.values[enum_info.values.len() - 2];
 
                     // Also check if N_PROPS = PROP_X where PROP_X is an override
                     let n_props_value = enum_info.values.last().unwrap();
-                    let n_props_points_to_override = if n_props_value.value_start_byte.is_some() && n_props_value.value.is_none() {
+                    let n_props_points_to_override = if n_props_value.value_start_byte.is_some()
+                        && n_props_value.value.is_none()
+                    {
                         // Extract the identifier from source (e.g., "PROP_ORIENTATION")
-                        if let (Some(start), Some(end)) = (n_props_value.value_start_byte, n_props_value.value_end_byte) {
+                        if let (Some(start), Some(end)) =
+                            (n_props_value.value_start_byte, n_props_value.value_end_byte)
+                        {
                             std::str::from_utf8(&file.source[start..end])
                                 .ok()
                                 .and_then(|value_text| {
@@ -146,12 +152,16 @@ impl Rule for PropertyEnumConvention {
 
                     if n_props_points_to_override {
                         // N_PROPS = PROP_ORIENTATION (override), so find last non-override property
-                        enum_info.values.iter()
+                        enum_info
+                            .values
+                            .iter()
                             .rev()
                             .skip(1) // Skip N_PROPS
-                            .find(|v| !Self::is_prop_0_name(&v.name)
-                                   && !Self::is_sentinel_name(&v.name)
-                                   && !property_map.get(&v.name).copied().unwrap_or(false))
+                            .find(|v| {
+                                !Self::is_prop_0_name(&v.name)
+                                    && !Self::is_sentinel_name(&v.name)
+                                    && !property_map.get(&v.name).copied().unwrap_or(false)
+                            })
                             .map(|v| v.name.clone())
                             .unwrap_or_else(|| second_to_last.name.clone())
                     } else {
@@ -826,20 +836,31 @@ impl PropertyEnumConvention {
                                     && let Expression::Call(call) = &*assignment.rhs
                                 {
                                     // Check if this is a g_param_spec_* call
-                                    if let Some(prop) = gobject_ast::Property::from_param_spec_call(call) {
-                                        let is_override = matches!(prop.property_type, gobject_ast::PropertyType::Override);
+                                    if let Some(prop) =
+                                        gobject_ast::Property::from_param_spec_call(call)
+                                    {
+                                        let is_override = matches!(
+                                            prop.property_type,
+                                            gobject_ast::PropertyType::Override
+                                        );
                                         property_map.insert(enum_id.name.clone(), is_override);
                                     }
                                 }
                             }
-                            // Direct call: g_object_class_override_property(class, PROP_ORIENTATION, "orientation")
+                            // Direct call: g_object_class_override_property(class,
+                            // PROP_ORIENTATION, "orientation")
                             Expression::Call(call) => {
-                                if let Some(prop) = gobject_ast::Property::from_override_property_call(call) {
+                                if let Some(prop) =
+                                    gobject_ast::Property::from_override_property_call(call)
+                                {
                                     // Extract the enum value (second argument)
                                     if let Some(arg) = call.get_arg(1)
                                         && let Expression::Identifier(id) = arg
                                     {
-                                        let is_override = matches!(prop.property_type, gobject_ast::PropertyType::Override);
+                                        let is_override = matches!(
+                                            prop.property_type,
+                                            gobject_ast::PropertyType::Override
+                                        );
                                         property_map.insert(id.name.clone(), is_override);
                                     }
                                 }

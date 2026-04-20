@@ -296,7 +296,8 @@ impl Property {
     }
 
     /// Extract property from g_object_class_override_property call
-    /// Call signature: g_object_class_override_property(oclass, property_id, name)
+    /// Call signature: g_object_class_override_property(oclass, property_id,
+    /// name)
     pub fn from_override_property_call(call: &CallExpression) -> Option<Self> {
         let func_name = call.function_name_str()?;
         if func_name != "g_object_class_override_property" {
