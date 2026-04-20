@@ -32,64 +32,74 @@ impl Rule for GDeclareSemicolon {
     ) {
         // Check both header files and C files
         for (path, file) in ast_context.iter_all_files() {
-            // Use the already-loaded source from the file model
-            let source = std::str::from_utf8(&file.source).unwrap_or("");
+            let source = &file.source;
 
-            // Track byte offset as we go through lines
-            let mut byte_offset = 0;
+            // Use the AST to find all G_DECLARE_* and G_DEFINE_* macros
+            for gobject_type in file.iter_all_gobject_types() {
+                let macro_name = gobject_type.kind.macro_name();
+                let location = &gobject_type.location;
 
-            // Track if we're inside a G_DECLARE macro (for multi-line cases)
-            let mut in_g_declare: Option<usize> = None; // Store the starting line number
+                // Check if there's a semicolon after the macro (location.end_byte points right
+                // after the closing paren)
+                let mut check_pos = location.end_byte;
+                let mut has_semicolon = false;
 
-            // Look for G_DECLARE_* macros
-            for (line_num, line) in source.lines().enumerate() {
-                let trimmed = line.trim();
-
-                // Check if we're starting a G_DECLARE or G_DEFINE macro
-                if trimmed.contains("G_DECLARE_FINAL_TYPE")
-                    || trimmed.contains("G_DECLARE_DERIVABLE_TYPE")
-                    || trimmed.contains("G_DECLARE_INTERFACE")
-                    || trimmed.contains("G_DEFINE_TYPE")
-                    || trimmed.contains("G_DEFINE_ABSTRACT_TYPE")
-                    || trimmed.contains("G_DEFINE_FINAL_TYPE")
-                    || trimmed.contains("G_DEFINE_INTERFACE")
-                    || trimmed.contains("G_DEFINE_BOXED_TYPE")
-                {
-                    in_g_declare = Some(line_num);
-                }
-
-                // If we're in a G_DECLARE macro, check for the closing paren
-                if in_g_declare.is_some() && trimmed.contains(')') {
-                    // Check if this looks like the closing line (not a nested paren)
-                    // Simple heuristic: if the line ends with ) or has ) followed by
-                    // whitespace/comment
-                    if let Some(paren_pos) = line.rfind(')') {
-                        let after_paren = line[paren_pos + 1..].trim();
-
-                        // Check if there's no semicolon after the closing paren
-                        if !after_paren.starts_with(';') {
-                            // Calculate byte position right after the closing paren
-                            let fix_byte_pos = byte_offset + paren_pos + 1;
-
-                            let mut v = self.violation_with_fix(
-                                path,
-                                line_num + 1,
-                                paren_pos + 1,
-                                "G_DECLARE_*/G_DEFINE_* macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.".to_string(),
-                                Fix::new(fix_byte_pos, fix_byte_pos, ";"),
-                            );
-                            v.snippet = Some(format!("{}; // Add semicolon here", trimmed));
-                            violations.push(v);
-                        }
-
-                        // Reset state - we've processed this G_DECLARE
-                        in_g_declare = None;
+                while check_pos < source.len() {
+                    let ch = source[check_pos];
+                    if ch == b';' {
+                        has_semicolon = true;
+                        break;
+                    } else if ch == b' ' || ch == b'\t' || ch == b'\n' || ch == b'\r' {
+                        check_pos += 1;
+                    } else {
+                        break;
                     }
                 }
 
-                // Update byte offset for next line (line length + newline)
-                byte_offset += line.len() + 1;
+                if !has_semicolon {
+                    // Calculate line and column for end_byte
+                    let (end_line, end_column) =
+                        self.calculate_line_column(source, location.end_byte);
+
+                    let mut v = self.violation_with_fix(
+                        path,
+                        end_line,
+                        end_column,
+                        format!(
+                            "{} macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.",
+                            macro_name
+                        ),
+                        Fix::new(location.end_byte, location.end_byte, ";"),
+                    );
+
+                    // Extract snippet from source
+                    if let Ok(source_str) = std::str::from_utf8(source) {
+                        let snippet = source_str.lines().nth(end_line - 1).unwrap_or("").trim();
+                        v.snippet = Some(format!("{}; // Add semicolon here", snippet));
+                    }
+
+                    violations.push(v);
+                }
             }
         }
+    }
+}
+
+impl GDeclareSemicolon {
+    /// Calculate line and column number from byte offset
+    fn calculate_line_column(&self, source: &[u8], byte_offset: usize) -> (usize, usize) {
+        let mut line = 1;
+        let mut column = 1;
+
+        for &byte in &source[..byte_offset.min(source.len())] {
+            if byte == b'\n' {
+                line += 1;
+                column = 1;
+            } else {
+                column += 1;
+            }
+        }
+
+        (line, column)
     }
 }
