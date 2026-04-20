@@ -15,6 +15,7 @@ Rules that detect code that is outright wrong or very useless.
 - **g_param_spec_static_name_canonical** - Ensure property names are canonical (use dashes, not underscores). Critical with G_PARAM_STATIC_NAME
 - **g_object_virtual_methods_chain_up** - Ensure dispose/finalize/constructed methods chain up to parent class
 - **property_enum_coverage** - Ensure all property enum values have corresponding g_param_spec or g_object_class_override_property
+- **signal_enum_coverage** - Ensure all signal enum values have corresponding g_signal_new calls
 - **strcmp_explicit_comparison** - Require explicit comparison with 0 for strcmp/g_strcmp0 (returns 0 for equality, not TRUE)
 - **use_g_ascii_functions** - Use g_ascii_* functions instead of locale-dependent C ctype functions (tolower, toupper, isdigit, etc.)
 - **use_g_strlcpy** - Avoid unsafe string functions (strcpy, strcat, strncat); use g_strlcpy/g_strlcat instead

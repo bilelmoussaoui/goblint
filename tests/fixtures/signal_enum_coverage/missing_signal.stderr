@@ -1,0 +1,1 @@
+missing_signal.c:13:1: signal_enum_coverage: Signal enum value 'SIGNAL_RELEASED' is declared but never installed in my_button_class_init

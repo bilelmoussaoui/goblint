@@ -291,6 +291,7 @@ rule_test!(
     goblint::rules::PropertyEnumConvention
 );
 rule_test!(property_enum_coverage, goblint::rules::PropertyEnumCoverage);
+rule_test!(signal_enum_coverage, goblint::rules::SignalEnumCoverage);
 rule_test!(
     use_g_object_new_with_properties,
     goblint::rules::UseGObjectNewWithProperties

@@ -18,6 +18,12 @@ impl EnumInfo {
             .iter()
             .any(|v| v.name.contains("_PROP_") || v.name.starts_with("PROP_"))
     }
+
+    pub fn is_signal_enum(&self) -> bool {
+        self.values
+            .iter()
+            .any(|v| v.name.contains("_SIGNAL_") || v.name.starts_with("SIGNAL_"))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,5 +75,21 @@ impl EnumValue {
             || (self.name.starts_with("N_") && self.name.ends_with("_PROPS"))
             || (self.name.starts_with("N_") && self.name.ends_with("_PROPERTIES"))
             || (self.name.starts_with("NUM_") && self.name.ends_with("_PROPS"))
+    }
+
+    /// Check if this is a signal count sentinel (N_SIGNALS, LAST_SIGNAL,
+    /// NUM_SIGNALS, etc.)
+    pub fn is_signal_last(&self) -> bool {
+        self.name.ends_with("_N_SIGNALS")
+            || self.name == "N_SIGNALS"
+            || self.name.ends_with("_SIGNAL_LAST")
+            || self.name == "SIGNAL_LAST"
+            || self.name.ends_with("_LAST_SIGNAL")
+            || self.name == "LAST_SIGNAL"
+            || self.name.ends_with("_NUM_SIGNALS")
+            || self.name == "NUM_SIGNALS"
+            || (self.name.starts_with("LAST_") && self.name.ends_with("_SIGNAL"))
+            || (self.name.starts_with("N_") && self.name.ends_with("_SIGNALS"))
+            || (self.name.starts_with("NUM_") && self.name.ends_with("_SIGNALS"))
     }
 }

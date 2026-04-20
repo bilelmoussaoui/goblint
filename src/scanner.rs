@@ -124,6 +124,7 @@ macro_rules! for_each_rule {
             (g_source_id_not_stored, GSourceIdNotStored, 2, 0),
             (property_enum_convention, PropertyEnumConvention, 2, 0),
             (property_enum_coverage, PropertyEnumCoverage, 2, 0),
+            (signal_enum_coverage, SignalEnumCoverage, 2, 0),
             (g_object_virtual_methods_chain_up, GObjectVirtualMethodsChainUp, 2, 0),
             (g_task_source_tag, GTaskSourceTag, 2, 36),
             (unnecessary_null_check, UnnecessaryNullCheck, 2, 0),
