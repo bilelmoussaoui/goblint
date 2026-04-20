@@ -1,9 +1,9 @@
 #include "config.h"
 
 #include <string.h>
+#include <unistd.h>
 
 #include <X11/Xatom.h>
-#include <unistd.h>
 
 #include "compositor/compositor-private.h"
 #include "core/meta-window-config-private.h"

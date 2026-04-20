@@ -11,7 +11,7 @@ impl Rule for IncludeOrder {
     }
 
     fn description(&self) -> &'static str {
-        "Enforce consistent include ordering: config header (configurable), associated header, system headers, project headers"
+        "Enforce consistent include ordering: config header (configurable), associated header, standard C/POSIX headers, system headers, project headers"
     }
 
     fn category(&self) -> super::Category {
@@ -293,9 +293,10 @@ impl IncludeOrder {
         grouped.iter().map(|(inc, _)| inc.path.as_str()).collect()
     }
 
-    /// Check if a header is a standard C library header
+    /// Check if a header is a standard C or POSIX header
     fn is_standard_c_header(&self, path: &str) -> bool {
-        matches!(
+        // Standard C library headers
+        if matches!(
             path,
             "assert.h"
                 | "complex.h"
@@ -326,7 +327,75 @@ impl IncludeOrder {
                 | "uchar.h"
                 | "wchar.h"
                 | "wctype.h"
-        )
+        ) {
+            return true;
+        }
+
+        // POSIX headers
+        if matches!(
+            path,
+            "aio.h"
+                | "arpa/inet.h"
+                | "dirent.h"
+                | "dlfcn.h"
+                | "fcntl.h"
+                | "fmtmsg.h"
+                | "fnmatch.h"
+                | "ftw.h"
+                | "glob.h"
+                | "grp.h"
+                | "iconv.h"
+                | "langinfo.h"
+                | "libgen.h"
+                | "monetary.h"
+                | "mqueue.h"
+                | "ndbm.h"
+                | "net/if.h"
+                | "netdb.h"
+                | "netinet/in.h"
+                | "netinet/tcp.h"
+                | "nl_types.h"
+                | "poll.h"
+                | "pthread.h"
+                | "pwd.h"
+                | "regex.h"
+                | "sched.h"
+                | "search.h"
+                | "semaphore.h"
+                | "spawn.h"
+                | "strings.h"
+                | "stropts.h"
+                | "sys/ipc.h"
+                | "sys/mman.h"
+                | "sys/msg.h"
+                | "sys/resource.h"
+                | "sys/select.h"
+                | "sys/sem.h"
+                | "sys/shm.h"
+                | "sys/socket.h"
+                | "sys/stat.h"
+                | "sys/statvfs.h"
+                | "sys/time.h"
+                | "sys/times.h"
+                | "sys/types.h"
+                | "sys/uio.h"
+                | "sys/un.h"
+                | "sys/utsname.h"
+                | "sys/wait.h"
+                | "syslog.h"
+                | "tar.h"
+                | "termios.h"
+                | "trace.h"
+                | "ulimit.h"
+                | "unistd.h"
+                | "utime.h"
+                | "utmpx.h"
+                | "wordexp.h"
+        ) {
+            return true;
+        }
+
+        false
     }
 
     /// Get all possible associated headers for a C file
