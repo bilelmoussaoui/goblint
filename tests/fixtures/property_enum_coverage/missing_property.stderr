@@ -1,0 +1,1 @@
+missing_property.c:13:1: property_enum_coverage: Property enum value 'PROP_BAZ' is declared but never installed in my_object_class_init

@@ -39,24 +39,19 @@ impl Rule for PropertyEnumConvention {
             // (skip override pattern enums and already-modern enums)
             let sentinel_usage: std::collections::HashMap<String, usize> = file
                 .iter_all_enums()
-                .filter(|e| self.is_property_enum(e))
+                .filter(|e| e.is_property_enum())
                 .filter(|e| {
                     // Apply same checks as main loop to see if this enum will be transformed
-                    let has_prop_0 = e
-                        .values
-                        .first()
-                        .map(|v| Self::is_prop_0_name(&v.name))
-                        .unwrap_or(false);
+                    let has_prop_0 = e.values.first().map(|v| v.is_prop_0()).unwrap_or(false);
 
-                    let has_n_props_at_end = e
-                        .values
-                        .last()
-                        .map(|v| Self::is_sentinel_name(&v.name))
-                        .unwrap_or(false);
+                    let has_n_props_at_end =
+                        e.values.last().map(|v| v.is_prop_last()).unwrap_or(false);
 
-                    let has_n_props_in_middle = e.values.iter().enumerate().any(|(idx, v)| {
-                        idx < e.values.len() - 1 && Self::is_sentinel_name(&v.name)
-                    });
+                    let has_n_props_in_middle = e
+                        .values
+                        .iter()
+                        .enumerate()
+                        .any(|(idx, v)| idx < e.values.len() - 1 && v.is_prop_last());
 
                     // Only count if it will be transformed (not in-middle pattern, not already
                     // modern) Note: N_PROPS = PROP_X where PROP_X is override
@@ -66,7 +61,7 @@ impl Rule for PropertyEnumConvention {
                 .filter_map(|e| {
                     e.values
                         .iter()
-                        .find(|v| Self::is_sentinel_name(&v.name))
+                        .find(|v| v.is_prop_last())
                         .map(|v| v.name.clone())
                 })
                 .fold(std::collections::HashMap::new(), |mut map, name| {
@@ -75,7 +70,7 @@ impl Rule for PropertyEnumConvention {
                 });
 
             for enum_info in file.iter_all_enums() {
-                if !self.is_property_enum(enum_info) {
+                if !enum_info.is_property_enum() {
                     continue;
                 }
 
@@ -83,20 +78,22 @@ impl Rule for PropertyEnumConvention {
                 let has_prop_0 = enum_info
                     .values
                     .first()
-                    .map(|v| Self::is_prop_0_name(&v.name))
+                    .map(|v| v.is_prop_0())
                     .unwrap_or(false);
 
                 let has_n_props = enum_info
                     .values
                     .last()
-                    .map(|v| Self::is_sentinel_name(&v.name))
+                    .map(|v| v.is_prop_last())
                     .unwrap_or(false);
 
                 // Check if N_PROPS appears in the middle (not last) - this is the override
                 // properties pattern
-                let has_n_props_in_middle = enum_info.values.iter().enumerate().any(|(idx, v)| {
-                    idx < enum_info.values.len() - 1 && Self::is_sentinel_name(&v.name)
-                });
+                let has_n_props_in_middle = enum_info
+                    .values
+                    .iter()
+                    .enumerate()
+                    .any(|(idx, v)| idx < enum_info.values.len() - 1 && v.is_prop_last());
 
                 if !has_prop_0 && !has_n_props {
                     // Already using new pattern, skip
@@ -158,8 +155,8 @@ impl Rule for PropertyEnumConvention {
                             .rev()
                             .skip(1) // Skip N_PROPS
                             .find(|v| {
-                                !Self::is_prop_0_name(&v.name)
-                                    && !Self::is_sentinel_name(&v.name)
+                                !v.is_prop_0()
+                                    && !v.is_prop_last()
                                     && !property_map.get(&v.name).copied().unwrap_or(false)
                             })
                             .map(|v| v.name.clone())
@@ -363,34 +360,6 @@ impl Rule for PropertyEnumConvention {
 }
 
 impl PropertyEnumConvention {
-    fn is_property_enum(&self, enum_info: &gobject_ast::EnumInfo) -> bool {
-        enum_info
-            .values
-            .iter()
-            .any(|v| v.name.contains("_PROP_") || v.name.starts_with("PROP_"))
-    }
-
-    /// Check if a name is a PROP_0 sentinel (PROP_0, *_PROP_0, etc.)
-    fn is_prop_0_name(name: &str) -> bool {
-        name.ends_with("_PROP_0")
-            || name == "PROP_0"
-            || (name.starts_with("PROP_") && name.ends_with("_0"))
-    }
-
-    /// Check if a name is a sentinel (N_PROPS, PROP_LAST, NUM_PROPERTIES,
-    /// N_PROPERTIES, etc.)
-    fn is_sentinel_name(name: &str) -> bool {
-        name.ends_with("_N_PROPS")
-            || name == "N_PROPS"
-            || name.ends_with("_PROP_LAST")
-            || name == "PROP_LAST"
-            || name.ends_with("_NUM_PROPERTIES")
-            || name == "NUM_PROPERTIES"
-            || name == "N_PROPERTIES"
-            || (name.starts_with("N_") && name.ends_with("_PROPS"))
-            || (name.starts_with("N_") && name.ends_with("_PROPERTIES"))
-    }
-
     /// Find GParamSpec arrays that use N_PROPS, fix their declarations, and
     /// return their names e.g., static GParamSpec *props[N_PROPS] -> static
     /// GParamSpec *props[LAST_PROP + 1]
@@ -552,14 +521,14 @@ impl PropertyEnumConvention {
         let n_props_name = enum_info
             .values
             .last()
-            .filter(|v| Self::is_sentinel_name(&v.name))
+            .filter(|v| v.is_prop_last())
             .map(|v| v.name.as_str());
 
         // Get all property enum value names (excluding PROP_0 and sentinels)
         let property_names: Vec<&str> = enum_info
             .values
             .iter()
-            .filter(|v| !Self::is_prop_0_name(&v.name) && !Self::is_sentinel_name(&v.name))
+            .filter(|v| !v.is_prop_0() && !v.is_prop_last())
             .map(|v| v.name.as_str())
             .collect();
 
