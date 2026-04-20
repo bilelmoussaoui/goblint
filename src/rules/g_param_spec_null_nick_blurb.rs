@@ -86,9 +86,18 @@ impl GParamSpecNullNickBlurb {
             return; // Project uses custom flags that include static strings
         }
 
-        // Check if nick/blurb are NULL using the parsed Property
-        let nick_is_null = property.nick.is_none();
-        let blurb_is_null = property.blurb.is_none();
+        // Check if nick/blurb are NULL by examining the actual expressions
+        // The parsed Property only recognizes string literals, so it treats macro calls
+        // like _("...") as None. We need to check the raw expressions instead.
+        let Some(nick_expr) = call.get_arg(1) else {
+            return;
+        };
+        let Some(blurb_expr) = call.get_arg(2) else {
+            return;
+        };
+
+        let nick_is_null = nick_expr.is_null();
+        let blurb_is_null = blurb_expr.is_null();
 
         // Collect which parameters need fixing
         let mut issues = Vec::new();
@@ -104,13 +113,6 @@ impl GParamSpecNullNickBlurb {
         }
 
         // Create fix to replace non-NULL arguments with NULL
-        let Some(nick_expr) = call.get_arg(1) else {
-            return;
-        };
-        let Some(blurb_expr) = call.get_arg(2) else {
-            return;
-        };
-
         let string_fix = if !nick_is_null && !blurb_is_null {
             // Replace both nick and blurb with NULL
             Fix::new(
