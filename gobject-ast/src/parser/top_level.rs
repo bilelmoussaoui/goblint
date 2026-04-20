@@ -4,6 +4,91 @@ use super::Parser;
 use crate::model::{top_level::*, *};
 
 impl Parser {
+    /// Extract return type from a function declaration or definition
+    fn extract_return_type(&self, node: Node, source: &[u8]) -> TypeInfo {
+        // Get the full text of the function
+        let func_text = std::str::from_utf8(&source[node.byte_range()]).unwrap_or("");
+
+        // Find the function name to know where the return type ends
+        let declarator = node.child_by_field_name("declarator");
+        let func_name_offset = if let Some(decl) = declarator {
+            // Find function_declarator within the declarator
+            if let Some(func_decl) = self.find_function_declarator(decl) {
+                if let Some(name_node) = func_decl.child_by_field_name("declarator") {
+                    name_node.start_byte() - node.start_byte()
+                } else {
+                    // Fallback: just use position of (
+                    func_text.find('(').unwrap_or(func_text.len())
+                }
+            } else {
+                func_text.find('(').unwrap_or(func_text.len())
+            }
+        } else {
+            func_text.find('(').unwrap_or(func_text.len())
+        };
+
+        // Extract everything before the function name as the return type
+        let before_name = &func_text[..func_name_offset].trim();
+
+        // Split by whitespace to get all parts
+        let parts: Vec<&str> = before_name.split_whitespace().collect();
+
+        // Filter out storage classes (static, extern, inline)
+        let mut type_parts = Vec::new();
+        let mut is_const = false;
+
+        for part in parts {
+            match part {
+                "static" | "extern" | "inline" => {
+                    // Skip storage class specifiers
+                }
+                "const" => {
+                    is_const = true;
+                }
+                _ => {
+                    type_parts.push(part);
+                }
+            }
+        }
+
+        // Join the type parts
+        let full_type_text = type_parts.join(" ");
+
+        // Find the byte position of the return type in the source BEFORE we modify it
+        let type_start_offset = if !full_type_text.is_empty() {
+            before_name.find(&full_type_text).unwrap_or(0)
+        } else {
+            0
+        };
+
+        let start_byte = node.start_byte() + type_start_offset;
+        let end_byte = start_byte + full_type_text.len();
+
+        // Default to void if empty (after removing pointers for checking)
+        let full_type_text = if full_type_text.replace('*', "").trim().is_empty() {
+            "void".to_string()
+        } else {
+            full_type_text
+        };
+
+        let full_text = if is_const {
+            format!("const {}", full_type_text)
+        } else {
+            full_type_text.clone()
+        };
+
+        // Use the function's line/column as approximation - the critical parts are the
+        // byte offsets
+        let location = SourceLocation::new(
+            node.start_position().row + 1,
+            node.start_position().column + 1,
+            start_byte,
+            end_byte,
+        );
+
+        TypeInfo::new(full_text, location)
+    }
+
     /// Find a function_declarator node within a declaration
     fn find_function_declarator_in_node<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
         // Direct declarator field
@@ -210,8 +295,12 @@ impl Parser {
                     // Extract export macros from first line
                     let export_macros = self.find_export_macros_in_declaration(node, source);
 
+                    // Extract return type
+                    let return_type = self.extract_return_type(node, source);
+
                     return Some(TopLevelItem::FunctionDeclaration(FunctionDeclItem {
                         name: name.to_owned(),
+                        return_type,
                         is_static,
                         export_macros: export_macros.into_iter().map(|s| s.to_owned()).collect(),
                         location: self.node_location(node),
@@ -265,8 +354,12 @@ impl Parser {
                     .unwrap_or_default();
                 let body_location = body.map(|b| self.node_location(b));
 
+                // Extract return type
+                let return_type = self.extract_return_type(node, source);
+
                 Some(TopLevelItem::FunctionDefinition(FunctionDefItem {
                     name: name.to_owned(),
+                    return_type,
                     is_static,
                     parameters,
                     body_statements,
@@ -472,30 +565,17 @@ impl Parser {
                 0
             };
 
-            // Check for const qualifier
-            let is_const = base_type.starts_with("const ");
-            let base_type_clean = if is_const {
-                base_type
-                    .strip_prefix("const ")
-                    .unwrap_or(&base_type)
-                    .trim()
-                    .to_string()
-            } else {
-                base_type.clone()
-            };
-
             // Build full type text
             let mut full_text = base_type;
             if pointer_depth > 0 {
                 full_text.push_str(&"*".repeat(pointer_depth));
             }
 
-            let type_info = super::TypeInfo {
-                base_type: base_type_clean,
-                is_const,
-                pointer_depth,
-                full_text,
-            };
+            // Use type node's location if available
+            let param_location = type_node
+                .map(|node| self.node_location(node))
+                .unwrap_or_default();
+            let type_info = TypeInfo::new(full_text, param_location);
 
             parameters.push(Parameter {
                 name: name.map(ToOwned::to_owned),

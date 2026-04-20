@@ -14,7 +14,8 @@ impl Parser {
             .to_owned();
 
         // Parse type info from the type text
-        let type_info = TypeInfo::from_string(type_text);
+        let type_location = self.node_location(type_node);
+        let type_info = TypeInfo::new(type_text, type_location);
 
         // Get the value node
         let value_node = node.child_by_field_name("value")?;

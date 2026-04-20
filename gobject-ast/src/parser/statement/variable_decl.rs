@@ -1,7 +1,7 @@
 use tree_sitter::Node;
 
 use crate::{
-    model::{TypeInfo, VariableDecl},
+    model::{SourceLocation, TypeInfo, VariableDecl},
     parser::Parser,
 };
 
@@ -9,18 +9,20 @@ impl Parser {
     pub(crate) fn parse_variable_decl(&self, node: Node, source: &[u8]) -> Option<VariableDecl> {
         // declaration contains declarator and optionally type_specifier
         let mut type_parts = Vec::new();
-        let mut is_const = false;
         let mut declarator = None;
+        let mut first_type_node: Option<Node> = None;
+        let mut last_type_node: Option<Node> = None;
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "type_qualifier" => {
                     let qualifier = std::str::from_utf8(&source[child.byte_range()]).ok()?;
-                    if qualifier == "const" {
-                        is_const = true;
-                    }
                     type_parts.push(qualifier);
+                    if first_type_node.is_none() {
+                        first_type_node = Some(child);
+                    }
+                    last_type_node = Some(child);
                 }
                 "storage_class_specifier"
                 | "type_specifier"
@@ -29,6 +31,10 @@ impl Parser {
                 | "sized_type_specifier"
                 | "struct_specifier" => {
                     type_parts.push(std::str::from_utf8(&source[child.byte_range()]).ok()?);
+                    if first_type_node.is_none() {
+                        first_type_node = Some(child);
+                    }
+                    last_type_node = Some(child);
                 }
                 // Declarations with initializer: int x = 5;
                 "init_declarator" => {
@@ -80,26 +86,24 @@ impl Parser {
             }
         }
 
-        // Build full type text and extract base type
+        // Build full type text
         let mut full_text = type_parts.join(" ");
         if pointer_depth > 0 {
             full_text.push_str(&"*".repeat(pointer_depth));
         }
 
-        // Extract base type (type without qualifiers or pointers)
-        let base_type = type_parts
-            .iter()
-            .filter(|&&part| part != "const" && part != "static" && part != "extern")
-            .copied()
-            .collect::<Vec<_>>()
-            .join(" ");
-
-        let type_info = TypeInfo {
-            base_type,
-            is_const,
-            pointer_depth,
-            full_text,
+        // TypeInfo::new() will automatically filter out storage class specifiers
+        let type_location = if let (Some(first), Some(last)) = (first_type_node, last_type_node) {
+            SourceLocation::new(
+                first.start_position().row + 1,
+                first.start_position().column,
+                first.start_byte(),
+                last.end_byte(),
+            )
+        } else {
+            SourceLocation::default()
         };
+        let type_info = TypeInfo::new(full_text, type_location);
 
         Some(VariableDecl {
             type_info,

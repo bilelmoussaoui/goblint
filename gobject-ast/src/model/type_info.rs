@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::SourceLocation;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
     /// The base type without qualifiers or pointers (e.g., "GFile", "int")
@@ -10,19 +12,44 @@ pub struct TypeInfo {
     pub pointer_depth: usize,
     /// The full type string as it appears in source (e.g., "const GFile *")
     pub full_text: String,
+    /// Location of the type in the source code
+    pub location: SourceLocation,
 }
 
 impl TypeInfo {
-    /// Create TypeInfo from a full type string (for backward compatibility)
-    pub fn from_string(type_string: String) -> Self {
+    /// Create TypeInfo from a full type string with location information
+    /// Automatically filters out storage class specifiers (static, extern,
+    /// inline)
+    pub fn new(type_string: String, location: SourceLocation) -> Self {
         let trimmed = type_string.trim();
-        let is_const = trimmed.starts_with("const ");
 
-        // Remove const qualifier
+        // Split by whitespace and filter out storage class specifiers
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        let mut filtered_parts = Vec::new();
+        let mut is_const = false;
+
+        for part in parts {
+            match part {
+                "static" | "extern" | "inline" => {
+                    // Skip storage class specifiers
+                }
+                "const" => {
+                    is_const = true;
+                    filtered_parts.push(part);
+                }
+                _ => {
+                    filtered_parts.push(part);
+                }
+            }
+        }
+
+        let cleaned = filtered_parts.join(" ");
+
+        // Remove const qualifier from base type extraction
         let without_const = if is_const {
-            trimmed.strip_prefix("const ").unwrap_or(trimmed).trim()
+            cleaned.strip_prefix("const ").unwrap_or(&cleaned).trim()
         } else {
-            trimmed
+            &cleaned
         };
 
         // Count pointer depth
@@ -35,7 +62,8 @@ impl TypeInfo {
             base_type,
             is_const,
             pointer_depth,
-            full_text: type_string,
+            full_text: cleaned,
+            location,
         }
     }
 

@@ -180,81 +180,47 @@ impl UseGSourceOnce {
 
     fn fix_definition_return_type(
         &self,
-        file_path: &std::path::Path,
+        _file_path: &std::path::Path,
         func: &gobject_ast::top_level::FunctionDefItem,
-        ast_context: &AstContext,
+        _ast_context: &AstContext,
     ) -> Option<Fix> {
-        // Get the file source
-        let file = ast_context.project.files.get(file_path)?;
-        let source = &file.source;
-
-        // Find "gboolean" in the function signature using location
-        let func_start = func.location.start_byte;
-        let func_end = func.location.end_byte;
-
-        // Search for "gboolean" before the function body
-        let func_text = std::str::from_utf8(&source[func_start..func_end]).ok()?;
-
-        // Find the position of the function body (first '{')
-        let body_start = func_text.find('{')?;
-        let signature = &func_text[..body_start];
-
-        if let Some(offset) = signature.find("gboolean") {
-            let gboolean_start = func_start + offset;
-            let gboolean_end = gboolean_start + "gboolean".len();
-
-            return Some(Fix::new(gboolean_start, gboolean_end, "void".to_string()));
+        // Check if return type is gboolean
+        if func.return_type.base_type != "gboolean" {
+            return None;
         }
 
-        None
+        // Use the location from the return type's TypeInfo
+        Some(Fix::new(
+            func.return_type.location.start_byte,
+            func.return_type.location.end_byte,
+            "void".to_string(),
+        ))
     }
 
     fn fix_declaration_return_type(
         &self,
-        file_path: &std::path::Path,
+        _file_path: &std::path::Path,
         func: &gobject_ast::top_level::FunctionDeclItem,
-        ast_context: &AstContext,
+        _ast_context: &AstContext,
     ) -> Option<Fix> {
-        // Get the file source
-        let file = ast_context.project.files.get(file_path)?;
-        let source = &file.source;
-
-        // Find the line where the declaration is
-        let mut line_start = 0;
-        let mut current_line = 1;
-
-        for (i, &byte) in source.iter().enumerate() {
-            if current_line == func.location.line {
-                // Found the line, now find "gboolean" on this line
-                let mut line_end = i;
-                while line_end < source.len() && source[line_end] != b'\n' {
-                    line_end += 1;
-                }
-
-                let line_bytes = &source[line_start..line_end];
-                let line_str = std::str::from_utf8(line_bytes).unwrap_or("");
-
-                // Search for "gboolean" in the line
-                if let Some(offset) = line_str.find("gboolean") {
-                    let gboolean_start = line_start + offset;
-                    let gboolean_end = gboolean_start + "gboolean".len();
-
-                    // Preserve alignment by padding "void" to match "gboolean" length
-                    let replacement = format!("{:8}", "void"); // "gboolean" is 8 chars
-
-                    return Some(Fix::new(gboolean_start, gboolean_end, replacement));
-                }
-
-                return None;
-            }
-
-            if byte == b'\n' {
-                current_line += 1;
-                line_start = i + 1;
-            }
+        // Check if return type is gboolean
+        if func.return_type.base_type != "gboolean" {
+            return None;
         }
 
-        None
+        // Preserve alignment by padding "void" to match the original type length
+        let replacement = format!(
+            "{:width$}",
+            "void",
+            width = func.return_type.full_text.trim().len()
+        );
+
+        // Use the location from the return type's TypeInfo
+        Some(Fix::new(
+            func.return_type.location.start_byte,
+            func.return_type.location.end_byte,
+            replacement,
+        ))
     }
 
     fn is_callback_used_elsewhere(

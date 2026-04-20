@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Source location information for AST nodes
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub struct SourceLocation {
     pub line: usize,
     pub column: usize,
