@@ -1,0 +1,4 @@
+two_classes.c:54:3: use_g_object_notify_by_pspec: Use g_object_notify_by_pspec(G_OBJECT (self), foo_props[FOO_PROP_NAME]) instead of g_object_notify(G_OBJECT (self), "name") for better performance
+two_classes.c:55:3: use_g_object_notify_by_pspec: Use g_object_notify_by_pspec(G_OBJECT (self), foo_props[FOO_PROP_TITLE]) instead of g_object_notify(G_OBJECT (self), "title") for better performance
+two_classes.c:61:3: use_g_object_notify_by_pspec: Use g_object_notify_by_pspec(G_OBJECT (self), bar_props[BAR_PROP_NAME]) instead of g_object_notify(G_OBJECT (self), "name") for better performance
+two_classes.c:62:3: use_g_object_notify_by_pspec: Use g_object_notify_by_pspec(G_OBJECT (self), bar_props[BAR_PROP_LABEL]) instead of g_object_notify(G_OBJECT (self), "label") for better performance

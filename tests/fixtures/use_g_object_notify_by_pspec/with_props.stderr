@@ -1,0 +1,2 @@
+with_props.c:29:3: use_g_object_notify_by_pspec: Use g_object_notify_by_pspec(G_OBJECT (self), props[PROP_NAME]) instead of g_object_notify(G_OBJECT (self), "name") for better performance
+with_props.c:30:3: use_g_object_notify_by_pspec: Use g_object_notify_by_pspec(G_OBJECT (self), props[PROP_DISPLAY_NAME]) instead of g_object_notify(G_OBJECT (self), "display-name") for better performance

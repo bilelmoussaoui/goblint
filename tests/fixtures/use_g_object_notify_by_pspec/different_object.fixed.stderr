@@ -1,0 +1,1 @@
+different_object.c:29:3: use_g_object_notify_by_pspec: Use g_object_notify_by_pspec(obj, props[PROP_TITLE]) instead of g_object_notify(obj, "title") for better performance
