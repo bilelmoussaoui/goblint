@@ -139,6 +139,7 @@ impl UseGObjectClassInstallProperties {
                     property_name,
                     statement_location,
                     call,
+                    ..
                 } = a
                 {
                     Some((variable_name, property_name, statement_location, call))

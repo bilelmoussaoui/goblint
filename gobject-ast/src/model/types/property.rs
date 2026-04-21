@@ -452,6 +452,8 @@ pub enum ParamSpecAssignment {
         property_name: String,
         statement_location: SourceLocation,
         call: CallExpression,
+        property: Property,
+        install_call: Option<CallExpression>,
     },
     /// Variable pattern: param_spec = g_param_spec_*()
     Variable {
@@ -459,5 +461,62 @@ pub enum ParamSpecAssignment {
         property_name: String,
         statement_location: SourceLocation,
         call: CallExpression,
+        property: Property,
+        install_call: Option<CallExpression>,
     },
+    /// Override property pattern: g_object_class_override_property(class,
+    /// PROP_X, "name")
+    OverrideProperty {
+        enum_value: String,
+        property_name: String,
+        statement_location: SourceLocation,
+        call: CallExpression,
+        property: Property,
+    },
+}
+
+impl ParamSpecAssignment {
+    /// Check if this param_spec assignment is installed (has an install call or
+    /// is an override)
+    pub fn is_installed(&self) -> bool {
+        match self {
+            ParamSpecAssignment::ArraySubscript { install_call, .. } => install_call.is_some(),
+            ParamSpecAssignment::OverrideProperty { .. } => true,
+            ParamSpecAssignment::Variable { install_call, .. } => install_call.is_some(),
+        }
+    }
+
+    /// Get the enum value if this assignment is installed
+    /// For Variable assignments, extracts enum value from install_property call
+    pub fn get_installed_enum_value(&self, source: &[u8]) -> Option<String> {
+        match self {
+            ParamSpecAssignment::ArraySubscript {
+                enum_value,
+                install_call,
+                ..
+            } => install_call.as_ref().map(|_| enum_value.clone()),
+            ParamSpecAssignment::OverrideProperty { enum_value, .. } => Some(enum_value.clone()),
+            ParamSpecAssignment::Variable { install_call, .. } => install_call
+                .as_ref()
+                .and_then(|call| call.get_arg(1).and_then(|arg| arg.to_source_string(source))),
+        }
+    }
+
+    /// Get the property information
+    pub fn property(&self) -> &Property {
+        match self {
+            ParamSpecAssignment::ArraySubscript { property, .. } => property,
+            ParamSpecAssignment::Variable { property, .. } => property,
+            ParamSpecAssignment::OverrideProperty { property, .. } => property,
+        }
+    }
+
+    /// Get the enum value (for ArraySubscript and OverrideProperty only)
+    pub fn enum_value(&self) -> Option<&str> {
+        match self {
+            ParamSpecAssignment::ArraySubscript { enum_value, .. } => Some(enum_value.as_str()),
+            ParamSpecAssignment::OverrideProperty { enum_value, .. } => Some(enum_value.as_str()),
+            ParamSpecAssignment::Variable { .. } => None,
+        }
+    }
 }

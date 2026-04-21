@@ -111,8 +111,17 @@ impl Rule for PropertyEnumConvention {
                     continue;
                 }
 
-                // Build map of which properties are overrides
-                let property_map = self.build_property_override_map(file);
+                // Find which class_init and property functions correspond to this enum
+                // by tracing N_PROPS through GParamSpec array to class_init
+                let (class_context, assignments) =
+                    match self.find_class_context_for_enum(file, enum_info) {
+                        Some(pair) => pair,
+                        None => continue,
+                    };
+
+                // Build map of which properties are overrides from this class_init's
+                // assignments
+                let property_map = self.build_property_override_map(&assignments);
 
                 // Get the name of the last REAL property (the one before N_PROPS)
                 // If N_PROPS = PROP_X and PROP_X is an override, find the last non-override
@@ -155,23 +164,10 @@ impl Rule for PropertyEnumConvention {
                     enum_info.values.last().unwrap().name.clone()
                 };
 
-                // Find which class_init and property functions correspond to this enum
-                // by tracing N_PROPS through GParamSpec array to class_init
-                let class_context = self.find_class_context_for_enum(file, enum_info);
-
-                // IMPORTANT: Only transform if we can verify this is a GObject property enum
-                // by finding its class_init. This prevents transforming unrelated enums that
-                // happen to have N_PROPS (e.g., in header files, or non-GObject enums).
-                if class_context.is_none() {
-                    continue;
-                }
-
                 // Determine the enum name to use (either from typedef or derived from
                 // class_init)
                 let derived_enum_name = if enum_info.name.is_none() {
-                    class_context
-                        .as_ref()
-                        .and_then(|ctx| self.derive_enum_name_from_class_type(&ctx.class_type_info))
+                    self.derive_enum_name_from_class_type(&class_context.class_type_info)
                 } else {
                     None
                 };
@@ -287,30 +283,23 @@ impl Rule for PropertyEnumConvention {
 
                 // Fix 6: Add enum cast to switch statements in get_property/set_property
                 // This enables -Wswitch-enum to catch missing properties
-                // Only apply to the specific property functions for this enum (from
-                // class_context)
-                if let Some(ref ctx) = class_context {
-                    let enum_name = if let Some(ref name) = enum_info.name {
-                        name.clone()
-                    } else if let Some(ref derived) = derived_enum_name {
-                        derived.clone()
-                    } else {
-                        // Try to derive from class type if we have it
-                        self.derive_enum_name_from_class_type(&ctx.class_type_info)
-                            .unwrap_or_else(|| "UnknownProps".to_string())
-                    };
+                // Only apply to the specific property functions for this enum
+                let enum_name = if let Some(ref name) = enum_info.name {
+                    name.clone()
+                } else if let Some(ref derived) = derived_enum_name {
+                    derived.clone()
+                } else {
+                    // Try to derive from class type if we have it
+                    self.derive_enum_name_from_class_type(&class_context.class_type_info)
+                        .unwrap_or_else(|| "UnknownProps".to_string())
+                };
 
-                    if !enum_name.is_empty() {
-                        if let Some(ref func_name) = ctx.get_property_func {
-                            self.add_switch_cast_for_function(
-                                file, func_name, &enum_name, &mut fixes,
-                            );
-                        }
-                        if let Some(ref func_name) = ctx.set_property_func {
-                            self.add_switch_cast_for_function(
-                                file, func_name, &enum_name, &mut fixes,
-                            );
-                        }
+                if !enum_name.is_empty() {
+                    if let Some(ref func_name) = class_context.get_property_func {
+                        self.add_switch_cast_for_function(file, func_name, &enum_name, &mut fixes);
+                    }
+                    if let Some(ref func_name) = class_context.set_property_func {
+                        self.add_switch_cast_for_function(file, func_name, &enum_name, &mut fixes);
                     }
                 }
 
@@ -489,194 +478,41 @@ impl PropertyEnumConvention {
         &self,
         file: &gobject_ast::FileModel,
         enum_info: &gobject_ast::EnumInfo,
-    ) -> Option<ClassContext> {
-        // Get N_PROPS name if present
-        let n_props_name = enum_info
-            .values
-            .last()
-            .filter(|v| v.is_prop_last())
-            .map(|v| v.name.as_str());
+    ) -> Option<(ClassContext, Vec<gobject_ast::ParamSpecAssignment>)> {
+        let (func, assignments) = file.find_class_init_for_property_enum(enum_info)?;
 
-        // Get all property enum value names (excluding PROP_0 and sentinels)
-        let property_names: Vec<&str> = enum_info
-            .values
-            .iter()
-            .filter(|v| !v.is_prop_0() && !v.is_prop_last())
-            .map(|v| v.name.as_str())
-            .collect();
+        // Extract class type from parameter
+        let class_type_info = func.parameters.first().map(|p| p.type_info.clone())?;
 
-        // Step 1: Find GParamSpec array declarations that use N_PROPS
-        let array_names = if let Some(sentinel) = n_props_name {
-            self.find_param_spec_arrays_for_sentinel(file, sentinel)
-        } else {
-            Vec::new()
-        };
+        // Extract get_property and set_property function names from assignments
+        let mut get_property_func = None;
+        let mut set_property_func = None;
 
-        // Step 2: Find class_init function that uses this array OR uses
-        // install_property
-        for func in file.iter_function_definitions() {
-            if !func.name.ends_with("_class_init") {
-                continue;
-            }
-
-            let mut uses_property_enum = false;
-
-            // Check if this class_init uses the array (install_properties path)
-            if !array_names.is_empty() {
-                uses_property_enum = func.body_statements.iter().any(|stmt| {
-                    let mut found = false;
-                    stmt.walk(&mut |s| {
-                        if let gobject_ast::Statement::Expression(expr_stmt) = s {
-                            match &expr_stmt.expr {
-                                // Check assignments: my_props[PROP_NAME] = ...
-                                gobject_ast::Expression::Assignment(assignment) => {
-                                    if let gobject_ast::Expression::Subscript(subscript) =
-                                        &*assignment.lhs
-                                        && let gobject_ast::Expression::Identifier(id) =
-                                            &*subscript.array
-                                        && array_names.contains(&id.name.as_str())
-                                    {
-                                        found = true;
-                                    }
-                                }
-                                // Check calls: g_object_class_install_properties(..., my_props)
-                                gobject_ast::Expression::Call(call)
-                                    if call.function_contains("install_properties") =>
-                                {
-                                    for arg in &call.arguments {
-                                        let gobject_ast::Argument::Expression(expr) = arg;
-                                        if let gobject_ast::Expression::Identifier(ident) =
-                                            expr.as_ref()
-                                        {
-                                            for array_name in &array_names {
-                                                if &ident.name == array_name {
-                                                    found = true;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                    });
-                    found
-                });
-            }
-
-            // If no array usage found, check for install_property (singular) calls
-            // that use any of our property enum values
-            if !uses_property_enum && !property_names.is_empty() {
-                func.body_statements.iter().for_each(|stmt| {
-                    stmt.walk(&mut |s| {
-                        if let gobject_ast::Statement::Expression(expr_stmt) = s
-                            && let gobject_ast::Expression::Call(call) = &expr_stmt.expr
-                            && call.function_contains("install_property")
-                            && !call.function_contains("install_properties")
-                        {
-                            // Check if any argument uses our property enum values
-                            for arg in &call.arguments {
-                                if let gobject_ast::Argument::Expression(expr) = arg
-                                    && let gobject_ast::Expression::Identifier(ident) =
-                                        expr.as_ref()
-                                    && property_names.contains(&ident.name.as_str())
-                                {
-                                    uses_property_enum = true;
-                                    break;
-                                }
-                            }
-                        }
-                    });
-                });
-            }
-
-            if !uses_property_enum {
-                continue;
-            }
-
-            // Extract class type from parameter
-            let class_type_info = func.parameters.first().map(|p| p.type_info.clone())?;
-
-            // Extract get_property and set_property function names from assignments
-            let mut get_property_func = None;
-            let mut set_property_func = None;
-
-            for stmt in &func.body_statements {
-                stmt.walk(&mut |s| {
-                    if let gobject_ast::Statement::Expression(expr_stmt) = s
-                        && let gobject_ast::Expression::Assignment(assignment) = &expr_stmt.expr
-                        && let gobject_ast::Expression::FieldAccess(field) = &*assignment.lhs
-                        && let gobject_ast::Expression::Identifier(ident) = assignment.rhs.as_ref()
-                    {
-                        // Check for object_class->get_property = func_name
-                        if field.field == "get_property" {
-                            get_property_func = Some(ident.name.to_string());
-                        } else if field.field == "set_property" {
-                            set_property_func = Some(ident.name.to_string());
-                        }
+        for stmt in &func.body_statements {
+            stmt.walk(&mut |s| {
+                if let gobject_ast::Statement::Expression(expr_stmt) = s
+                    && let gobject_ast::Expression::Assignment(assignment) = &expr_stmt.expr
+                    && let gobject_ast::Expression::FieldAccess(field) = &*assignment.lhs
+                    && let gobject_ast::Expression::Identifier(ident) = assignment.rhs.as_ref()
+                {
+                    // Check for object_class->get_property = func_name
+                    if field.field == "get_property" {
+                        get_property_func = Some(ident.name.to_string());
+                    } else if field.field == "set_property" {
+                        set_property_func = Some(ident.name.to_string());
                     }
-                });
-            }
-
-            return Some(ClassContext {
-                class_type_info,
-                get_property_func,
-                set_property_func,
+                }
             });
         }
 
-        None
-    }
-
-    /// Find GParamSpec array names that use the given sentinel
-    fn find_param_spec_arrays_for_sentinel<'a>(
-        &self,
-        file: &'a gobject_ast::FileModel,
-        sentinel_name: &str,
-    ) -> Vec<&'a str> {
-        let mut array_names = Vec::new();
-
-        for item in &file.top_level_items {
-            self.find_param_spec_arrays_in_item_for_sentinel(item, sentinel_name, &mut array_names);
-        }
-
-        array_names
-    }
-
-    fn find_param_spec_arrays_in_item_for_sentinel<'a>(
-        &self,
-        item: &'a gobject_ast::top_level::TopLevelItem,
-        sentinel_name: &str,
-        array_names: &mut Vec<&'a str>,
-    ) {
-        use gobject_ast::{
-            Statement,
-            top_level::{PreprocessorDirective, TopLevelItem},
-        };
-
-        match item {
-            TopLevelItem::Declaration(Statement::Declaration(decl))
-                if decl.type_info.is_base_type("GParamSpec") && decl.type_info.is_pointer() =>
-            {
-                // Check if it's an array declaration using the sentinel name
-                if let Some(Expression::Identifier(size_id)) = &decl.array_size
-                    && size_id.name == sentinel_name
-                {
-                    array_names.push(&decl.name);
-                }
-            }
-            TopLevelItem::Preprocessor(PreprocessorDirective::Conditional { body, .. }) => {
-                for nested_item in body {
-                    self.find_param_spec_arrays_in_item_for_sentinel(
-                        nested_item,
-                        sentinel_name,
-                        array_names,
-                    );
-                }
-            }
-            _ => {}
-        }
+        Some((
+            ClassContext {
+                class_type_info,
+                get_property_func,
+                set_property_func,
+            },
+            assignments,
+        ))
     }
 
     /// Check if N_PROPS is used in switch case expressions in
@@ -742,66 +578,22 @@ impl PropertyEnumConvention {
     }
 
     /// Build a map of enum value name -> whether it's an override property
-    /// by parsing all property installations in class_init
+    /// from the given param_spec assignments
     fn build_property_override_map(
         &self,
-        file: &gobject_ast::FileModel,
+        assignments: &[gobject_ast::ParamSpecAssignment],
     ) -> std::collections::HashMap<String, bool> {
-        use gobject_ast::Expression;
+        use gobject_ast::PropertyType;
 
         let mut property_map = std::collections::HashMap::new();
 
-        // Find class_init function
-        for func in file.iter_function_definitions() {
-            if !func.name.ends_with("_class_init") {
-                continue;
-            }
-
-            // Look for property installations
-            for stmt in &func.body_statements {
-                stmt.walk(&mut |s| {
-                    if let gobject_ast::Statement::Expression(expr_stmt) = s {
-                        match &expr_stmt.expr {
-                            // Array assignment: obj_props[PROP_NAME] = g_param_spec_*(...)
-                            Expression::Assignment(assignment) => {
-                                if let Expression::Subscript(subscript) = &*assignment.lhs
-                                    && let Expression::Identifier(enum_id) = &*subscript.index
-                                    && let Expression::Call(call) = &*assignment.rhs
-                                {
-                                    // Check if this is a g_param_spec_* call
-                                    if let Some(prop) =
-                                        gobject_ast::Property::from_param_spec_call(call)
-                                    {
-                                        let is_override = matches!(
-                                            prop.property_type,
-                                            gobject_ast::PropertyType::Override
-                                        );
-                                        property_map.insert(enum_id.name.clone(), is_override);
-                                    }
-                                }
-                            }
-                            // Direct call: g_object_class_override_property(class,
-                            // PROP_ORIENTATION, "orientation")
-                            Expression::Call(call) => {
-                                if let Some(prop) =
-                                    gobject_ast::Property::from_override_property_call(call)
-                                {
-                                    // Extract the enum value (second argument)
-                                    if let Some(arg) = call.get_arg(1)
-                                        && let Expression::Identifier(id) = arg
-                                    {
-                                        let is_override = matches!(
-                                            prop.property_type,
-                                            gobject_ast::PropertyType::Override
-                                        );
-                                        property_map.insert(id.name.clone(), is_override);
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                });
+        for assignment in assignments {
+            // Only track assignments that have an enum_value (ArraySubscript and
+            // OverrideProperty)
+            if let Some(enum_value) = assignment.enum_value() {
+                let is_override =
+                    matches!(assignment.property().property_type, PropertyType::Override);
+                property_map.insert(enum_value.to_string(), is_override);
             }
         }
 

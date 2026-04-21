@@ -385,61 +385,149 @@ impl FunctionDefItem {
     }
 
     /// Find all param_spec assignments in the function body
-    /// Handles both array pattern (props[PROP_X] = ...) and variable pattern
-    /// (param_spec = ...)
+    /// Handles array pattern (props[PROP_X] = ...), variable pattern
+    /// (param_spec = ...), and override pattern
+    /// (g_object_class_override_property(...))
     pub fn find_param_spec_assignments(
         &self,
         source: &[u8],
     ) -> Vec<super::types::ParamSpecAssignment> {
-        use super::{Statement, expression::Expression, types::ParamSpecAssignment};
+        use std::collections::HashMap;
+
+        use super::{
+            Statement,
+            expression::Expression,
+            types::{ParamSpecAssignment, Property},
+        };
 
         let mut assignments = Vec::new();
+        let mut array_assignments: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut variable_assignments: HashMap<String, Vec<usize>> = HashMap::new();
 
+        // First pass: collect all assignments
         for stmt in &self.body_statements {
-            if let Statement::Expression(expr_stmt) = stmt
-                && let Expression::Assignment(assignment) = &expr_stmt.expr
-            {
-                // Check if RHS is a g_param_spec_* call
-                if let Expression::Call(param_call) = &*assignment.rhs {
-                    let func_name = param_call.function_name();
-                    if !func_name.contains("_param_spec_") {
-                        continue;
-                    }
+            stmt.walk(&mut |s| {
+                if let Statement::Expression(expr_stmt) = s {
+                    match &expr_stmt.expr {
+                        // Assignment: props[PROP_X] = g_param_spec_*() or spec = g_param_spec_*()
+                        Expression::Assignment(assignment) => {
+                            if let Expression::Call(param_call) = &*assignment.rhs {
+                                let func_name = param_call.function_name();
+                                if !func_name.contains("_param_spec_") {
+                                    return;
+                                }
 
-                    // Extract property name from first argument
-                    let property_name = if let Some(name_arg) = param_call.get_arg(0)
-                        && let Expression::StringLiteral(name_lit) = name_arg
-                    {
-                        name_lit.value.trim_matches('"').to_string()
-                    } else {
-                        continue;
-                    };
+                                // Parse property from call
+                                let Some(property) = Property::from_param_spec_call(param_call)
+                                else {
+                                    return;
+                                };
 
-                    // Check LHS: array subscript or variable?
-                    if let Expression::Subscript(subscript) = &*assignment.lhs {
-                        // Array pattern: props[PROP_X] = g_param_spec_*()
-                        if let Some(array_name) = subscript.array.to_source_string(source)
-                            && let Some(enum_value) = subscript.index.to_source_string(source)
-                        {
-                            assignments.push(ParamSpecAssignment::ArraySubscript {
-                                array_name,
-                                enum_value,
-                                property_name,
-                                statement_location: stmt.location().clone(),
-                                call: param_call.clone(),
-                            });
+                                // Check LHS: array subscript or variable?
+                                if let Expression::Subscript(subscript) = &*assignment.lhs {
+                                    // Array pattern: props[PROP_X] = g_param_spec_*()
+                                    if let Some(array_name) =
+                                        subscript.array.to_source_string(source)
+                                        && let Some(enum_value) =
+                                            subscript.index.to_source_string(source)
+                                    {
+                                        let idx = assignments.len();
+                                        array_assignments
+                                            .entry(array_name.clone())
+                                            .or_default()
+                                            .push(idx);
+                                        assignments.push(ParamSpecAssignment::ArraySubscript {
+                                            array_name,
+                                            enum_value,
+                                            property_name: property.name.clone(),
+                                            statement_location: s.location().clone(),
+                                            call: param_call.clone(),
+                                            property,
+                                            install_call: None,
+                                        });
+                                    }
+                                } else if let Some(var_name) =
+                                    assignment.lhs.to_source_string(source)
+                                {
+                                    // Variable pattern: param_spec = g_param_spec_*()
+                                    let idx = assignments.len();
+                                    variable_assignments
+                                        .entry(var_name.clone())
+                                        .or_default()
+                                        .push(idx);
+                                    assignments.push(ParamSpecAssignment::Variable {
+                                        variable_name: var_name,
+                                        property_name: property.name.clone(),
+                                        statement_location: s.location().clone(),
+                                        call: param_call.clone(),
+                                        property,
+                                        install_call: None,
+                                    });
+                                }
+                            }
                         }
-                    } else if let Some(var_name) = assignment.lhs.to_source_string(source) {
-                        // Variable pattern: param_spec = g_param_spec_*()
-                        assignments.push(ParamSpecAssignment::Variable {
-                            variable_name: var_name,
-                            property_name,
-                            statement_location: stmt.location().clone(),
-                            call: param_call.clone(),
-                        });
+                        // Direct call: g_object_class_override_property(class, PROP_X, "name")
+                        Expression::Call(call) => {
+                            if call.function_contains("override_property") {
+                                if let Some(property) = Property::from_override_property_call(call)
+                                    && let Some(enum_arg) = call.get_arg(1)
+                                    && let Some(enum_value) = enum_arg.to_source_string(source)
+                                {
+                                    assignments.push(ParamSpecAssignment::OverrideProperty {
+                                        enum_value,
+                                        property_name: property.name.clone(),
+                                        statement_location: s.location().clone(),
+                                        call: call.clone(),
+                                        property,
+                                    });
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
-            }
+            });
+        }
+
+        // Second pass: find install calls and link them to assignments
+        for stmt in &self.body_statements {
+            stmt.walk(&mut |s| {
+                if let Statement::Expression(expr_stmt) = s
+                    && let Expression::Call(call) = &expr_stmt.expr
+                {
+                    // g_object_class_install_properties(class, N_PROPS, array)
+                    if call.function_contains("install_properties") {
+                        if let Some(array_arg) = call.get_arg(2)
+                            && let Some(array_name) = array_arg.to_source_string(source)
+                            && let Some(indices) = array_assignments.get(&array_name)
+                        {
+                            for &idx in indices {
+                                if let ParamSpecAssignment::ArraySubscript {
+                                    install_call, ..
+                                } = &mut assignments[idx]
+                                {
+                                    *install_call = Some(call.clone());
+                                }
+                            }
+                        }
+                    }
+                    // g_object_class_install_property(class, PROP_X, spec)
+                    else if call.function_contains("install_property") {
+                        if let Some(spec_arg) = call.get_arg(2)
+                            && let Some(var_name) = spec_arg.to_source_string(source)
+                            && let Some(indices) = variable_assignments.get(&var_name)
+                        {
+                            for &idx in indices {
+                                if let ParamSpecAssignment::Variable { install_call, .. } =
+                                    &mut assignments[idx]
+                                {
+                                    *install_call = Some(call.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         assignments

@@ -174,6 +174,140 @@ impl FileModel {
         self.iter_all_enums().filter(|e| e.is_property_enum())
     }
 
+    /// Find array declarations of a specific type, optionally filtered by
+    /// sentinel
+    ///
+    /// If sentinel_name is None, returns ALL arrays of that type.
+    ///
+    /// Examples:
+    /// - `find_typed_arrays("GParamSpec", true, Some("N_PROPS"))` finds
+    ///   `GParamSpec *props[N_PROPS]`
+    /// - `find_typed_arrays("GParamSpec", true, None)` finds ALL `GParamSpec
+    ///   *[]` arrays
+    /// - `find_typed_arrays("guint", false, Some("N_SIGNALS"))` finds `guint
+    ///   signals[N_SIGNALS]`
+    pub fn find_typed_arrays(
+        &self,
+        base_type: &str,
+        is_pointer: bool,
+        sentinel_name: Option<&str>,
+    ) -> Vec<&super::statement::VariableDecl> {
+        let mut arrays = Vec::new();
+
+        for item in &self.top_level_items {
+            self.find_typed_arrays_in_item(item, base_type, is_pointer, sentinel_name, &mut arrays);
+        }
+
+        arrays
+    }
+
+    fn find_typed_arrays_in_item<'a>(
+        &self,
+        item: &'a TopLevelItem,
+        base_type: &str,
+        is_pointer: bool,
+        sentinel_name: Option<&str>,
+        arrays: &mut Vec<&'a super::statement::VariableDecl>,
+    ) {
+        use super::{
+            Statement,
+            expression::Expression,
+            top_level::{PreprocessorDirective, TopLevelItem},
+        };
+
+        match item {
+            TopLevelItem::Declaration(Statement::Declaration(decl))
+                if decl.type_info.is_base_type(base_type)
+                    && decl.type_info.is_pointer() == is_pointer =>
+            {
+                if let Some(Expression::Identifier(size_id)) = &decl.array_size {
+                    if sentinel_name.map_or(true, |s| size_id.name == s) {
+                        arrays.push(decl);
+                    }
+                }
+            }
+            TopLevelItem::Preprocessor(PreprocessorDirective::Conditional { body, .. }) => {
+                for nested_item in body {
+                    self.find_typed_arrays_in_item(
+                        nested_item,
+                        base_type,
+                        is_pointer,
+                        sentinel_name,
+                        arrays,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Find the class_init function that corresponds to a property enum
+    /// Returns the function and its param_spec assignments
+    pub fn find_class_init_for_property_enum(
+        &self,
+        enum_info: &super::types::EnumInfo,
+    ) -> Option<(
+        &super::top_level::FunctionDefItem,
+        Vec<super::types::ParamSpecAssignment>,
+    )> {
+        use super::types::ParamSpecAssignment;
+
+        // Get N_PROPS name if present
+        let n_props_name = enum_info
+            .values
+            .last()
+            .filter(|v| v.is_prop_last())
+            .map(|v| v.name.as_str());
+
+        // Get all property enum value names (excluding PROP_0 and sentinels)
+        let property_names: Vec<&str> = enum_info
+            .values
+            .iter()
+            .filter(|v| !v.is_prop_0() && !v.is_prop_last())
+            .map(|v| v.name.as_str())
+            .collect();
+
+        // Find GParamSpec array declarations that use N_PROPS
+        let arrays = self.find_typed_arrays("GParamSpec", true, n_props_name);
+        let array_names: Vec<&str> = arrays.iter().map(|d| d.name.as_str()).collect();
+
+        // Find class_init function that uses this array OR property names
+        for func in self.iter_class_init_functions() {
+            let assignments = func.find_param_spec_assignments(&self.source);
+
+            // Check if any param_spec assignments use our array or enum values
+            let has_param_spec_usage = assignments.iter().any(|a| match a {
+                ParamSpecAssignment::ArraySubscript { array_name, .. } => {
+                    array_names.contains(&array_name.as_str())
+                }
+                ParamSpecAssignment::OverrideProperty { enum_value, .. } => {
+                    property_names.contains(&enum_value.as_str())
+                }
+                ParamSpecAssignment::Variable { install_call, .. } => {
+                    install_call.as_ref().is_some_and(|call| {
+                        call.get_arg(1)
+                            .and_then(|arg| arg.to_source_string(&self.source))
+                            .is_some_and(|enum_val| property_names.contains(&enum_val.as_str()))
+                    })
+                }
+            });
+
+            // Also check for install_properties calls (even without param_spec assignments)
+            let has_install_call = !array_names.is_empty()
+                && func.find_install_properties_calls().iter().any(|call| {
+                    call.get_arg(2)
+                        .and_then(|arg| arg.to_source_string(&self.source))
+                        .is_some_and(|name| array_names.contains(&name.as_str()))
+                });
+
+            if has_param_spec_usage || has_install_call {
+                return Some((func, assignments));
+            }
+        }
+
+        None
+    }
+
     /// Recursively iterate through all items (including those in #ifdef blocks)
     fn iter_items_recursive<'a>(
         &'a self,

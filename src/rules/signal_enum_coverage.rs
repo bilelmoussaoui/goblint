@@ -1,5 +1,3 @@
-use gobject_ast::Expression;
-
 use super::Rule;
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
@@ -99,11 +97,8 @@ impl SignalEnumCoverage {
             .collect();
 
         // Find guint signal arrays that use N_SIGNALS or signal names
-        let array_names = if let Some(sentinel) = n_signals_name {
-            self.find_signal_arrays_for_sentinel(file, sentinel)
-        } else {
-            Vec::new()
-        };
+        let arrays = file.find_typed_arrays("guint", false, n_signals_name);
+        let array_names: Vec<&str> = arrays.iter().map(|d| d.name.as_str()).collect();
 
         // Find class_init function that uses this array OR signal names
         for func in file.iter_class_init_functions() {
@@ -152,51 +147,6 @@ impl SignalEnumCoverage {
         }
 
         None
-    }
-
-    /// Find guint signal array names that use the given sentinel
-    fn find_signal_arrays_for_sentinel<'a>(
-        &self,
-        file: &'a gobject_ast::FileModel,
-        sentinel_name: &str,
-    ) -> Vec<&'a str> {
-        use gobject_ast::{
-            Statement,
-            top_level::{PreprocessorDirective, TopLevelItem},
-        };
-
-        let mut array_names = Vec::new();
-
-        fn search_item<'a>(
-            item: &'a TopLevelItem,
-            sentinel_name: &str,
-            array_names: &mut Vec<&'a str>,
-        ) {
-            match item {
-                TopLevelItem::Declaration(Statement::Declaration(decl))
-                    if decl.type_info.is_base_type("guint") =>
-                {
-                    // Check if it's an array declaration using the sentinel name
-                    if let Some(Expression::Identifier(size_id)) = &decl.array_size
-                        && size_id.name == sentinel_name
-                    {
-                        array_names.push(&decl.name);
-                    }
-                }
-                TopLevelItem::Preprocessor(PreprocessorDirective::Conditional { body, .. }) => {
-                    for nested_item in body {
-                        search_item(nested_item, sentinel_name, array_names);
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        for item in &file.top_level_items {
-            search_item(item, sentinel_name, &mut array_names);
-        }
-
-        array_names
     }
 
     /// Collect all signal enum values that are installed in class_init
