@@ -13,7 +13,7 @@ pub use gobject_type::{
     ClassStruct, GObjectType, GObjectTypeKind, InterfaceImplementation, VirtualFunction,
 };
 pub use include::Include;
-pub use property::{ParamFlag, Property, PropertyType};
+pub use property::{ParamFlag, ParamSpecAssignment, Property, PropertyType};
 pub use signal::{Signal, SignalFlag};
 pub use struct_info::{Field, StructInfo};
 pub use typedef::TypedefInfo;

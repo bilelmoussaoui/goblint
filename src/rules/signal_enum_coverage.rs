@@ -106,11 +106,7 @@ impl SignalEnumCoverage {
         };
 
         // Find class_init function that uses this array OR signal names
-        for func in file.iter_function_definitions() {
-            if !func.name.ends_with("_class_init") {
-                continue;
-            }
-
+        for func in file.iter_class_init_functions() {
             let mut uses_signal_enum = false;
 
             // Check if this class_init uses the array

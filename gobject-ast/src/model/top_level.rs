@@ -223,6 +223,79 @@ impl FunctionDefItem {
         }
         values
     }
+
+    /// Find all g_object_class_install_properties calls in the function body
+    pub fn find_install_properties_calls(&self) -> Vec<&super::expression::CallExpression> {
+        self.find_calls(&["g_object_class_install_properties"])
+    }
+
+    /// Get a parameter by name
+    pub fn get_param_by_name(&self, name: &str) -> Option<&super::types::Parameter> {
+        self.parameters
+            .iter()
+            .find(|p| p.name.as_ref().map(|n| n == name).unwrap_or(false))
+    }
+
+    /// Find all param_spec assignments in the function body
+    /// Handles both array pattern (props[PROP_X] = ...) and variable pattern
+    /// (param_spec = ...)
+    pub fn find_param_spec_assignments(
+        &self,
+        source: &[u8],
+    ) -> Vec<super::types::ParamSpecAssignment> {
+        use super::{Statement, expression::Expression, types::ParamSpecAssignment};
+
+        let mut assignments = Vec::new();
+
+        for stmt in &self.body_statements {
+            if let Statement::Expression(expr_stmt) = stmt
+                && let Expression::Assignment(assignment) = &expr_stmt.expr
+            {
+                // Check if RHS is a g_param_spec_* call
+                if let Expression::Call(param_call) = &*assignment.rhs {
+                    let func_name = param_call.function_name();
+                    if !func_name.contains("_param_spec_") {
+                        continue;
+                    }
+
+                    // Extract property name from first argument
+                    let property_name = if let Some(name_arg) = param_call.get_arg(0)
+                        && let Expression::StringLiteral(name_lit) = name_arg
+                    {
+                        name_lit.value.trim_matches('"').to_string()
+                    } else {
+                        continue;
+                    };
+
+                    // Check LHS: array subscript or variable?
+                    if let Expression::Subscript(subscript) = &*assignment.lhs {
+                        // Array pattern: props[PROP_X] = g_param_spec_*()
+                        if let Some(array_name) = subscript.array.to_source_string(source)
+                            && let Some(enum_value) = subscript.index.to_source_string(source)
+                        {
+                            assignments.push(ParamSpecAssignment::ArraySubscript {
+                                array_name,
+                                enum_value,
+                                property_name,
+                                statement_location: stmt.location().clone(),
+                                call: param_call.clone(),
+                            });
+                        }
+                    } else if let Some(var_name) = assignment.lhs.to_source_string(source) {
+                        // Variable pattern: param_spec = g_param_spec_*()
+                        assignments.push(ParamSpecAssignment::Variable {
+                            variable_name: var_name,
+                            property_name,
+                            statement_location: stmt.location().clone(),
+                            call: param_call.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        assignments
+    }
 }
 
 fn collect_returns<'a>(stmt: &'a Statement, values: &mut Vec<&'a super::expression::Expression>) {

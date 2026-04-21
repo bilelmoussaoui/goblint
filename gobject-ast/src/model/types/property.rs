@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
+    SourceLocation,
     expression::{Argument, CallExpression, Expression},
     operators::{BinaryOp, UnaryOp},
 };
@@ -439,4 +440,24 @@ fn extract_flags_arg(arg: &Argument) -> Vec<ParamFlag> {
     }
 
     flags
+}
+
+/// Information about a param_spec assignment found in a class_init function
+#[derive(Debug, Clone)]
+pub enum ParamSpecAssignment {
+    /// Array subscript pattern: props[PROP_X] = g_param_spec_*()
+    ArraySubscript {
+        array_name: String,
+        enum_value: String,
+        property_name: String,
+        statement_location: SourceLocation,
+        call: CallExpression,
+    },
+    /// Variable pattern: param_spec = g_param_spec_*()
+    Variable {
+        variable_name: String,
+        property_name: String,
+        statement_location: SourceLocation,
+        call: CallExpression,
+    },
 }

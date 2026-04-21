@@ -25,11 +25,7 @@ impl Rule for PropertyEnumCoverage {
         violations: &mut Vec<Violation>,
     ) {
         for (path, file) in ast_context.iter_all_files() {
-            for enum_info in file.iter_all_enums() {
-                if !enum_info.is_property_enum() {
-                    continue;
-                }
-
+            for enum_info in file.iter_property_enums() {
                 // Get all property enum values (excluding PROP_0 and sentinels)
                 let property_values: Vec<&str> = enum_info
                     .values
@@ -108,11 +104,7 @@ impl PropertyEnumCoverage {
         };
 
         // Find class_init function that uses this array OR property names
-        for func in file.iter_function_definitions() {
-            if !func.name.ends_with("_class_init") {
-                continue;
-            }
-
+        for func in file.iter_class_init_functions() {
             let mut uses_property_enum = false;
 
             // Check if this class_init uses the array

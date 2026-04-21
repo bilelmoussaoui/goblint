@@ -163,24 +163,17 @@ impl UseGObjectNotifyByPspec {
         file: &gobject_ast::FileModel,
         source: &[u8],
     ) -> std::collections::HashMap<String, Vec<(String, String, String)>> {
-        use gobject_ast::Statement;
         let mut map: std::collections::HashMap<String, Vec<(String, String, String)>> =
             std::collections::HashMap::new();
 
         // Find all class_init functions
-        for func in file.iter_function_definitions() {
-            if !func.name.ends_with("_class_init")
-                && !func.name.ends_with("_class_install_properties")
-            {
-                continue;
-            }
-
+        for func in file.iter_class_init_functions() {
             // Extract class prefix from function name (e.g., "foo_class_init" -> "foo")
             let class_prefix = self.extract_class_prefix(&func.name);
 
             // Look for g_object_class_install_properties calls to get the array name
             let array_names: Vec<String> = func
-                .find_calls(&["g_object_class_install_properties"])
+                .find_install_properties_calls()
                 .iter()
                 .filter_map(|call| call.get_arg(2).and_then(|arg| arg.to_source_string(source)))
                 .collect();
@@ -189,41 +182,23 @@ impl UseGObjectNotifyByPspec {
                 continue;
             }
 
-            // Walk through all statements looking for props[PROP_X] = g_param_spec_*()
-            // patterns
-            for stmt in &func.body_statements {
-                if let Statement::Expression(expr_stmt) = stmt
-                    && let Expression::Assignment(assignment) = &expr_stmt.expr
+            // Find all param_spec assignments in this function
+            for assignment in func.find_param_spec_assignments(source) {
+                // Only interested in array subscript pattern
+                if let gobject_ast::ParamSpecAssignment::ArraySubscript {
+                    array_name,
+                    enum_value,
+                    property_name,
+                    ..
+                } = assignment
                 {
-                    // LHS should be array subscript like props[PROP_X]
-                    if let Expression::Subscript(subscript) = &*assignment.lhs
-                        && let Some(array_name) = subscript.array.to_source_string(source)
-                    {
-                        // Check if this array is one we're tracking
-                        if !array_names.contains(&array_name) {
-                            continue;
-                        }
-
-                        // Get the enum value (the subscript index)
-                        if let Some(enum_value) = subscript.index.to_source_string(source) {
-                            // RHS should be a g_param_spec_* call
-                            if let Expression::Call(param_call) = &*assignment.rhs {
-                                let func_name = param_call.function_name();
-                                if func_name.contains("_param_spec_") {
-                                    // Extract property name from first argument
-                                    if let Some(name_arg) = param_call.get_arg(0)
-                                        && let Expression::StringLiteral(name_lit) = name_arg
-                                    {
-                                        let prop_name = name_lit.value.trim_matches('"');
-                                        map.entry(prop_name.to_string()).or_default().push((
-                                            enum_value,
-                                            array_name,
-                                            class_prefix.clone(),
-                                        ));
-                                    }
-                                }
-                            }
-                        }
+                    // Check if this array is one we're tracking
+                    if array_names.contains(&array_name) {
+                        map.entry(property_name).or_default().push((
+                            enum_value,
+                            array_name,
+                            class_prefix.clone(),
+                        ));
                     }
                 }
             }
@@ -249,14 +224,7 @@ impl UseGObjectNotifyByPspec {
 
         // Find which function parameter matches this identifier
         let param_type = func
-            .parameters
-            .iter()
-            .find(|p| {
-                p.name
-                    .as_ref()
-                    .map(|n| n == &obj_identifier)
-                    .unwrap_or(false)
-            })
+            .get_param_by_name(&obj_identifier)
             .map(|p| &p.type_info.base_type)?;
 
         // Extract class prefix from type (e.g., "FooObject" -> "foo")

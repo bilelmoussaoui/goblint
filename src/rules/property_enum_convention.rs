@@ -40,8 +40,7 @@ impl Rule for PropertyEnumConvention {
             // Collect sentinel names from enums that will be transformed
             // (skip override pattern enums and already-modern enums)
             let sentinel_usage: std::collections::HashMap<String, usize> = file
-                .iter_all_enums()
-                .filter(|e| e.is_property_enum())
+                .iter_property_enums()
                 .filter(|e| {
                     // Apply same checks as main loop to see if this enum will be transformed
                     let has_prop_0 = e.values.first().map(|v| v.is_prop_0()).unwrap_or(false);
@@ -71,11 +70,7 @@ impl Rule for PropertyEnumConvention {
                     map
                 });
 
-            for enum_info in file.iter_all_enums() {
-                if !enum_info.is_property_enum() {
-                    continue;
-                }
-
+            for enum_info in file.iter_property_enums() {
                 // Check if this uses the old pattern: PROP_0 at start and N_PROPS at end
                 let has_prop_0 = enum_info
                     .values
@@ -266,8 +261,8 @@ impl Rule for PropertyEnumConvention {
                     );
 
                     // Fix install_properties calls that use these arrays
-                    for func in file.iter_function_definitions() {
-                        for call in func.find_calls(&["g_object_class_install_properties"]) {
+                    for func in file.iter_class_init_functions() {
+                        for call in func.find_install_properties_calls() {
                             // Second argument (index 1) should be N_PROPS
                             if let Some(arg) = call.get_arg(1)
                                 && let Some(arg_str) = arg.to_simple_string()

@@ -30,13 +30,7 @@ impl Rule for UseGObjectClassInstallProperties {
     ) {
         for (path, file) in ast_context.iter_all_files() {
             // Find all class_init or class-related functions
-            for func in file.iter_function_definitions() {
-                if !func.name.ends_with("_class_init")
-                    && !func.name.ends_with("_class_install_properties")
-                {
-                    continue;
-                }
-
+            for func in file.iter_class_init_functions() {
                 // Find all g_object_class_install_property calls
                 let install_property_calls = func.find_calls(&["g_object_class_install_property"]);
 
@@ -134,6 +128,25 @@ impl UseGObjectClassInstallProperties {
         source: &[u8],
     ) -> Vec<Fix> {
         let mut fixes = Vec::new();
+
+        // Pre-collect all param_spec assignments (variable pattern)
+        let param_spec_assignments: Vec<_> = class_init
+            .find_param_spec_assignments(source)
+            .into_iter()
+            .filter_map(|a| {
+                if let gobject_ast::ParamSpecAssignment::Variable {
+                    variable_name,
+                    property_name,
+                    statement_location,
+                    call,
+                } = a
+                {
+                    Some((variable_name, property_name, statement_location, call))
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         // Check if enum has N_PROPS sentinel
         let n_props_sentinel = property_enum.values.iter().find(|v| v.is_prop_last());
@@ -248,18 +261,28 @@ impl UseGObjectClassInstallProperties {
             } else {
                 // Variable pattern: param_spec = g_param_spec_xxx(...);
                 // g_object_class_install_property(..., param_spec);
-                // Find the assignment statement before this call
-                if let Some((assignment_stmt, var_name, g_param_spec_call)) =
-                    self.find_param_spec_assignment(&class_init.body_statements, call, source)
+                let Some(var_name) = param_spec_arg.to_source_string(source) else {
+                    continue;
+                };
+
+                // Find the assignment that comes before this install_property call
+                let assignment = param_spec_assignments
+                    .iter()
+                    .filter(|(name, _, stmt_loc, _)| {
+                        name == &var_name && stmt_loc.start_byte < call.location.start_byte
+                    })
+                    .max_by_key(|(_, _, stmt_loc, _)| stmt_loc.start_byte);
+
+                if let Some((_, _property_name, statement_location, g_param_spec_call)) = assignment
                 {
-                    param_spec_vars.insert(var_name);
+                    param_spec_vars.insert(var_name.clone());
 
                     // Use the g_param_spec call from the assignment
                     let func_name = g_param_spec_call.function_name();
                     let new_line_prefix = format!("{}[{}] = {} (", array_name, prop_id, func_name);
                     // Note: indentation is not included because it stays in place during
                     // replacement
-                    let assignment_indent = assignment_stmt.location().extract_indentation(source);
+                    let assignment_indent = statement_location.extract_indentation(source);
                     let target_column = assignment_indent.len() + new_line_prefix.len();
 
                     let Some(param_spec_text) =
@@ -276,8 +299,8 @@ impl UseGObjectClassInstallProperties {
                         self.reindent_multiline(&param_spec_text, target_column)
                     );
                     fixes.push(Fix::new(
-                        assignment_stmt.location().start_byte,
-                        assignment_stmt.location().end_byte,
+                        statement_location.start_byte,
+                        statement_location.end_byte,
                         replacement,
                     ));
 
@@ -436,48 +459,6 @@ impl UseGObjectClassInstallProperties {
         }
 
         result
-    }
-
-    /// Find the param_spec assignment statement that precedes an
-    /// install_property call Returns (assignment_statement, variable_name,
-    /// g_param_spec_call)
-    fn find_param_spec_assignment<'a>(
-        &self,
-        statements: &'a [Statement],
-        install_call: &gobject_ast::CallExpression,
-        source: &[u8],
-    ) -> Option<(&'a Statement, String, &'a gobject_ast::CallExpression)> {
-        use gobject_ast::Statement;
-
-        // Get the variable name from the 3rd argument of install_property
-        let param_spec_arg = install_call.get_arg(2)?;
-        let var_name = param_spec_arg.to_source_string(source)?;
-
-        // Find the statement containing the install_property call
-        let install_stmt_idx = statements.iter().position(|stmt| {
-            let loc = stmt.location();
-            install_call.location.start_byte >= loc.start_byte
-                && install_call.location.start_byte < loc.end_byte
-        })?;
-
-        // Search backward from the install_property call for an assignment to var_name
-        for stmt in statements[..install_stmt_idx].iter().rev() {
-            if let Statement::Expression(expr_stmt) = stmt
-                && let Expression::Assignment(assignment) = &expr_stmt.expr
-            {
-                // Check if this assigns to our variable
-                if let Some(lhs) = assignment.lhs.to_source_string(source)
-                    && lhs == var_name
-                {
-                    // Check if the RHS is a g_param_spec call
-                    if let Expression::Call(param_spec_call) = &*assignment.rhs {
-                        return Some((stmt, var_name, param_spec_call));
-                    }
-                }
-            }
-        }
-
-        None
     }
 
     /// Find the GParamSpec variable declaration in the function body

@@ -106,6 +106,14 @@ impl FileModel {
             })
     }
 
+    /// Iterate through class_init functions
+    pub fn iter_class_init_functions(
+        &self,
+    ) -> impl Iterator<Item = &super::top_level::FunctionDefItem> + '_ {
+        self.iter_function_definitions()
+            .filter(|f| f.name.ends_with("_class_init"))
+    }
+
     /// Iterate through all function declarations in the file (including those
     /// in #ifdef blocks)
     pub fn iter_function_declarations(
@@ -157,6 +165,13 @@ impl FileModel {
                     _ => None,
                 }
             })
+    }
+
+    /// Iterate through property enums (enums that appear to define GObject
+    /// properties) Filters for enums where first member starts with PROP_
+    /// or ends with _PROP_0
+    pub fn iter_property_enums(&self) -> impl Iterator<Item = &super::types::EnumInfo> + '_ {
+        self.iter_all_enums().filter(|e| e.is_property_enum())
     }
 
     /// Recursively iterate through all items (including those in #ifdef blocks)
