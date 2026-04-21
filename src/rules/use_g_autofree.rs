@@ -88,6 +88,10 @@ impl UseGAutofree {
         for stmt in statements {
             for decl in stmt.iter_declarations() {
                 if decl.is_simple_identifier() {
+                    // Skip variables that already have auto cleanup attributes
+                    if decl.type_info.uses_auto_cleanup() {
+                        continue;
+                    }
                     result.insert(decl.name.clone(), (decl.type_info.clone(), decl.location));
                 }
             }

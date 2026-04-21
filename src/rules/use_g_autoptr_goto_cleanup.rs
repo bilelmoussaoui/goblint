@@ -94,6 +94,11 @@ impl UseGAutoptrGotoCleanup {
     ) {
         for stmt in statements {
             for decl in stmt.iter_declarations() {
+                // Skip variables already using auto-cleanup macros
+                if decl.type_info.uses_auto_cleanup() {
+                    continue;
+                }
+
                 // Only track pointer types
                 if decl.type_info.is_pointer() && decl.is_simple_identifier() {
                     result.insert(decl.name.clone(), (decl.type_info.clone(), decl.location));

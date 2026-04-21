@@ -72,6 +72,11 @@ impl UseGAutoptrError {
     ) {
         for stmt in statements {
             for decl in stmt.iter_declarations() {
+                // Skip variables already using auto-cleanup macros
+                if decl.type_info.uses_auto_cleanup() {
+                    continue;
+                }
+
                 // Check if type is GError pointer
                 if decl.type_info.is_base_type("GError") && decl.type_info.is_pointer() {
                     result.push((decl.name.clone(), (decl.type_info.clone(), decl.location)));
