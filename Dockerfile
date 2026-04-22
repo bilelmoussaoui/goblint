@@ -16,6 +16,7 @@ RUN mkdir -p src gobject-ast/src && \
 # Copy actual source code
 COPY src ./src
 COPY gobject-ast ./gobject-ast
+COPY docs ./docs
 
 # Build the actual binary
 RUN cargo build --release --bin goblint
