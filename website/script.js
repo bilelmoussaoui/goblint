@@ -47,7 +47,7 @@ function renderDetail(rule) {
     rule.config_options && rule.config_options.length > 0
       ? `
     <div>
-      <h3 class="text-lg font-semibold detail-label mb-3">Configuration Options</h3>
+      <h3 class="text-lg font-semibold detail-label mb-3">Configuration</h3>
       ${rule.config_options
         .map(
           (opt) => `
@@ -65,7 +65,6 @@ function renderDetail(rule) {
       <div class="text-sm detail-label mt-3">
         Example configuration in <code>goblint.toml</code>:
         <pre class="code-block p-3 rounded-lg border mt-2 text-xs">[rules.${rule.name}]
-level = "error"
 ${rule.config_options.map((opt) => `${opt.name} = ${opt.example_value}`).join("\n")}</pre>
       </div>
     </div>

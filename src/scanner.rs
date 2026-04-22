@@ -422,15 +422,39 @@ pub fn list_all_rules_json(config: &Config) -> String {
 
     let metadata: Vec<RuleMetadata> = rules
         .iter()
-        .map(|entry| RuleMetadata {
-            name: entry.rule.name().to_string(),
-            description: entry.rule.description().to_string(),
-            long_description: entry.rule.long_description().map(|s| s.to_string()),
-            category: entry.rule.category().as_str().to_string(),
-            fixable: entry.rule.fixable(),
-            min_glib_version: format!("{}.{}", entry.min_glib_version.0, entry.min_glib_version.1),
-            requires_auto_cleanup: entry.requires_auto_cleanup,
-            config_options: entry.rule.config_options().to_vec(),
+        .map(|entry| {
+            // Prepend standard config options to rule-specific ones
+            let mut all_options = vec![
+                crate::rules::ConfigOption {
+                    name: "level",
+                    option_type: "string",
+                    default_value: "\"warn\"",
+                    example_value: "\"error\"",
+                    description: "Rule severity level: \"error\", \"warn\", or \"ignore\"",
+                },
+                crate::rules::ConfigOption {
+                    name: "ignore",
+                    option_type: "array<string>",
+                    default_value: "[]",
+                    example_value: "[\"tests/**\", \"examples/*.c\"]",
+                    description: "Glob patterns for files to ignore for this rule",
+                },
+            ];
+            all_options.extend_from_slice(entry.rule.config_options());
+
+            RuleMetadata {
+                name: entry.rule.name().to_string(),
+                description: entry.rule.description().to_string(),
+                long_description: entry.rule.long_description().map(|s| s.to_string()),
+                category: entry.rule.category().as_str().to_string(),
+                fixable: entry.rule.fixable(),
+                min_glib_version: format!(
+                    "{}.{}",
+                    entry.min_glib_version.0, entry.min_glib_version.1
+                ),
+                requires_auto_cleanup: entry.requires_auto_cleanup,
+                config_options: all_options,
+            }
         })
         .collect();
 
