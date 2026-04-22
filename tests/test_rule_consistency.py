@@ -49,19 +49,10 @@ def get_tested_rules(rule_tests_path):
     return set(matches)
 
 
-def get_documented_rules(rules_md_path):
-    """Extract all rule names from RULES.md."""
-    content = rules_md_path.read_text()
-    # Match markdown bold rule names: - **rule_name** - description
-    matches = re.findall(r'-\s+\*\*([a-z_0-9]+)\*\*\s+-', content)
-    return set(matches)
-
-
 def test_rule_consistency():
     """Test all rules for consistency."""
     project_root = Path(__file__).parent.parent
     rules_dir = project_root / "src" / "rules"
-    rules_md = project_root / "RULES.md"
     rule_tests_rs = project_root / "tests" / "rule_tests.rs"
     fixtures_dir = project_root / "tests" / "fixtures"
 
@@ -70,11 +61,6 @@ def test_rule_consistency():
 
     if not rule_files:
         raise AssertionError("No rule files found!")
-
-    # Get documented rules
-    documented_rules = get_documented_rules(rules_md)
-    if not documented_rules:
-        raise AssertionError("No rules found in RULES.md!")
 
     # Get tested rules
     tested_rules = get_tested_rules(rule_tests_rs)
@@ -109,12 +95,6 @@ def test_rule_consistency():
                 f"expected PascalCase '{expected_struct_name}' for rule '{rule_name}'"
             )
 
-        # Check 3: Rule must be documented in RULES.md
-        if rule_name not in documented_rules:
-            errors.append(
-                f"{rule_file.name}: Rule '{rule_name}' is not documented in RULES.md"
-            )
-
         # Check 4: Rule must have a registered test in rule_tests.rs
         if rule_name not in tested_rules:
             errors.append(
@@ -128,13 +108,6 @@ def test_rule_consistency():
                 f"{rule_file.name}: Rule '{rule_name}' has no fixture directory at tests/fixtures/{rule_name}/"
             )
 
-    # Check 6: All documented rules should have corresponding files
-    for doc_rule in documented_rules:
-        if doc_rule not in all_rule_names:
-            errors.append(
-                f"RULES.md: Rule '{doc_rule}' is documented but has no corresponding file"
-            )
-
     # Report results
     if errors:
         error_msg = "\n".join(errors)
@@ -143,7 +116,6 @@ def test_rule_consistency():
     print(f"✓ All {len(rule_files)} rules are consistent!")
     print("  - File names match rule names")
     print("  - Struct names are correct PascalCase")
-    print("  - All rules documented in RULES.md")
     print("  - All rules have a registered test case in rule_tests.rs")
     print("  - All rules have a fixture directory")
 

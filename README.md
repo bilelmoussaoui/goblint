@@ -31,9 +31,9 @@ goblint --ignore "build/**" --ignore "tests/**"
 
 ## Available Rules
 
-See [RULES.md](RULES.md) for a complete list of all available rules organized by category.
+Browse all available rules at **https://bilelmoussaoui.github.io/goblint/** with descriptions, examples, and configuration options.
 
-Run `goblint --list-rules` to see the current status of all rules.
+Run `goblint --list-rules` to see the current status of all rules in your terminal.
 
 ## Configuration
 
