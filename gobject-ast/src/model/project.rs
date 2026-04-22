@@ -260,7 +260,7 @@ impl FileModel {
         &super::top_level::FunctionDefItem,
         Vec<super::types::ParamSpecAssignment>,
     )> {
-        use super::types::ParamSpecAssignment;
+        use super::{expression::Expression, types::ParamSpecAssignment};
 
         // Get N_PROPS name if present
         let n_props_name = enum_info
@@ -277,8 +277,31 @@ impl FileModel {
             .map(|v| v.name.as_str())
             .collect();
 
-        // Find GParamSpec array declarations that use N_PROPS
+        // Find GParamSpec array declarations that use N_PROPS or properties from this
+        // enum
         let arrays = self.find_typed_arrays("GParamSpec", true, n_props_name);
+
+        // Filter arrays to only those that reference properties from THIS enum
+        let arrays: Vec<_> = arrays
+            .into_iter()
+            .filter(|decl| {
+                // If we have an N_PROPS sentinel, we already filtered correctly above
+                if n_props_name.is_some() {
+                    return true;
+                }
+
+                // For modern enums (no N_PROPS), check if the array size uses a property from
+                // this enum
+                if let Some(Expression::Binary(binary)) = &decl.array_size
+                    && let Expression::Identifier(prop_id) = &*binary.left
+                {
+                    property_names.contains(&prop_id.name.as_str())
+                } else {
+                    false
+                }
+            })
+            .collect();
+
         let array_names: Vec<&str> = arrays.iter().map(|d| d.name.as_str()).collect();
 
         // Find class_init function that uses this array OR property names
@@ -287,24 +310,23 @@ impl FileModel {
 
             // Check if any param_spec assignments use our array or enum values
             let has_param_spec_usage = assignments.iter().any(|a| match a {
-                ParamSpecAssignment::ArraySubscript {
-                    array_name,
-                    enum_value,
-                    ..
-                } => {
-                    // Match if array is in our tracked arrays OR if enum_value is from our enum
+                ParamSpecAssignment::ArraySubscript { array_name, .. } => {
+                    // Match ONLY by array name - the array is the definitive link
                     array_names.contains(&array_name.as_str())
-                        || property_names.contains(&enum_value.as_str())
                 }
                 ParamSpecAssignment::OverrideProperty { enum_value, .. } => {
+                    // Override properties don't use arrays - match by enum value
                     property_names.contains(&enum_value.as_str())
                 }
                 ParamSpecAssignment::Variable { install_call, .. } => {
-                    install_call.as_ref().is_some_and(|call| {
-                        call.get_arg(1)
-                            .and_then(|arg| arg.to_source_string(&self.source))
-                            .is_some_and(|enum_val| property_names.contains(&enum_val.as_str()))
-                    })
+                    // Variable assignments without arrays - match by enum value in install call
+                    // Only relevant when no arrays are found for this enum
+                    array_names.is_empty()
+                        && install_call.as_ref().is_some_and(|call| {
+                            call.get_arg(1)
+                                .and_then(|arg| arg.to_source_string(&self.source))
+                                .is_some_and(|enum_val| property_names.contains(&enum_val.as_str()))
+                        })
                 }
             });
 

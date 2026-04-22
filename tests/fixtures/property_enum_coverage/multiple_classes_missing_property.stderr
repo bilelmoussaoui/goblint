@@ -1,0 +1,1 @@
+multiple_classes_missing_property.c:16:1: property_enum_coverage: Property enum value 'ITEM_PROP_PRIORITY' is declared but never installed in my_item_class_init
