@@ -380,13 +380,13 @@ impl PropertySwitchExhaustiveness {
         source: &[u8],
     ) -> Fix {
         let insertion_point = self.find_case_insertion_point(switch_stmt, source);
-        let indent = self.detect_indentation(switch_stmt, source);
+        let (case_indent, body_indent) = self.detect_indentation(switch_stmt, source);
 
         let mut replacement = String::new();
         for prop_name in prop_names {
             replacement.push_str(&format!(
-                "{}case {}:\n{0}  g_assert_not_reached ();\n{0}  break;\n",
-                indent, prop_name
+                "{}case {}:\n{}g_assert_not_reached ();\n{}break;\n",
+                case_indent, prop_name, body_indent, body_indent
             ));
         }
 
@@ -401,7 +401,7 @@ impl PropertySwitchExhaustiveness {
         switch_stmt: &gobject_ast::SwitchStatement,
         source: &[u8],
     ) -> Fix {
-        let indent = self.detect_indentation(switch_stmt, source);
+        let (case_indent, body_indent) = self.detect_indentation(switch_stmt, source);
 
         // Find the range of the default case to replace
         let (start, end) = self.find_default_case_range(switch_stmt, source);
@@ -410,8 +410,8 @@ impl PropertySwitchExhaustiveness {
         let mut replacement = String::new();
         for prop_name in prop_names {
             replacement.push_str(&format!(
-                "{}case {}:\n{0}  g_assert_not_reached ();\n{0}  break;\n",
-                indent, prop_name
+                "{}case {}:\n{}g_assert_not_reached ();\n{}break;\n",
+                case_indent, prop_name, body_indent, body_indent
             ));
         }
 
@@ -480,18 +480,32 @@ impl PropertySwitchExhaustiveness {
         }
     }
 
-    /// Detect indentation level from existing cases
+    /// Detect indentation levels from existing cases
+    /// Returns (case_indent, body_indent) where body_indent is for statements
+    /// inside the case
     fn detect_indentation(
         &self,
         switch_stmt: &gobject_ast::SwitchStatement,
         source: &[u8],
-    ) -> String {
-        // Find the first case and detect its indentation
-        if let Some(case) = switch_stmt.cases.first() {
-            return case.label.location.extract_indentation(source);
+    ) -> (String, String) {
+        // Try to find a case with at least one statement in its body
+        for case in &switch_stmt.cases {
+            if let Some(first_stmt) = case.body.first() {
+                let case_indent = case.label.location.extract_indentation(source);
+                let body_indent = first_stmt.location().extract_indentation(source);
+                return (case_indent, body_indent);
+            }
         }
 
-        // Default: 2 spaces
-        "  ".to_string()
+        // If no case has body statements, try to get case label indentation
+        if let Some(case) = switch_stmt.cases.first() {
+            let case_indent = case.label.location.extract_indentation(source);
+            // Assume body is indented 2 more spaces than case
+            let body_indent = format!("{}  ", case_indent);
+            return (case_indent, body_indent);
+        }
+
+        // Default: case at 2 spaces, body at 4 spaces
+        ("  ".to_string(), "    ".to_string())
     }
 }
