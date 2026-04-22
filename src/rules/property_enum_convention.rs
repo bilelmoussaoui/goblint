@@ -581,7 +581,7 @@ impl PropertyEnumConvention {
                     // Check if any case label uses n_props_name
                     for case in &switch_stmt.cases {
                         if let Some(value_expr) = &case.label.value
-                            && self.expression_uses_identifier(value_expr, n_props_name)
+                            && value_expr.contains_identifier(n_props_name)
                         {
                             return true;
                         }
@@ -590,38 +590,6 @@ impl PropertyEnumConvention {
             }
         }
         false
-    }
-
-    /// Check if an expression uses a specific identifier
-    fn expression_uses_identifier(&self, expr: &gobject_ast::Expression, identifier: &str) -> bool {
-        use gobject_ast::Expression;
-        match expr {
-            Expression::Identifier(ident) => ident.name == identifier,
-            Expression::Binary(binary) => {
-                self.expression_uses_identifier(&binary.left, identifier)
-                    || self.expression_uses_identifier(&binary.right, identifier)
-            }
-            Expression::Unary(unary) => self.expression_uses_identifier(&unary.operand, identifier),
-            Expression::Call(call) => call.arguments.iter().any(|arg| {
-                let gobject_ast::Argument::Expression(expr) = arg;
-                self.expression_uses_identifier(expr, identifier)
-            }),
-            Expression::Cast(cast) => self.expression_uses_identifier(&cast.operand, identifier),
-            Expression::Conditional(cond) => {
-                self.expression_uses_identifier(&cond.condition, identifier)
-                    || self.expression_uses_identifier(&cond.then_expr, identifier)
-                    || self.expression_uses_identifier(&cond.else_expr, identifier)
-            }
-            Expression::FieldAccess(_) => {
-                // FieldAccessExpression only stores text, not parsed sub-expressions
-                false
-            }
-            Expression::Subscript(sub) => {
-                self.expression_uses_identifier(&sub.array, identifier)
-                    || self.expression_uses_identifier(&sub.index, identifier)
-            }
-            _ => false,
-        }
     }
 
     /// Build a map of enum value name -> whether it's an override property

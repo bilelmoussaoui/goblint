@@ -187,6 +187,49 @@ impl Statement {
         results
     }
 
+    /// Iterator over all if statements in this statement tree (recursive)
+    pub fn iter_if_statements(&self) -> impl Iterator<Item = &IfStatement> {
+        Self::collect_if_statements(self).into_iter()
+    }
+
+    fn collect_if_statements(stmt: &Statement) -> Vec<&IfStatement> {
+        let mut results = Vec::new();
+        if let Statement::If(if_stmt) = stmt {
+            results.push(if_stmt);
+        }
+
+        // Recurse into nested statements
+        match stmt {
+            Statement::If(if_stmt) => {
+                for s in &if_stmt.then_body {
+                    results.extend(Self::collect_if_statements(s));
+                }
+                if let Some(else_body) = &if_stmt.else_body {
+                    for s in else_body {
+                        results.extend(Self::collect_if_statements(s));
+                    }
+                }
+            }
+            Statement::Compound(compound) => {
+                for s in &compound.statements {
+                    results.extend(Self::collect_if_statements(s));
+                }
+            }
+            Statement::Labeled(labeled) => {
+                results.extend(Self::collect_if_statements(&labeled.statement));
+            }
+            Statement::Switch(switch) => {
+                for case in &switch.cases {
+                    for s in &case.body {
+                        results.extend(Self::collect_if_statements(s));
+                    }
+                }
+            }
+            _ => {}
+        }
+        results
+    }
+
     /// Iterator over all variable declarations in this statement tree
     /// (recursive)
     pub fn iter_declarations(&self) -> impl Iterator<Item = &VariableDecl> {

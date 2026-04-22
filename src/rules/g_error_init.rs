@@ -1,5 +1,3 @@
-use gobject_ast::Statement;
-
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
@@ -32,24 +30,20 @@ impl Rule for GErrorInit {
     ) {
         // Walk all statements and check declarations
         for stmt in &func.body_statements {
-            stmt.walk(&mut |s| {
-                self.check_statement(path, s, violations);
-            });
+            for decl in stmt.iter_declarations() {
+                self.check_declaration(path, decl, violations);
+            }
         }
     }
 }
 
 impl GErrorInit {
-    fn check_statement(
+    fn check_declaration(
         &self,
         file_path: &std::path::Path,
-        stmt: &Statement,
+        decl: &gobject_ast::VariableDecl,
         violations: &mut Vec<Violation>,
     ) {
-        let Statement::Declaration(decl) = stmt else {
-            return;
-        };
-
         // Check if this is a GError* declaration
         if !decl.type_info.is_base_type("GError") || !decl.type_info.is_pointer() {
             return;

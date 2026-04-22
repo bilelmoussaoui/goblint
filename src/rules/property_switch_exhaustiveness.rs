@@ -173,26 +173,22 @@ impl PropertySwitchExhaustiveness {
         class_init: &gobject_ast::top_level::FunctionDefItem,
         field_name: &str,
     ) -> Option<String> {
-        use gobject_ast::{Expression, Statement};
+        use gobject_ast::Expression;
 
-        for stmt in &class_init.body_statements {
-            if let Statement::Expression(expr_stmt) = stmt {
-                // Look for: object_class->get_property = my_object_get_property
-                if let Expression::Assignment(assignment) = &expr_stmt.expr {
-                    // Check if left side is a field access to the desired field
-                    if let Expression::FieldAccess(field_access) = &*assignment.lhs
-                        && field_access.field == field_name
-                    {
-                        // Extract the function name from the right side
-                        if let Expression::Identifier(id) = &*assignment.rhs {
-                            return Some(id.name.clone());
-                        }
-                    }
+        class_init
+            .body_statements
+            .iter()
+            .flat_map(|s| s.iter_assignments())
+            .find_map(|assignment| {
+                if let Expression::FieldAccess(field_access) = &*assignment.lhs
+                    && field_access.field == field_name
+                    && let Expression::Identifier(id) = &*assignment.rhs
+                {
+                    Some(id.name.clone())
+                } else {
+                    None
                 }
-            }
-        }
-
-        None
+            })
     }
 
     /// Check a property getter or setter function for exhaustiveness

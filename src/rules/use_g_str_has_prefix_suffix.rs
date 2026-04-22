@@ -1,4 +1,4 @@
-use gobject_ast::{BinaryOp, Expression, Statement};
+use gobject_ast::{BinaryOp, Expression};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -30,32 +30,15 @@ impl Rule for UseGStrHasPrefixSuffix {
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        self.check_statements(&func.body_statements, path, violations);
+        for stmt in &func.body_statements {
+            stmt.walk_expressions(&mut |expr| {
+                self.check_expression(expr, path, violations);
+            });
+        }
     }
 }
 
 impl UseGStrHasPrefixSuffix {
-    fn check_statements(
-        &self,
-        statements: &[Statement],
-        file_path: &std::path::Path,
-        violations: &mut Vec<Violation>,
-    ) {
-        for stmt in statements {
-            stmt.walk(&mut |s| {
-                // Check expressions in this statement
-                for expr in s.expressions() {
-                    self.check_expression(expr, file_path, violations);
-                }
-
-                // Check condition expression for if statements
-                if let Statement::If(if_stmt) = s {
-                    self.check_expression(&if_stmt.condition, file_path, violations);
-                }
-            });
-        }
-    }
-
     fn check_expression(
         &self,
         expr: &Expression,

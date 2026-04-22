@@ -32,27 +32,16 @@ impl Rule for UnnecessaryNullCheck {
     ) {
         let source = &ast_context.project.files.get(path).unwrap().source;
         // Walk through function body looking for if statements
-        self.check_statements(&func.body_statements, path, source, violations);
+
+        for stmt in &func.body_statements {
+            for if_stmt in stmt.iter_if_statements() {
+                self.check_if_statement(if_stmt, path, source, violations);
+            }
+        }
     }
 }
 
 impl UnnecessaryNullCheck {
-    fn check_statements(
-        &self,
-        statements: &[Statement],
-        file_path: &std::path::Path,
-        source: &[u8],
-        violations: &mut Vec<Violation>,
-    ) {
-        for stmt in statements {
-            stmt.walk(&mut |s| {
-                if let Statement::If(if_stmt) = s {
-                    self.check_if_statement(if_stmt, file_path, source, violations);
-                }
-            });
-        }
-    }
-
     fn check_if_statement(
         &self,
         if_stmt: &gobject_ast::IfStatement,

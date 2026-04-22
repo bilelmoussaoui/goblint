@@ -1,4 +1,4 @@
-use gobject_ast::{Expression, Statement, UnaryOp};
+use gobject_ast::{Expression, UnaryOp};
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -30,26 +30,15 @@ impl Rule for StrcmpExplicitComparison {
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
-        self.check_statements(&func.body_statements, path, violations);
+        for stmt in &func.body_statements {
+            for if_stmt in stmt.iter_if_statements() {
+                self.check_condition(&if_stmt.condition, path, violations);
+            }
+        }
     }
 }
 
 impl StrcmpExplicitComparison {
-    fn check_statements(
-        &self,
-        statements: &[Statement],
-        file_path: &std::path::Path,
-        violations: &mut Vec<Violation>,
-    ) {
-        for stmt in statements {
-            stmt.walk(&mut |s| {
-                if let Statement::If(if_stmt) = s {
-                    self.check_condition(&if_stmt.condition, file_path, violations);
-                }
-            });
-        }
-    }
-
     fn check_condition(
         &self,
         condition: &Expression,
