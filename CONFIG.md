@@ -8,6 +8,10 @@ Create a `goblint.toml` file in your project root:
 # Set minimum GLib version (disables rules that require newer versions)
 min_glib_version = "2.76"
 
+# Target MSVC-compatible code (disables g_auto* cleanup attributes)
+# When true: enables no_g_auto_macros forbidding all usage of g_auto macros
+msvc_compatible = true
+
 # Editor URL template for clickable links in output
 # {path}, {line}, {column} are replaced with actual values
 editor_url = "vscode://file{path}:{line}:{column}"

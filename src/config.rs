@@ -50,6 +50,10 @@ pub struct Config {
     #[serde(default, deserialize_with = "deserialize_glib_version")]
     pub min_glib_version: Option<(u32, u32)>,
 
+    /// Target MSVC-compatible code
+    #[serde(default)]
+    pub msvc_compatible: bool,
+
     /// Editor URL format for clickable links
     /// Available placeholders: {path}, {line}, {column}
     /// Examples:
@@ -213,7 +217,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
 }
 
 macro_rules! impl_rules_config {
-    ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+    ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
         #[derive(Debug, Clone, Deserialize, Default)]
         pub struct RulesConfig {
             $(
@@ -279,7 +283,7 @@ impl Config {
     /// Get reference to a rule config by field name
     pub fn get_rule_config(&self, field_name: &str) -> Option<&RuleConfig> {
         macro_rules! impl_get_rule_config {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
                 match field_name {
                     $(
                         stringify!($config_field) => Some(&self.rules.$config_field),
@@ -295,7 +299,7 @@ impl Config {
     /// Get mutable reference to a rule config by field name
     pub fn get_rule_config_mut(&mut self, field_name: &str) -> Option<&mut RuleConfig> {
         macro_rules! impl_get_rule_config_mut {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
                 match field_name {
                     $(
                         stringify!($config_field) => Some(&mut self.rules.$config_field),
@@ -313,7 +317,7 @@ impl Config {
         // First, validate that all provided rule names exist
         let valid_rules: Vec<&str> = {
             macro_rules! collect_rule_names {
-                ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+                ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
                     vec![$(stringify!($config_field)),*]
                 };
             }
@@ -328,7 +332,7 @@ impl Config {
 
         // Now enable only the specified rules
         macro_rules! impl_enable_only_rules {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
                 {
                     $(
                         self.rules.$config_field.level = if rule_names.iter().any(|r| r == stringify!($config_field)) {
@@ -350,7 +354,7 @@ impl Config {
         // First, validate that all provided rule names exist
         let valid_rules: Vec<&str> = {
             macro_rules! collect_rule_names {
-                ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+                ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
                     vec![$(stringify!($config_field)),*]
                 };
             }
@@ -365,7 +369,7 @@ impl Config {
 
         // Now disable the specified rules
         macro_rules! impl_disable_rules {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
                 {
                     $(
                         if rule_names.iter().any(|r| r == stringify!($config_field)) {
@@ -383,7 +387,7 @@ impl Config {
     /// Filter rules by category, disabling all others
     pub fn filter_by_category(&mut self, category: crate::rules::Category) -> Result<()> {
         macro_rules! impl_filter_by_category {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
                 {
                     $(
                         self.rules.$config_field.level = if $rule_type.category() == category {

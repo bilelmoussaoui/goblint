@@ -67,6 +67,11 @@ struct Args {
     /// versions
     #[arg(long, value_name = "VERSION", value_parser = parse_glib_version_arg)]
     min_glib_version: Option<(u32, u32)>,
+
+    /// Target MSVC-compatible code (disables g_auto* rules, enables
+    /// no_g_auto_macros)
+    #[arg(long)]
+    msvc_compatible: bool,
 }
 
 /// Parse GLib version string for clap
@@ -103,6 +108,11 @@ fn main() -> Result<()> {
     // Apply --min-glib-version if specified (overrides config)
     if let Some(version) = args.min_glib_version {
         config.min_glib_version = Some(version);
+    }
+
+    // Apply --msvc-compatible if specified (overrides config)
+    if args.msvc_compatible {
+        config.msvc_compatible = true;
     }
 
     // Apply --only filter if specified
