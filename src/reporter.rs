@@ -190,9 +190,13 @@ pub fn report_summary(violations: &[Violation], fixable: &HashMap<&str, bool>) {
     }
 
     println!("{}", bot);
+
+    // Calculate total from the counts table to ensure accuracy
+    let total_count: usize = counts.values().sum();
+
     println!(
         "  {} violation(s) across {} rule(s)",
-        violations.len().to_string().yellow().bold(),
+        total_count.to_string().yellow().bold(),
         rows.len().to_string().yellow().bold(),
     );
 }
