@@ -5,6 +5,7 @@ const categoryFilter = document.getElementById("categoryFilter");
 
 let rules = [];
 let filteredRules = [];
+let selectedRuleName = null;
 
 function formatCategory(category) {
   const categoryMap = {
@@ -32,12 +33,16 @@ function renderList() {
 
   ruleList.innerHTML = sortedRules
     .map(
-      (r) => `
-    <div onclick="selectRule('${r.name}')" class="rule-item px-4 py-3 border-b cursor-pointer">
+      (r) => {
+        const isActive = r.name === selectedRuleName;
+        const activeClass = isActive ? ' active' : '';
+        return `
+    <div onclick="selectRule('${r.name}')" class="rule-item${activeClass} px-4 py-3 border-b cursor-pointer">
       <div class="rule-item-name" title="${r.name}">${r.name}</div>
       <div class="text-sm rule-item-category mt-1">${formatCategory(r.category)}</div>
     </div>
-  `,
+  `;
+      },
     )
     .join("");
 }
@@ -104,7 +109,9 @@ ${rule.config_options.map((opt) => `${opt.name} = ${opt.example_value}`).join("\
 function selectRule(name) {
   const rule = rules.find((r) => r.name === name);
   if (!rule) return;
+  selectedRuleName = name;
   renderDetail(rule);
+  renderList(); // Re-render to update active state
   location.hash = name;
 }
 

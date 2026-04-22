@@ -1,14 +1,10 @@
-html {
-  zoom: 1.33;
-}
-
 body {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 15px;
+  font-size: 18px;
 }
 
 .sidebar {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 @media (prefers-color-scheme: light) {
@@ -32,6 +28,10 @@ body {
   }
   .rule-item:hover {
     background-color: #e5e7eb;
+  }
+  .rule-item.active {
+    background-color: #dbeafe;
+    border-left: 3px solid #3b82f6;
   }
   .rule-item-name {
     overflow: hidden;
@@ -103,6 +103,10 @@ body {
   }
   .rule-item:hover {
     background-color: #1f2937;
+  }
+  .rule-item.active {
+    background-color: #1e3a8a;
+    border-left: 3px solid #60a5fa;
   }
   .rule-item-name {
     overflow: hidden;
