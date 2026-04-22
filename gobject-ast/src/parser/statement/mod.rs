@@ -1,4 +1,6 @@
+mod break_stmt;
 mod compound_stmt;
+mod continue_stmt;
 mod expression_stmt;
 mod goto_stmt;
 mod if_stmt;
@@ -175,10 +177,12 @@ impl Parser {
                 self.parse_loop_statement(node, source)
                     .map(Statement::Compound)
             }
-            "break_statement" | "continue_statement" => {
-                // Simple control flow statements - don't need details
-                None
-            }
+            "break_statement" => self
+                .parse_break_statement(node, source)
+                .map(Statement::Break),
+            "continue_statement" => self
+                .parse_continue_statement(node, source)
+                .map(Statement::Continue),
             "case_statement" => {
                 // Case labels in switch statements - parse the body
                 let mut cursor = node.walk();

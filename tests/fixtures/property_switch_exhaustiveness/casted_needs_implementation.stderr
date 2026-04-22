@@ -1,0 +1,2 @@
+casted_needs_implementation.c:31:1: property_switch_exhaustiveness: Property 'PROP_STATUS' should be handled in my_object_get_property switch statement
+casted_needs_implementation.c:50:1: property_switch_exhaustiveness: Switch is exhaustive with enum cast; default case can be removed for compile-time checking

@@ -15,6 +15,19 @@ Rules that detect code that is outright wrong or very useless.
 - **g_param_spec_static_name_canonical** - Ensure property names are canonical (use dashes, not underscores). Critical with G_PARAM_STATIC_NAME
 - **g_object_virtual_methods_chain_up** - Ensure dispose/finalize/constructed methods chain up to parent class
 - **property_enum_coverage** - Ensure all property enum values have corresponding g_param_spec or g_object_class_override_property
+- **property_switch_exhaustiveness** - Ensure get_property/set_property switch statements handle all properties. Auto-fixes incompatible properties (write-only in getter, read-only in setter) with `g_assert_not_reached()`. Removes default case when switch is exhaustive with enum cast.
+  - **Per-rule config option `readable_flags`**: List of flag constants that indicate a property is readable (default: `["G_PARAM_READABLE", "G_PARAM_READWRITE"]`). Use this if your project has custom flag macros. Example:
+    ```toml
+    [rules.property_switch_exhaustiveness]
+    level = "error"
+    readable_flags = ["G_PARAM_READABLE", "G_PARAM_READWRITE", "MY_LIB_READABLE"]
+    ```
+  - **Per-rule config option `writable_flags`**: List of flag constants that indicate a property is writable (default: `["G_PARAM_WRITABLE", "G_PARAM_READWRITE"]`). Use this if your project has custom flag macros. Example:
+    ```toml
+    [rules.property_switch_exhaustiveness]
+    level = "error"
+    writable_flags = ["G_PARAM_WRITABLE", "G_PARAM_READWRITE", "MY_LIB_WRITABLE"]
+    ```
 - **signal_enum_coverage** - Ensure all signal enum values have corresponding g_signal_new calls
 - **strcmp_explicit_comparison** - Require explicit comparison with 0 for strcmp/g_strcmp0 (returns 0 for equality, not TRUE)
 - **use_g_ascii_functions** - Use g_ascii_* functions instead of locale-dependent C ctype functions (tolower, toupper, isdigit, etc.)

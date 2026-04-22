@@ -1,0 +1,2 @@
+casted_auto_fixable.c:31:1: property_switch_exhaustiveness: Property 'PROP_PASSWORD' should be handled in my_object_get_property switch statement
+casted_auto_fixable.c:50:1: property_switch_exhaustiveness: Switch is exhaustive with enum cast; default case can be removed for compile-time checking

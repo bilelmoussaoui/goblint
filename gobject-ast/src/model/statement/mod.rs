@@ -1,4 +1,6 @@
+mod break_stmt;
 mod compound_stmt;
+mod continue_stmt;
 mod expression_stmt;
 mod goto_stmt;
 mod if_stmt;
@@ -7,14 +9,16 @@ mod return_stmt;
 mod switch_stmt;
 mod variable_decl;
 
+pub use break_stmt::BreakStatement;
 pub use compound_stmt::CompoundStatement;
+pub use continue_stmt::ContinueStatement;
 pub use expression_stmt::ExpressionStmt;
 pub use goto_stmt::GotoStatement;
 pub use if_stmt::IfStatement;
 pub use labeled_stmt::LabeledStatement;
 pub use return_stmt::ReturnStatement;
 use serde::{Deserialize, Serialize};
-pub use switch_stmt::{CaseLabel, SwitchStatement};
+pub use switch_stmt::{CaseLabel, SwitchCase, SwitchStatement};
 pub use variable_decl::VariableDecl;
 
 use crate::model::{Argument, CallExpression, Expression, SourceLocation};
@@ -29,6 +33,8 @@ pub enum Statement {
     Labeled(LabeledStatement),
     Compound(CompoundStatement),
     Switch(SwitchStatement),
+    Break(BreakStatement),
+    Continue(ContinueStatement),
 }
 
 impl Statement {
@@ -58,8 +64,10 @@ impl Statement {
                 labeled.statement.walk(f);
             }
             Statement::Switch(switch) => {
-                for stmt in &switch.body {
-                    stmt.walk(f);
+                for case in &switch.cases {
+                    for stmt in &case.body {
+                        stmt.walk(f);
+                    }
                 }
             }
             _ => {}
@@ -86,6 +94,8 @@ impl Statement {
             Statement::Labeled(l) => &l.location,
             Statement::Compound(c) => &c.location,
             Statement::Switch(s) => &s.location,
+            Statement::Break(b) => &b.location,
+            Statement::Continue(c) => &c.location,
         }
     }
 
@@ -124,8 +134,10 @@ impl Statement {
             }
             Statement::Switch(switch) => {
                 f(&switch.condition);
-                for stmt in &switch.body {
-                    stmt.walk_expressions(f);
+                for case in &switch.cases {
+                    for stmt in &case.body {
+                        stmt.walk_expressions(f);
+                    }
                 }
             }
             _ => {}
@@ -164,8 +176,10 @@ impl Statement {
                 results.extend(Self::collect_switches(&labeled.statement));
             }
             Statement::Switch(switch) => {
-                for s in &switch.body {
-                    results.extend(Self::collect_switches(s));
+                for case in &switch.cases {
+                    for s in &case.body {
+                        results.extend(Self::collect_switches(s));
+                    }
                 }
             }
             _ => {}
@@ -206,8 +220,10 @@ impl Statement {
                 results.extend(Self::collect_declarations(&labeled.statement));
             }
             Statement::Switch(switch) => {
-                for s in &switch.body {
-                    results.extend(Self::collect_declarations(s));
+                for case in &switch.cases {
+                    for s in &case.body {
+                        results.extend(Self::collect_declarations(s));
+                    }
                 }
             }
             _ => {}
@@ -247,8 +263,10 @@ impl Statement {
                 results.extend(Self::collect_returns(&labeled.statement));
             }
             Statement::Switch(switch) => {
-                for s in &switch.body {
-                    results.extend(Self::collect_returns(s));
+                for case in &switch.cases {
+                    for s in &case.body {
+                        results.extend(Self::collect_returns(s));
+                    }
                 }
             }
             _ => {}
@@ -290,8 +308,10 @@ impl Statement {
                 results.extend(Self::collect_assignments(&labeled.statement));
             }
             Statement::Switch(switch) => {
-                for s in &switch.body {
-                    results.extend(Self::collect_assignments(s));
+                for case in &switch.cases {
+                    for s in &case.body {
+                        results.extend(Self::collect_assignments(s));
+                    }
                 }
             }
             _ => {}
@@ -348,8 +368,10 @@ impl Statement {
             }
             Statement::Switch(switch) => {
                 Self::collect_calls_from_expr(&switch.condition, &mut results);
-                for s in &switch.body {
-                    results.extend(Self::collect_calls(s));
+                for case in &switch.cases {
+                    for s in &case.body {
+                        results.extend(Self::collect_calls(s));
+                    }
                 }
             }
             _ => {}

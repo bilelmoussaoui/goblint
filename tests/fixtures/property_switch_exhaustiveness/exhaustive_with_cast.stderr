@@ -1,0 +1,2 @@
+exhaustive_with_cast.c:30:1: property_switch_exhaustiveness: Switch is exhaustive with enum cast; default case can be removed for compile-time checking
+exhaustive_with_cast.c:52:1: property_switch_exhaustiveness: Switch is exhaustive with enum cast; default case can be removed for compile-time checking

@@ -580,7 +580,7 @@ impl PropertyEnumConvention {
                 for switch_stmt in stmt.iter_switches() {
                     // Check if any case label uses n_props_name
                     for case in &switch_stmt.cases {
-                        if let Some(value_expr) = &case.value
+                        if let Some(value_expr) = &case.label.value
                             && self.expression_uses_identifier(value_expr, n_props_name)
                         {
                             return true;

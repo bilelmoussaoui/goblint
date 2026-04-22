@@ -1,0 +1,2 @@
+write_only_properties.c:30:1: property_switch_exhaustiveness: Property 'PROP_PASSWORD' should be handled in my_object_get_property switch statement
+write_only_properties.c:49:1: property_switch_exhaustiveness: Property 'PROP_PASSWORD' should be handled in my_object_set_property switch statement

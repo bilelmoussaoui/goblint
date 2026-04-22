@@ -1,0 +1,2 @@
+read_only_properties.c:30:1: property_switch_exhaustiveness: Property 'PROP_STATUS' should be handled in my_object_get_property switch statement
+read_only_properties.c:50:1: property_switch_exhaustiveness: Property 'PROP_STATUS' should be handled in my_object_set_property switch statement

@@ -20,8 +20,9 @@ pub use operators::{AssignmentOp, BinaryOp, FieldAccessOp, UnaryOp, UpdateOp};
 pub use project::{FileModel, Project};
 pub use source_location::SourceLocation;
 pub use statement::{
-    CaseLabel, CompoundStatement, ExpressionStmt, GotoStatement, IfStatement, LabeledStatement,
-    ReturnStatement, Statement, SwitchStatement, VariableDecl,
+    BreakStatement, CaseLabel, CompoundStatement, ContinueStatement, ExpressionStmt, GotoStatement,
+    IfStatement, LabeledStatement, ReturnStatement, Statement, SwitchCase, SwitchStatement,
+    VariableDecl,
 };
 pub use type_info::TypeInfo;
 pub use types::*;
