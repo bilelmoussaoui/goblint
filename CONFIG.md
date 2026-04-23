@@ -69,13 +69,7 @@ ignore = [
 
 ### Per-Rule Configuration Options
 
-Some rules accept additional configuration options beyond `level` and `ignore`. These are documented in [RULES.md](RULES.md). For example, the `include_order` rule accepts a `config_header` option:
-
-```toml
-[rules.include_order]
-level = "error"
-config_header = "myproject-config.h"  # Default: "config.h"
-```
+Some rules accept additional configuration that are documented in https://bilelmoussaoui.github.io/goblint/.
 
 ## Inline Ignore Directives
 
