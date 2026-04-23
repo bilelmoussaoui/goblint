@@ -1,0 +1,1 @@
+already_has_attribute.c:2:1: use_g_gnuc_flag_enum: Enum 'G_GNUC_FLAG_ENUM' appears to be a flags enum but is missing G_GNUC_FLAG_ENUM attribute

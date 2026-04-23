@@ -149,6 +149,7 @@ macro_rules! for_each_rule {
             (use_g_clear_signal_handler, UseGClearSignalHandler, 2, 0, false),
             (use_g_clear_weak_pointer, UseGClearWeakPointer, 2, 56, false),
             (use_g_file_load_bytes, UseGFileLoadBytes, 2, 56, false),
+            (use_g_gnuc_flag_enum, UseGGnucFlagEnum, 2, 87, false),
             (use_g_object_new_with_properties, UseGObjectNewWithProperties, 2, 0, false),
             (use_g_object_notify_by_pspec, UseGObjectNotifyByPspec, 2, 26, false),
             (use_g_string_free_and_steal, UseGStringFreeAndSteal, 2, 76, false),

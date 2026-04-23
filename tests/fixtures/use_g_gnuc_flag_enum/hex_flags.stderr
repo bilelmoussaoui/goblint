@@ -1,0 +1,1 @@
+hex_flags.c:2:1: use_g_gnuc_flag_enum: Enum 'PermissionFlags' appears to be a flags enum but is missing G_GNUC_FLAG_ENUM attribute

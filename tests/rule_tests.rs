@@ -317,6 +317,7 @@ rule_test!(
     goblint::rules::UseGAutoptrInlineCleanup
 );
 rule_test!(use_g_file_load_bytes, goblint::rules::UseGFileLoadBytes);
+rule_test!(use_g_gnuc_flag_enum, goblint::rules::UseGGnucFlagEnum);
 rule_test!(use_g_new, goblint::rules::UseGNew);
 rule_test!(
     use_g_object_class_install_properties,

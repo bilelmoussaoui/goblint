@@ -9,6 +9,8 @@ pub struct EnumInfo {
     pub values: Vec<EnumValue>,
     /// Location of the enum body for inserting fixes
     pub body_location: SourceLocation,
+    /// Attributes between closing brace and type name (e.g., G_GNUC_FLAG_ENUM)
+    pub attributes: Vec<String>,
 }
 
 impl EnumInfo {
@@ -23,12 +25,60 @@ impl EnumInfo {
             .iter()
             .any(|v| v.name.contains("_SIGNAL_") || v.name.starts_with("SIGNAL_"))
     }
+
+    /// Check if this appears to be a flags enum (bit flags pattern)
+    /// based on bit shift operations or power-of-two values
+    pub fn is_flags_enum(&self) -> bool {
+        if self.values.is_empty() {
+            return false;
+        }
+
+        let mut has_bit_shift = false;
+        let mut has_power_of_two = false;
+
+        for value in &self.values {
+            // Check if the value expression is a bit shift operation
+            if let Some(expr) = &value.value_expr {
+                if is_bit_shift_expr(expr) {
+                    has_bit_shift = true;
+                }
+            }
+
+            // Check if the evaluated value is a power of 2
+            if let Some(num) = value.value {
+                if num > 0 && (num & (num - 1)) == 0 {
+                    has_power_of_two = true;
+                }
+            }
+        }
+
+        // Consider it a flags enum if it uses bit shifts or multiple power-of-two
+        // values
+        has_bit_shift || (has_power_of_two && self.values.len() > 2)
+    }
+
+    /// Check if this enum has a specific attribute (e.g., G_GNUC_FLAG_ENUM)
+    pub fn has_attribute(&self, attr_name: &str) -> bool {
+        self.attributes.iter().any(|attr| attr == attr_name)
+    }
+}
+
+/// Check if an expression is a bit shift operation (e.g., 1 << 0)
+fn is_bit_shift_expr(expr: &super::super::Expression) -> bool {
+    use super::super::operators::BinaryOp;
+
+    match expr {
+        super::super::Expression::Binary(bin) => matches!(bin.operator, BinaryOp::LeftShift),
+        _ => false,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnumValue {
     pub name: String,
     pub value: Option<i64>,
+    /// The expression AST for the value (if present)
+    pub value_expr: Option<super::super::Expression>,
     /// Location of this enumerator node
     pub location: SourceLocation,
     /// Location of just the name

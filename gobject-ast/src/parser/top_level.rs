@@ -89,6 +89,28 @@ impl Parser {
         TypeInfo::new(full_text, location)
     }
 
+    /// Parse a number literal string, handling both decimal and hexadecimal
+    /// Returns None if the string cannot be parsed as a number
+    fn parse_number_literal(literal: &str) -> Option<i64> {
+        let trimmed = literal.trim();
+
+        // Handle hex numbers (0x or 0X prefix)
+        if let Some(hex_str) = trimmed
+            .strip_prefix("0x")
+            .or_else(|| trimmed.strip_prefix("0X"))
+        {
+            return i64::from_str_radix(hex_str, 16).ok();
+        }
+
+        // Handle octal numbers (0 prefix, but not "0" alone)
+        if trimmed.starts_with('0') && trimmed.len() > 1 && !trimmed.contains('.') {
+            return i64::from_str_radix(&trimmed[1..], 8).ok();
+        }
+
+        // Handle decimal numbers
+        trimmed.parse::<i64>().ok()
+    }
+
     /// Find a function_declarator node within a declaration
     fn find_function_declarator_in_node<'a>(&self, node: Node<'a>) -> Option<Node<'a>> {
         // Direct declarator field
@@ -391,6 +413,34 @@ impl Parser {
         })
     }
 
+    /// Extract attributes between closing brace and declarator in typedef enum
+    /// e.g., "typedef enum { ... } G_GNUC_FLAG_ENUM Name;" ->
+    /// ["G_GNUC_FLAG_ENUM"]
+    fn extract_typedef_enum_attributes(
+        &self,
+        type_node: Node,
+        declarator_node: Node,
+        source: &[u8],
+    ) -> Vec<String> {
+        // Get the text between the closing brace of the enum and the declarator
+        let enum_end = type_node.end_byte();
+        let decl_start = declarator_node.start_byte();
+
+        if decl_start <= enum_end {
+            return Vec::new();
+        }
+
+        let between = &source[enum_end..decl_start];
+        let between_str = std::str::from_utf8(between).unwrap_or("");
+
+        // Split by whitespace and filter out empty strings and punctuation
+        between_str
+            .split_whitespace()
+            .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_'))
+            .map(|s| s.to_owned())
+            .collect()
+    }
+
     pub(super) fn extract_enum(&self, node: Node, source: &[u8]) -> Option<EnumInfo> {
         // Check if this is a typedef or regular declaration containing an enum
         let node_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
@@ -415,6 +465,7 @@ impl Parser {
                     location: self.node_location(node),
                     values,
                     body_location: self.node_location(body),
+                    attributes: Vec::new(), // No attributes in direct enum_specifier
                 });
             }
         }
@@ -428,11 +479,17 @@ impl Parser {
                             std::str::from_utf8(&source[declarator_node.byte_range()]).ok()?;
                         if let Some(body) = type_node.child_by_field_name("body") {
                             let values = self.extract_enum_values(body, source);
+                            let attributes = self.extract_typedef_enum_attributes(
+                                type_node,
+                                declarator_node,
+                                source,
+                            );
                             return Some(EnumInfo {
                                 name: Some(name.to_owned()),
                                 location: self.node_location(node),
                                 values,
                                 body_location: self.node_location(body),
+                                attributes,
                             });
                         }
                     }
@@ -462,6 +519,7 @@ impl Parser {
                             location: self.node_location(child),
                             values,
                             body_location: self.node_location(body),
+                            attributes: Vec::new(), // No attributes in standalone enum
                         });
                     }
                 }
@@ -481,29 +539,31 @@ impl Parser {
                         .unwrap_or("")
                         .to_owned();
 
-                    let (value, value_location) = if let Some(value_node) =
+                    let (value, value_expr, value_location) = if let Some(value_node) =
                         child.child_by_field_name("value")
                     {
                         // Parse as expression (only if it's actually an expression node)
-                        let parsed_value = if Parser::is_expression_node(&value_node) {
+                        let expr = if Parser::is_expression_node(&value_node) {
                             self.parse_expression(value_node, source)
-                                .and_then(|expr| match &expr {
-                                    Expression::NumberLiteral(n) => n.value.parse::<i64>().ok(),
-                                    Expression::Identifier(_) => None, // Symbolic constant
-                                    _ => None,
-                                })
                         } else {
                             None
                         };
 
-                        (parsed_value, Some(self.node_location(value_node)))
+                        let parsed_value = expr.as_ref().and_then(|e| match e {
+                            Expression::NumberLiteral(n) => Self::parse_number_literal(&n.value),
+                            Expression::Identifier(_) => None, // Symbolic constant
+                            _ => None,
+                        });
+
+                        (parsed_value, expr, Some(self.node_location(value_node)))
                     } else {
-                        (None, None)
+                        (None, None, None)
                     };
 
                     values.push(EnumValue {
                         name,
                         value,
+                        value_expr,
                         location: self.node_location(child),
                         name_location: self.node_location(name_node),
                         value_location,
