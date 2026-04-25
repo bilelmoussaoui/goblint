@@ -15,6 +15,8 @@ enum OutputFormat {
     Sarif,
     /// GCC-compatible format for Emacs, Vim, and other tools
     Gcc,
+    /// Gitlab specific Code Quality Report
+    GitlabCodequality,
 }
 
 #[derive(Parser, Debug)]
@@ -262,6 +264,11 @@ fn main() -> Result<()> {
         }
         OutputFormat::Gcc => {
             output::gcc::generate_gcc(&violations);
+        }
+        OutputFormat::GitlabCodequality => {
+            let json =
+                output::gitlab_codequality::generate_gitlab_codequality(&violations, &project_root);
+            println!("{}", json);
         }
     }
 

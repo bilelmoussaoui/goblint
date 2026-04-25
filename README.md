@@ -97,7 +97,7 @@ The results will appear in the "Security" tab under "Code scanning alerts" for y
 
 ### GitLab CI
 
-Using the container image with GitLab's SARIF ingestion:
+Using the container image with GitLab's SARIF ingestion or CodeQuality report:
 
 ```yaml
 goblint:
@@ -106,11 +106,15 @@ goblint:
     name: "ghcr.io/bilelmoussaoui/goblint:latest"
     entrypoint: [""]
   script:
+    # Only available in Enterpise Edition
     - goblint --format sarif > goblint.sarif
+    # Available in the Community Edition
+    - goblint --format gitlab-codequality > goblint-codequality.json
   artifacts:
     expire_in: "1 week"
     reports:
       sarif: goblint.sarif
+      codequality: goblint-codequality.json
 ```
 
 The results will appear in the merge request's security report and as inline comments.
