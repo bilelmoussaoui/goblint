@@ -102,10 +102,13 @@ Using the container image with GitLab's SARIF ingestion:
 ```yaml
 goblint:
   stage: lint
-  image: ghcr.io/bilelmoussaoui/goblint:latest
+  image:
+    name: "ghcr.io/bilelmoussaoui/goblint:latest"
+    entrypoint: [""]
   script:
     - goblint --format sarif > goblint.sarif
   artifacts:
+    expire_in: "1 week"
     reports:
       sarif: goblint.sarif
 ```
