@@ -205,13 +205,12 @@ fn apply_msvc_compatibility(
     requires_auto_cleanup: bool,
     configured_level: crate::config::RuleLevel,
 ) -> crate::config::RuleLevel {
-    if !config.msvc_compatible {
-        return configured_level;
-    }
-
-    // Enable no_g_auto_macros
-    if rule_name == "no_g_auto_macros" {
-        return crate::config::RuleLevel::Error;
+    match (rule_name, config.msvc_compatible) {
+        ("no_g_auto_macros", false) => return crate::config::RuleLevel::Ignore,
+        ("no_g_auto_macros", true) => return crate::config::RuleLevel::Error,
+        (_, false) => return configured_level,
+        // Continue
+        (_, true) => (),
     }
 
     // Disable all rules that require auto cleanup attributes
