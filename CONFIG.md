@@ -23,6 +23,9 @@ ignore = [
     "vendor/**",
 ]
 
+# Output format, one of "text", "json", "sarif", "gcc", or "gitlab-codequality"
+format = "text"
+
 # Configure individual rules
 [rules.use_g_strlcpy]
 level = "error"  # "error", "warn", or "ignore"

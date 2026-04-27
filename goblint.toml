@@ -29,7 +29,7 @@ ignore = [
     "vendor/**",
 ]
 
-# Output format
+# Output format, one of "text", "json", "sarif", "gcc", or "gitlab-codequality"
 format = "text"
 
 [rules]
