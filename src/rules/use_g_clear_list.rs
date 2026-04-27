@@ -95,14 +95,18 @@ impl UseGClearList {
                         ),
                     ];
 
+                    let base_type = match list_type {
+                        "GList" => "g_list",
+                        "GSList" => "g_slist",
+                        _ => unreachable!(),
+                    };
+
                     violations.push(self.violation_with_fixes(
                         file_path,
                         first.location().line,
                         first.location().column,
                         format!(
-                            "Use {} instead of {}_free and NULL assignment",
-                            replacement,
-                            list_type.to_lowercase()
+                            "Use {replacement} instead of {base_type}_free and NULL assignment",
                         ),
                         fixes,
                     ));

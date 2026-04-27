@@ -1,2 +1,2 @@
-basic.c:6:3: use_g_clear_list: Use g_clear_list (&list, NULL); instead of glist_free and NULL assignment
-basic.c:9:3: use_g_clear_list: Use g_clear_slist (&slist, NULL); instead of gslist_free and NULL assignment
+basic.c:6:3: use_g_clear_list: Use g_clear_list (&list, NULL); instead of g_list_free and NULL assignment
+basic.c:9:3: use_g_clear_list: Use g_clear_slist (&slist, NULL); instead of g_slist_free and NULL assignment
