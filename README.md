@@ -113,7 +113,9 @@ goblint:
   artifacts:
     expire_in: "1 week"
     reports:
+      # Only available in Enterprise Edition
       sarif: goblint.sarif
+      # Available in the Community Edition
       codequality: goblint-codequality.json
 ```
 
