@@ -106,7 +106,7 @@ goblint:
     name: "ghcr.io/bilelmoussaoui/goblint:latest"
     entrypoint: [""]
   script:
-    # Only available in Enterpise Edition
+    # Only available in Enterprise Edition
     - goblint --format sarif > goblint.sarif
     # Available in the Community Edition
     - goblint --format gitlab-codequality > goblint-codequality.json
