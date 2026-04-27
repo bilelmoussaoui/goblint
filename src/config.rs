@@ -1,10 +1,27 @@
 use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::{Context, Result};
+use clap::ValueEnum;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::Deserialize;
 
 use crate::rules::*;
+
+#[derive(Default, Debug, Clone, Copy, ValueEnum, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OutputFormat {
+    /// Human-readable colorized output (default)
+    #[default]
+    Text,
+    /// JSON format
+    Json,
+    /// SARIF JSON format for GitHub Code Scanning, VS Code, etc.
+    Sarif,
+    /// GCC-compatible format for Emacs, Vim, and other tools
+    Gcc,
+    /// Gitlab specific Code Quality Report
+    GitlabCodequality,
+}
 
 /// Parse a GLib version string like "2.76" into (major, minor)
 pub fn parse_glib_version(version: &str) -> Option<(u32, u32)> {
@@ -53,6 +70,9 @@ pub struct Config {
     /// Target MSVC-compatible code
     #[serde(default)]
     pub msvc_compatible: bool,
+
+    /// Output format
+    pub format: Option<OutputFormat>,
 
     /// Editor URL format for clickable links
     /// Available placeholders: {path}, {line}, {column}

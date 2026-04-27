@@ -1,23 +1,11 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::{Parser, ValueEnum};
-use goblint::{ast_context, config, fixer, output, reporter, rules::Category, scanner};
+use clap::Parser;
+use goblint::{
+    ast_context, config, config::OutputFormat, fixer, output, reporter, rules::Category, scanner,
+};
 use indicatif::{ProgressBar, ProgressStyle};
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-enum OutputFormat {
-    /// Human-readable colorized output (default)
-    Text,
-    /// JSON format
-    Json,
-    /// SARIF JSON format for GitHub Code Scanning, VS Code, etc.
-    Sarif,
-    /// GCC-compatible format for Emacs, Vim, and other tools
-    Gcc,
-    /// Gitlab specific Code Quality Report
-    GitlabCodequality,
-}
 
 #[derive(Parser, Debug)]
 #[command(name = "goblint")]
@@ -56,8 +44,8 @@ struct Args {
     category: Option<Category>,
 
     /// Output format
-    #[arg(long, value_enum, default_value = "text")]
-    format: OutputFormat,
+    #[arg(long, value_enum)]
+    format: Option<OutputFormat>,
 
     /// Automatically apply fixes for violations
     #[arg(long)]
@@ -91,9 +79,14 @@ fn parse_glib_version_arg(s: &str) -> Result<(u32, u32), String> {
 fn main() -> Result<()> {
     let args = Args::parse();
 
+    // Load configuration
+    let mut config = config::Config::load(&args.config)?;
+
+    let format = args.format.or(config.format).unwrap_or_default();
+
     // Auto-disable colors for machine-readable formats or when not a terminal
     if matches!(
-        args.format,
+        format,
         OutputFormat::Json | OutputFormat::Sarif | OutputFormat::Gcc
     ) {
         // Machine-readable formats never use colors
@@ -104,9 +97,6 @@ fn main() -> Result<()> {
             colored::control::set_override(false);
         }
     }
-
-    // Load configuration
-    let mut config = config::Config::load(&args.config)?;
 
     // Merge CLI ignore patterns with config
     config.ignore.extend(args.ignore.clone());
@@ -138,7 +128,7 @@ fn main() -> Result<()> {
 
     // Handle --list-rules
     if args.list_rules {
-        match args.format {
+        match format {
             OutputFormat::Json => {
                 println!("{}", scanner::list_all_rules_json(&config));
             }
@@ -249,7 +239,7 @@ fn main() -> Result<()> {
     }
 
     // Output violations in the requested format
-    match args.format {
+    match format {
         OutputFormat::Text => {
             reporter::report_violations(&violations, args.verbose, &config);
         }

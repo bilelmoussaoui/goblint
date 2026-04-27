@@ -29,6 +29,9 @@ ignore = [
     "vendor/**",
 ]
 
+# Output format
+format = "text"
+
 [rules]
 # Rules can be set to:
 #   "warn"  - Report as warning but don't fail CI (default)
