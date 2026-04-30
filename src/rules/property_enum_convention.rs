@@ -1,4 +1,5 @@
 use gobject_ast::Expression;
+use heck::ToShoutySnakeCase;
 
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -19,7 +20,7 @@ impl Rule for PropertyEnumConvention {
     }
 
     fn description(&self) -> &'static str {
-        "Prefer modern property enum pattern (PROP_FOO = 1) over legacy PROP_0/N_PROPS pattern"
+        "Enforce property enum conventions (typed or legacy style)"
     }
 
     fn category(&self) -> super::Category {
@@ -30,16 +31,48 @@ impl Rule for PropertyEnumConvention {
         true
     }
 
+    fn config_options(&self) -> &'static [super::ConfigOption] {
+        &[super::ConfigOption {
+            name: "style",
+            option_type: "string",
+            default_value: "\"typed\"",
+            example_value: "\"legacy\"",
+            description: "Property enum style: \"typed\" (PROP_FOO = 1, no PROP_0/N_PROPS) or \"legacy\" (PROP_0, N_PROPS)",
+        }]
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,
-        _config: &Config,
+        config: &Config,
         violations: &mut Vec<Violation>,
     ) {
+        // Get style configuration (default to "typed")
+        let rule_config = &config.rules.property_enum_convention;
+        let style = rule_config
+            .options
+            .get("style")
+            .and_then(|v| v.as_str())
+            .unwrap_or("typed");
+
+        match style {
+            "typed" => self.check_all_typed_style(ast_context, violations),
+            "legacy" => self.check_all_legacy_style(ast_context, violations),
+            _ => {
+                // Invalid style, default to legacy
+                self.check_all_legacy_style(ast_context, violations);
+            }
+        }
+    }
+}
+
+impl PropertyEnumConvention {
+    /// Check using modern typed enum style (PROP_FOO = 1, no PROP_0/N_PROPS)
+    fn check_all_typed_style(&self, ast_context: &AstContext, violations: &mut Vec<Violation>) {
         for (path, file) in ast_context.iter_all_files() {
-            // Collect sentinel names from enums that will be transformed
+            // Collect N_PROPS names from enums that will be transformed
             // (skip override pattern enums and already-modern enums)
-            let sentinel_usage: std::collections::HashMap<String, usize> = file
+            let n_props_usage: std::collections::HashMap<String, usize> = file
                 .iter_property_enums()
                 .filter(|e| {
                     // Apply same checks as main loop to see if this enum will be transformed
@@ -226,8 +259,8 @@ impl Rule for PropertyEnumConvention {
 
                 // Fix 4 & 5: Find GParamSpec arrays and fix both their declarations and
                 // install_properties calls
-                // Only fix if this sentinel name is unique in the file (avoid ambiguity)
-                if has_n_props && sentinel_usage.get(&n_props_name).copied().unwrap_or(0) == 1 {
+                // Only fix if this N_PROPS name is unique in the file (avoid ambiguity)
+                if has_n_props && n_props_usage.get(&n_props_name).copied().unwrap_or(0) == 1 {
                     let array_names = self.find_and_fix_param_spec_arrays(
                         file,
                         &n_props_name,
@@ -291,7 +324,7 @@ impl Rule for PropertyEnumConvention {
                     } else if has_prop_0 {
                         format!("Remove {} and start enum from = 1", prop_0_name)
                     } else {
-                        format!("Remove {} sentinel", n_props_name)
+                        format!("Remove {}", n_props_name)
                     };
 
                     violations.push(self.violation_with_fixes(
@@ -373,9 +406,131 @@ impl Rule for PropertyEnumConvention {
             }
         }
     }
-}
 
-impl PropertyEnumConvention {
+    /// Check using legacy enum style (PROP_0 at start, N_PROPS at end)
+    fn check_all_legacy_style(&self, ast_context: &AstContext, violations: &mut Vec<Violation>) {
+        // Check each file's enums
+        for (path, file) in ast_context.iter_all_files() {
+            // First pass: collect all existing PROP_0 variants to avoid duplicates
+            let existing_prop_zeros: std::collections::HashSet<String> = file
+                .iter_property_enums()
+                .flat_map(|enum_info| &enum_info.values)
+                .filter_map(|val| {
+                    if val.is_prop_0() {
+                        Some(val.name.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            let mut will_add_unprefixed_prop_zero = existing_prop_zeros.contains("PROP_0");
+
+            // Second pass: check each enum
+            for enum_info in file.iter_property_enums() {
+                // Determine if we need a prefix for PROP_0
+                let prefix = if will_add_unprefixed_prop_zero {
+                    enum_info
+                        .name
+                        .as_ref()
+                        .map(|name| name.to_shouty_snake_case() + "_")
+                } else {
+                    None
+                };
+
+                let mut fixes = Vec::new();
+                let mut has_violations = false;
+                let mut violation_line = enum_info.location.line;
+                let mut message = String::new();
+
+                // Check first enumerator - should be PROP_0
+                if let Some(first_val) = enum_info.values.first()
+                    && !first_val.is_prop_0()
+                {
+                    has_violations = true;
+                    violation_line = enum_info.location.line;
+
+                    // Get indentation from the source
+                    let indent = first_val.location.extract_line_indentation(&file.source);
+
+                    let prop_zero_name = if let Some(ref p) = prefix {
+                        format!("{}PROP_0", p)
+                    } else {
+                        "PROP_0".to_string()
+                    };
+
+                    // Insert PROP_0 before first property
+                    let insertion = format!("{},\n{}", prop_zero_name, indent);
+                    fixes.push(Fix::new(
+                        first_val.location.start_byte,
+                        first_val.location.start_byte,
+                        insertion,
+                    ));
+
+                    // Remove " = 0" if it exists on first property
+                    if first_val.value == Some(0)
+                        && let Some(value_loc) = &first_val.value_location
+                    {
+                        fixes.push(Fix::new(
+                            first_val.name_location.end_byte,
+                            value_loc.end_byte,
+                            String::new(),
+                        ));
+                    }
+
+                    message = format!(
+                        "Property enum should start with {}, not {}",
+                        prop_zero_name, first_val.name
+                    );
+
+                    // Mark that we're adding PROP_0
+                    if prefix.is_none() {
+                        will_add_unprefixed_prop_zero = true;
+                    }
+                }
+
+                // Check last enumerator - should be N_PROPS or similar
+                if let Some(last) = enum_info.values.last()
+                    && !last.is_prop_last()
+                {
+                    has_violations = true;
+
+                    let indent = last.location.extract_line_indentation(&file.source);
+
+                    let n_props_name = if let Some(ref p) = prefix {
+                        format!("{}N_PROPS", p)
+                    } else {
+                        "N_PROPS".to_string()
+                    };
+
+                    // Insert N_PROPS after last enumerator
+                    let insertion = format!(",\n{}{}", indent, n_props_name);
+                    fixes.push(Fix::new(
+                        last.location.end_byte,
+                        last.location.end_byte,
+                        insertion,
+                    ));
+
+                    if !message.is_empty() {
+                        message.push_str(&format!(", and should end with {}", n_props_name));
+                    } else {
+                        message = format!("Property enum should end with {}", n_props_name);
+                    }
+                }
+
+                if has_violations {
+                    violations.push(self.violation_with_fixes(
+                        path,
+                        violation_line,
+                        1,
+                        message,
+                        fixes,
+                    ));
+                }
+            }
+        }
+    }
+
     /// Find GParamSpec arrays that use N_PROPS, fix their declarations, and
     /// return their names e.g., static GParamSpec *props[N_PROPS] -> static
     /// GParamSpec *props[LAST_PROP + 1]

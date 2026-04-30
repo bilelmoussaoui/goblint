@@ -28,7 +28,7 @@ impl Rule for SignalEnumCoverage {
                     continue;
                 }
 
-                // Get all signal enum values (excluding sentinels)
+                // Get all signal enum values (excluding N_SIGNALS/LAST_SIGNAL)
                 let signal_values: Vec<&str> = enum_info
                     .values
                     .iter()

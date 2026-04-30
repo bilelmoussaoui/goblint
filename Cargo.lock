@@ -433,6 +433,7 @@ dependencies = [
  "colored",
  "globset",
  "gobject-ast",
+ "heck",
  "ignore",
  "indicatif",
  "rayon",

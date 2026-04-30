@@ -22,6 +22,32 @@ impl Rule for PropertySwitchExhaustiveness {
         true
     }
 
+    fn config_options(&self) -> &'static [super::ConfigOption] {
+        &[
+            super::ConfigOption {
+                name: "style",
+                option_type: "string",
+                default_value: "\"typed\"",
+                example_value: "\"legacy\"",
+                description: "Property enum style: \"typed\" (strict, requires enum casts and all properties in switches) or \"legacy\" (relaxed, only checks read-write properties)",
+            },
+            super::ConfigOption {
+                name: "readable_flags",
+                option_type: "array<string>",
+                default_value: "[\"G_PARAM_READABLE\", \"G_PARAM_READWRITE\"]",
+                example_value: "[\"G_PARAM_READABLE\", \"MY_LIB_READABLE\"]",
+                description: "Custom flag names indicating readable properties",
+            },
+            super::ConfigOption {
+                name: "writable_flags",
+                option_type: "array<string>",
+                default_value: "[\"G_PARAM_WRITABLE\", \"G_PARAM_READWRITE\"]",
+                example_value: "[\"G_PARAM_WRITABLE\", \"MY_LIB_WRITABLE\"]",
+                description: "Custom flag names indicating writable properties",
+            },
+        ]
+    }
+
     fn check_all(
         &self,
         ast_context: &AstContext,
@@ -29,6 +55,13 @@ impl Rule for PropertySwitchExhaustiveness {
         violations: &mut Vec<Violation>,
     ) {
         let rule_config = &config.rules.property_switch_exhaustiveness;
+
+        // Get style configuration (default to "typed")
+        let style = rule_config
+            .options
+            .get("style")
+            .and_then(|v| v.as_str())
+            .unwrap_or("typed");
 
         // Get custom flag patterns from config
         let readable_flags = self.get_flag_patterns(rule_config, "readable_flags");
@@ -43,7 +76,7 @@ impl Rule for PropertySwitchExhaustiveness {
                         None => continue,
                     };
 
-                // Get property names (excluding PROP_0 and sentinels)
+                // Get property names (excluding PROP_0 and N_PROPS)
                 let property_names: Vec<&str> = enum_info
                     .values
                     .iter()
@@ -76,6 +109,7 @@ impl Rule for PropertySwitchExhaustiveness {
                         &property_names,
                         &property_access,
                         true, // is_getter
+                        style,
                         violations,
                     );
                 }
@@ -89,6 +123,7 @@ impl Rule for PropertySwitchExhaustiveness {
                         &property_names,
                         &property_access,
                         false, // is_getter
+                        style,
                         violations,
                     );
                 }
@@ -201,6 +236,7 @@ impl PropertySwitchExhaustiveness {
         property_names: &[&str],
         property_access: &std::collections::HashMap<String, Option<(bool, bool)>>,
         is_getter: bool,
+        style: &str,
         violations: &mut Vec<Violation>,
     ) {
         // Find the function definition
@@ -231,9 +267,21 @@ impl PropertySwitchExhaustiveness {
                         continue; // Property is handled
                     }
 
-                    // All properties should be in all functions
-                    // We'll decide later whether to use g_assert_not_reached() or require
-                    // implementation
+                    // In legacy mode, skip properties that don't belong in this function
+                    // In typed mode, all properties should be in all functions
+                    if style == "legacy" {
+                        let access = property_access.get(*prop_name).copied().flatten();
+                        if let Some((is_readable, is_writable)) = access {
+                            // Skip write-only in getter, skip read-only in setter
+                            if is_getter && !is_readable && is_writable {
+                                continue; // Write-only property in getter - skip
+                            }
+                            if !is_getter && is_readable && !is_writable {
+                                continue; // Read-only property in setter - skip
+                            }
+                        }
+                    }
+
                     missing_properties.push(*prop_name);
                 }
 
@@ -246,16 +294,19 @@ impl PropertySwitchExhaustiveness {
 
                     match access {
                         Some((is_readable, is_writable)) => {
-                            // Known access type - can auto-fix if property shouldn't be in this
-                            // function
-                            let should_use_assert = if is_getter {
-                                // In get_property: only auto-fix write-only properties (not
-                                // readable)
-                                !is_readable && is_writable
+                            // In typed mode, can auto-fix properties that shouldn't be in this
+                            // function In legacy mode, all missing
+                            // properties need implementation (no auto-fix)
+                            let should_use_assert = if style == "typed" {
+                                if is_getter {
+                                    // In get_property: only auto-fix write-only properties
+                                    !is_readable && is_writable
+                                } else {
+                                    // In set_property: only auto-fix read-only properties
+                                    is_readable && !is_writable
+                                }
                             } else {
-                                // In set_property: only auto-fix read-only properties (not
-                                // writable)
-                                is_readable && !is_writable
+                                false // Legacy mode: no auto-fix for incompatible properties
                             };
 
                             if should_use_assert {
@@ -294,10 +345,11 @@ impl PropertySwitchExhaustiveness {
 
                 // Generate fix for auto-fixable properties
                 if !auto_fixable_properties.is_empty() {
-                    let can_remove_default =
-                        matches!(switch_stmt.condition, gobject_ast::Expression::Cast(_))
-                            && switch_stmt.has_default_case()
-                            && !has_non_fixable;
+                    // Only remove default case in typed mode with enum cast
+                    let can_remove_default = style == "typed"
+                        && matches!(switch_stmt.condition, gobject_ast::Expression::Cast(_))
+                        && switch_stmt.has_default_case()
+                        && !has_non_fixable;
 
                     let fix = if can_remove_default {
                         // Replace default with new cases
@@ -337,8 +389,9 @@ impl PropertySwitchExhaustiveness {
                 }
 
                 // Check if we can remove the default case when all properties are already
-                // handled
-                if missing_properties.is_empty()
+                // handled (only in typed mode)
+                if style == "typed"
+                    && missing_properties.is_empty()
                     && matches!(switch_stmt.condition, gobject_ast::Expression::Cast(_))
                     && switch_stmt.has_default_case()
                 {

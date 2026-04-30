@@ -149,13 +149,13 @@ impl UseGObjectClassInstallProperties {
             })
             .collect();
 
-        // Check if enum has N_PROPS sentinel
-        let n_props_sentinel = property_enum.values.iter().find(|v| v.is_prop_last());
-        let n_props_name = if let Some(sentinel) = n_props_sentinel {
-            sentinel.name.clone()
+        // Check if enum has N_PROPS
+        let n_props_value = property_enum.values.iter().find(|v| v.is_prop_last());
+        let n_props_name = if let Some(n_props) = n_props_value {
+            n_props.name.clone()
         } else {
             // Need to add N_PROPS to the enum
-            let sentinel_name = self.determine_n_props_name(property_enum);
+            let n_props_name = self.determine_n_props_name(property_enum);
 
             // Insert N_PROPS after the last enum value
             let last_value = property_enum.values.last().unwrap();
@@ -174,14 +174,14 @@ impl UseGObjectClassInstallProperties {
             };
 
             let n_props_decl = if needs_comma {
-                format!(",\n{}{}", value_indentation, sentinel_name)
+                format!(",\n{}{}", value_indentation, n_props_name)
             } else {
-                format!("\n{}{}", value_indentation, sentinel_name)
+                format!("\n{}{}", value_indentation, n_props_name)
             };
 
             fixes.push(Fix::new(insertion_pos, insertion_pos, n_props_decl));
 
-            sentinel_name
+            n_props_name
         };
 
         // Determine array name: prefer "props", fallback to "obj_props"
@@ -369,7 +369,7 @@ impl UseGObjectClassInstallProperties {
         fixes
     }
 
-    /// Determine the N_PROPS sentinel name based on enum naming convention
+    /// Determine the N_PROPS name based on enum naming convention
     fn determine_n_props_name(&self, property_enum: &gobject_ast::EnumInfo) -> String {
         // Look for common prefixes in enum values
         if let Some(first_value) = property_enum.values.first() {

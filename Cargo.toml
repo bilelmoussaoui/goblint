@@ -30,6 +30,7 @@ anyhow = "1.0"
 colored = "3.1"
 globset = "0.4"
 indicatif = "0.18"
+heck = "0.5"
 tower-lsp = { version = "0.20", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-std"], optional = true }
 serde_json = "1.0"

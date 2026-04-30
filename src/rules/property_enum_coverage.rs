@@ -24,7 +24,7 @@ impl Rule for PropertyEnumCoverage {
     ) {
         for (path, file) in ast_context.iter_all_files() {
             for enum_info in file.iter_property_enums() {
-                // Get all property enum values (excluding PROP_0 and sentinels)
+                // Get all property enum values (excluding PROP_0 and N_PROPS)
                 let property_values: Vec<&str> = enum_info
                     .values
                     .iter()
