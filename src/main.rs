@@ -162,6 +162,31 @@ fn main() -> Result<()> {
         None
     };
 
+    // Get public headers from meson introspection (for dead code analysis)
+    let public_headers = if let Some(ref sp) = spinner {
+        sp.set_message("Running meson introspection...");
+        goblint::meson::get_public_headers(&project_root, config.build_dir.as_deref())
+            .ok()
+            .flatten()
+    } else {
+        goblint::meson::get_public_headers(&project_root, config.build_dir.as_deref())
+            .ok()
+            .flatten()
+    };
+
+    if args.verbose {
+        if let Some(ref headers) = public_headers {
+            println!(
+                "Found {} public headers via meson introspection",
+                headers.len()
+            );
+        } else {
+            println!(
+                "Meson introspection not available - proceeding without public/private distinction"
+            );
+        }
+    }
+
     // Build AST-based context
     if let Some(ref sp) = spinner {
         sp.set_message("Parsing files...");
@@ -170,6 +195,7 @@ fn main() -> Result<()> {
         &project_root,
         &ignore_matcher,
         spinner.as_ref(),
+        public_headers,
     )?;
 
     // Run AST-based rules

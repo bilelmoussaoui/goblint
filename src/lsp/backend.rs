@@ -90,20 +90,30 @@ impl GObjectBackend {
             }
         };
 
+        // Get public headers from meson introspection (for dead code analysis)
+        let public_headers =
+            goblint::meson::get_public_headers(&workspace_root, config.build_dir.as_deref())
+                .ok()
+                .flatten();
+
         // Build AST context
-        let ast_context =
-            match AstContext::build_with_ignore(&workspace_root, &ignore_matcher, None) {
-                Ok(ctx) => ctx,
-                Err(e) => {
-                    self.client
-                        .log_message(
-                            MessageType::ERROR,
-                            format!("Failed to build AST context: {}", e),
-                        )
-                        .await;
-                    return Ok(());
-                }
-            };
+        let ast_context = match AstContext::build_with_ignore(
+            &workspace_root,
+            &ignore_matcher,
+            None,
+            public_headers,
+        ) {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                self.client
+                    .log_message(
+                        MessageType::ERROR,
+                        format!("Failed to build AST context: {}", e),
+                    )
+                    .await;
+                return Ok(());
+            }
+        };
 
         // Store in state
         *self.workspace_root.lock().await = Some(workspace_root);

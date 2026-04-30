@@ -15,7 +15,7 @@ fn test_inline_ignore() {
     fs::copy(&c_file, &dest).expect("failed to copy fixture");
 
     let ignore = GlobSetBuilder::new().build().unwrap();
-    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None)
+    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None, None)
         .expect("failed to build AstContext");
 
     // Run scanner
@@ -101,7 +101,7 @@ fn test_inline_ignore_wildcards() {
     fs::copy(&c_file, &dest).expect("failed to copy fixture");
 
     let ignore = GlobSetBuilder::new().build().unwrap();
-    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None)
+    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None, None)
         .expect("failed to build AstContext");
 
     // Run scanner
@@ -143,7 +143,7 @@ void test(void) {
     .expect("failed to write test file");
 
     let ignore = GlobSetBuilder::new().build().unwrap();
-    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None)
+    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None, None)
         .expect("failed to build AstContext");
 
     let mut config = Config::default();

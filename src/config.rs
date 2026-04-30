@@ -81,6 +81,11 @@ pub struct Config {
     ///   IntelliJ: "idea://open?file={path}&line={line}"
     ///   Sublime: "subl://open?url=file://{path}&line={line}&column={column}"
     pub editor_url: Option<String>,
+
+    /// Build directory for meson introspection (used for dead code analysis)
+    /// If not specified, will search for common build directories (build/,
+    /// builddir/, _build/)
+    pub build_dir: Option<String>,
 }
 
 /// Rule severity level

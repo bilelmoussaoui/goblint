@@ -26,7 +26,7 @@ fn build_context_for_file(test_file: &Path) -> (AstContext, tempfile::TempDir) {
     }
 
     let ignore = GlobSetBuilder::new().build().unwrap();
-    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None)
+    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None, None)
         .expect("failed to build AstContext");
 
     (ctx, temp_dir)

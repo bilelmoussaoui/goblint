@@ -1,5 +1,6 @@
 use std::{
-    path::Path,
+    collections::HashSet,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -14,14 +15,18 @@ use rayon::prelude::*;
 /// ProjectContext
 pub struct AstContext {
     pub project: Project,
+    /// Set of public header files (from meson introspection)
+    /// Used for dead code analysis to distinguish public vs private APIs
+    pub public_headers: Option<HashSet<PathBuf>>,
 }
 
 impl AstContext {
-    /// Build with ignore patterns
+    /// Build with ignore patterns and optional public headers
     pub fn build_with_ignore(
         directory: &Path,
         ignore_matcher: &GlobSet,
         spinner: Option<&ProgressBar>,
+        public_headers: Option<HashSet<PathBuf>>,
     ) -> Result<Self> {
         // Collect all files first to get count
         // WalkBuilder respects .gitignore, .ignore, and other ignore files
@@ -67,7 +72,10 @@ impl AstContext {
             project.files.extend(file_project.files);
         }
 
-        Ok(Self { project })
+        Ok(Self {
+            project,
+            public_headers,
+        })
     }
 
     /// Update a single file in the project
@@ -112,5 +120,18 @@ impl AstContext {
             .iter()
             .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "h"))
             .map(|(path, file)| (path.as_path(), file))
+    }
+
+    /// Check if a file path is a public header (installed by meson)
+    /// Returns None if public_headers information is not available
+    pub fn is_public_header(&self, path: &Path) -> Option<bool> {
+        self.public_headers
+            .as_ref()
+            .map(|headers| headers.contains(path))
+    }
+
+    /// Check if public/private distinction is available
+    pub fn has_public_private_info(&self) -> bool {
+        self.public_headers.is_some()
     }
 }
