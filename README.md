@@ -86,7 +86,6 @@ jobs:
         run: goblint --format sarif > goblint.sarif
 
       - name: Upload SARIF results
-        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: goblint.sarif
