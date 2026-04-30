@@ -21,9 +21,9 @@ pub struct InterfaceImplementation {
 }
 
 impl GObjectType {
-    /// Get the expected class_init function name based on the function_prefix
-    pub fn class_init_function_name(&self) -> String {
-        let function_prefix = match &self.kind {
+    /// Get the function_prefix from this type
+    pub fn function_prefix(&self) -> &str {
+        match &self.kind {
             GObjectTypeKind::DeclareFinal {
                 function_prefix, ..
             }
@@ -72,9 +72,33 @@ impl GObjectType {
             | GObjectTypeKind::DefinePointerType {
                 function_prefix, ..
             } => function_prefix,
-        };
+        }
+    }
 
-        format!("{}_class_init", function_prefix)
+    /// Get the expected instance init function name based on the
+    /// function_prefix
+    pub fn init_function_name(&self) -> String {
+        format!("{}_init", self.function_prefix())
+    }
+
+    /// Get the expected class_init function name based on the function_prefix
+    pub fn class_init_function_name(&self) -> String {
+        format!("{}_class_init", self.function_prefix())
+    }
+
+    /// Get the expected default_init function name for interfaces
+    pub fn default_init_function_name(&self) -> String {
+        format!("{}_default_init", self.function_prefix())
+    }
+
+    /// Check if this is an interface type
+    pub fn is_interface(&self) -> bool {
+        matches!(
+            self.kind,
+            GObjectTypeKind::DeclareInterface { .. }
+                | GObjectTypeKind::DefineInterface { .. }
+                | GObjectTypeKind::DefineInterfaceWithCode { .. }
+        )
     }
 
     /// Extract properties from a class_init function
