@@ -25,6 +25,7 @@ pub use switch_stmt::{CaseLabel, SwitchCase, SwitchStatement};
 pub use variable_decl::VariableDecl;
 pub use while_stmt::{DoWhileStatement, WhileStatement};
 
+use super::top_level::PreprocessorDirective;
 use crate::model::{Argument, CallExpression, Expression, SourceLocation};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +43,7 @@ pub enum Statement {
     DoWhile(DoWhileStatement),
     Break(BreakStatement),
     Continue(ContinueStatement),
+    Preprocessor(PreprocessorDirective),
 }
 
 impl Statement {
@@ -136,6 +138,17 @@ impl Statement {
             Statement::DoWhile(d) => &d.location,
             Statement::Break(b) => &b.location,
             Statement::Continue(c) => &c.location,
+            Statement::Preprocessor(p) => match p {
+                PreprocessorDirective::Include { location, .. }
+                | PreprocessorDirective::Define { location, .. }
+                | PreprocessorDirective::Call { location, .. }
+                | PreprocessorDirective::Pragma { location, .. }
+                | PreprocessorDirective::GObjectType { location, .. }
+                | PreprocessorDirective::AutoptrCleanupFunc { location, .. }
+                | PreprocessorDirective::AutoCleanupClearFunc { location, .. }
+                | PreprocessorDirective::MacroWithCode { location, .. }
+                | PreprocessorDirective::Conditional { location, .. } => location,
+            },
         }
     }
 

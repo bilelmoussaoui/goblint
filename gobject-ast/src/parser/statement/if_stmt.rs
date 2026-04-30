@@ -22,11 +22,11 @@ impl Parser {
             // The alternative can be an else_clause or directly an if_statement (else if)
             let statement_node = if alt_node.kind() == "else_clause" {
                 // else_clause contains the actual statement(s)
-                // Find the first named child
+                // Find the first named child that's not a comment or the 'else' keyword
                 let mut cursor = alt_node.walk();
                 alt_node
                     .children(&mut cursor)
-                    .find(|c| c.is_named())
+                    .find(|c| c.is_named() && c.kind() != "comment" && c.kind() != "else")
                     .unwrap_or(alt_node)
             } else {
                 alt_node

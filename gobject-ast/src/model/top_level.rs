@@ -59,6 +59,26 @@ pub enum PreprocessorDirective {
         gobject_type: Box<super::types::GObjectType>,
         location: SourceLocation,
     },
+    /// G_DEFINE_AUTOPTR_CLEANUP_FUNC (Type, cleanup_func)
+    AutoptrCleanupFunc {
+        type_name: String,
+        cleanup_function: String,
+        location: SourceLocation,
+    },
+    /// G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC (Type, cleanup_func)
+    AutoCleanupClearFunc {
+        type_name: String,
+        cleanup_function: String,
+        location: SourceLocation,
+    },
+    /// Macro call with code block (e.g., G_DEFINE_BOXED_TYPE_WITH_CODE)
+    /// Contains the macro name and parsed statements from the code block
+    MacroWithCode {
+        macro_name: String,
+        arguments: Vec<String>,
+        code_statements: Vec<Statement>,
+        location: SourceLocation,
+    },
     Conditional {
         kind: ConditionalKind,
         condition: Option<String>,

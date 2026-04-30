@@ -11,6 +11,7 @@ pub struct GObjectType {
     pub class_struct: Option<ClassStruct>, // For derivable types
     pub interfaces: Vec<InterfaceImplementation>, // G_IMPLEMENT_INTERFACE
     pub has_private: bool,                 // G_ADD_PRIVATE in G_DEFINE_TYPE_WITH_CODE
+    pub code_block_statements: Vec<super::super::Statement>, // Statements from *_WITH_CODE macros
     pub location: SourceLocation,
 }
 
@@ -67,6 +68,9 @@ impl GObjectType {
                 function_prefix, ..
             }
             | GObjectTypeKind::DefineBoxedType {
+                function_prefix, ..
+            }
+            | GObjectTypeKind::DefineBoxedTypeWithCode {
                 function_prefix, ..
             }
             | GObjectTypeKind::DefinePointerType {
@@ -215,6 +219,13 @@ pub enum GObjectTypeKind {
     },
     DefineBoxedType {
         function_prefix: String,
+        copy_func: String,
+        free_func: String,
+    },
+    DefineBoxedTypeWithCode {
+        function_prefix: String,
+        copy_func: String,
+        free_func: String,
     },
     DefinePointerType {
         function_prefix: String,
@@ -240,6 +251,7 @@ impl GObjectTypeKind {
             Self::DefineInterface { .. } => "G_DEFINE_INTERFACE",
             Self::DefineInterfaceWithCode { .. } => "G_DEFINE_INTERFACE_WITH_CODE",
             Self::DefineBoxedType { .. } => "G_DEFINE_BOXED_TYPE",
+            Self::DefineBoxedTypeWithCode { .. } => "G_DEFINE_BOXED_TYPE_WITH_CODE",
             Self::DefinePointerType { .. } => "G_DEFINE_POINTER_TYPE",
         }
     }
@@ -269,6 +281,8 @@ impl GObjectTypeKind {
                 | Self::DefineAbstractTypeWithPrivate { .. }
                 | Self::DefineInterface { .. }
                 | Self::DefineInterfaceWithCode { .. }
+                | Self::DefineBoxedType { .. }
+                | Self::DefineBoxedTypeWithCode { .. }
         )
     }
 

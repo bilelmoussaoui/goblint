@@ -60,6 +60,53 @@ impl Parser {
                 class_struct: None,
                 interfaces: Vec::new(),
                 has_private: false,
+                code_block_statements: Vec::new(),
+                location: self.node_location(parent),
+            });
+        }
+
+        // G_DEFINE_BOXED_TYPE* needs 4 args: TypeName, function_prefix, copy_func,
+        // free_func
+        if (macro_name == "G_DEFINE_BOXED_TYPE" || macro_name == "G_DEFINE_BOXED_TYPE_WITH_CODE")
+            && arg_values.len() >= 4
+        {
+            let type_name = arg_values[0];
+            let function_prefix = arg_values[1];
+            let copy_func = arg_values[2];
+            let free_func = arg_values[3];
+
+            let type_macro = format!("TYPE_{}", type_name.to_uppercase());
+
+            let kind = if macro_name == "G_DEFINE_BOXED_TYPE" {
+                GObjectTypeKind::DefineBoxedType {
+                    function_prefix: function_prefix.to_owned(),
+                    copy_func: copy_func.to_owned(),
+                    free_func: free_func.to_owned(),
+                }
+            } else {
+                GObjectTypeKind::DefineBoxedTypeWithCode {
+                    function_prefix: function_prefix.to_owned(),
+                    copy_func: copy_func.to_owned(),
+                    free_func: free_func.to_owned(),
+                }
+            };
+
+            // For *_WITH_CODE, extract code block statements
+            let (interfaces, has_private, code_block_statements) =
+                if macro_name.ends_with("_WITH_CODE") {
+                    self.extract_code_block_info_from_parent(parent, source, &arg_values)
+                } else {
+                    (Vec::new(), false, Vec::new())
+                };
+
+            return Some(GObjectType {
+                type_name: type_name.to_owned(),
+                type_macro,
+                kind,
+                class_struct: None,
+                interfaces,
+                has_private,
+                code_block_statements,
                 location: self.node_location(parent),
             });
         }
@@ -111,8 +158,13 @@ impl Parser {
                         parent_type: parent_type.to_owned(),
                     }
                 }
-                "G_DEFINE_BOXED_TYPE" => GObjectTypeKind::DefineBoxedType {
+                "G_DEFINE_INTERFACE" => GObjectTypeKind::DefineInterface {
                     function_prefix: function_prefix.to_owned(),
+                    prerequisite_type: parent_type.to_owned(),
+                },
+                "G_DEFINE_INTERFACE_WITH_CODE" => GObjectTypeKind::DefineInterfaceWithCode {
+                    function_prefix: function_prefix.to_owned(),
+                    prerequisite_type: parent_type.to_owned(),
                 },
                 "G_DEFINE_POINTER_TYPE" => GObjectTypeKind::DefinePointerType {
                     function_prefix: function_prefix.to_owned(),
@@ -120,15 +172,13 @@ impl Parser {
                 _ => return None,
             };
 
-            // For G_DEFINE_TYPE_WITH_CODE, extract interfaces and has_private
-            let (interfaces, has_private) = if matches!(
-                macro_name,
-                "G_DEFINE_TYPE_WITH_CODE" | "G_DEFINE_FINAL_TYPE_WITH_CODE"
-            ) {
-                self.extract_code_block_info_from_parent(parent, source, &arg_values)
-            } else {
-                (Vec::new(), false)
-            };
+            // For *_WITH_CODE macros, extract interfaces, has_private, and code statements
+            let (interfaces, has_private, code_block_statements) =
+                if macro_name.ends_with("_WITH_CODE") {
+                    self.extract_code_block_info_from_parent(parent, source, &arg_values)
+                } else {
+                    (Vec::new(), false, Vec::new())
+                };
 
             return Some(GObjectType {
                 type_name: type_name.to_owned(),
@@ -137,6 +187,7 @@ impl Parser {
                 class_struct: None,
                 interfaces,
                 has_private,
+                code_block_statements,
                 location: self.node_location(parent),
             });
         }
@@ -251,17 +302,22 @@ impl Parser {
         parent: Node,
         source: &[u8],
         _arg_values: &[&str],
-    ) -> (Vec<crate::model::types::InterfaceImplementation>, bool) {
+    ) -> (
+        Vec<crate::model::types::InterfaceImplementation>,
+        bool,
+        Vec<crate::model::Statement>,
+    ) {
         use crate::model::types::InterfaceImplementation;
 
         let mut interfaces = Vec::new();
         let mut has_private = false;
+        let mut code_statements = Vec::new();
 
         // Get the arguments node from the parent call_expression
         let args_node = if let Some(args) = parent.child_by_field_name("arguments") {
             args
         } else {
-            return (interfaces, has_private);
+            return (interfaces, has_private, code_statements);
         };
 
         // Walk the arguments node to find G_IMPLEMENT_INTERFACE and G_ADD_PRIVATE macro
@@ -271,6 +327,7 @@ impl Parser {
             source: &[u8],
             interfaces: &mut Vec<InterfaceImplementation>,
             has_private: &mut bool,
+            code_statements: &mut Vec<crate::model::Statement>,
             parser: &Parser,
         ) {
             // Handle normal call_expression nodes
@@ -293,6 +350,11 @@ impl Parser {
                                     init_function: iface_args[1].to_owned(),
                                 });
                             }
+                        }
+                    } else {
+                        // Other macro calls - parse as statements for code block
+                        if let Some(stmt) = parser.parse_call_as_statement(node, source) {
+                            code_statements.push(stmt);
                         }
                     }
                 }
@@ -334,16 +396,51 @@ impl Parser {
             // Recurse into children
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                walk_for_macros(child, source, interfaces, has_private, parser);
+                walk_for_macros(
+                    child,
+                    source,
+                    interfaces,
+                    has_private,
+                    code_statements,
+                    parser,
+                );
             }
         }
 
-        walk_for_macros(args_node, source, &mut interfaces, &mut has_private, self);
+        walk_for_macros(
+            args_node,
+            source,
+            &mut interfaces,
+            &mut has_private,
+            &mut code_statements,
+            self,
+        );
 
-        (interfaces, has_private)
+        (interfaces, has_private, code_statements)
     }
 
-    fn collect_identifiers<'a>(&self, node: Node, source: &'a [u8], result: &mut Vec<&'a str>) {
+    fn parse_call_as_statement(
+        &self,
+        node: Node,
+        source: &[u8],
+    ) -> Option<crate::model::Statement> {
+        use crate::model::{ExpressionStmt, Statement};
+
+        // Parse the call expression
+        let expr = self.parse_expression(node, source)?;
+
+        Some(Statement::Expression(ExpressionStmt {
+            expr,
+            location: self.node_location(node),
+        }))
+    }
+
+    pub(super) fn collect_identifiers<'a>(
+        &self,
+        node: Node,
+        source: &'a [u8],
+        result: &mut Vec<&'a str>,
+    ) {
         // Only parse if this is actually an expression node
         if Parser::is_expression_node(&node) {
             if let Some(expr) = self.parse_expression(node, source) {

@@ -308,25 +308,37 @@ impl Parser {
 
                 if let Some(func_decl) = func_declarator {
                     // Extract function name
-                    let name = self.extract_declarator_name(func_decl, source)?;
+                    if let Some(name) = self.extract_declarator_name(func_decl, source) {
+                        // Skip macro "declarations" - macros are all uppercase with underscores
+                        // e.g., G_DECLARE_FINAL_TYPE, MY_MACRO_CALL, etc.
+                        if name
+                            .chars()
+                            .all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit())
+                        {
+                            return None;
+                        }
 
-                    // Check for static storage class
-                    let decl_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
-                    let is_static = decl_text.contains("static");
+                        // Check for static storage class
+                        let decl_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
+                        let is_static = decl_text.contains("static");
 
-                    // Extract export macros from first line
-                    let export_macros = self.find_export_macros_in_declaration(node, source);
+                        // Extract export macros from first line
+                        let export_macros = self.find_export_macros_in_declaration(node, source);
 
-                    // Extract return type
-                    let return_type = self.extract_return_type(node, source);
+                        // Extract return type
+                        let return_type = self.extract_return_type(node, source);
 
-                    return Some(TopLevelItem::FunctionDeclaration(FunctionDeclItem {
-                        name: name.to_owned(),
-                        return_type,
-                        is_static,
-                        export_macros: export_macros.into_iter().map(|s| s.to_owned()).collect(),
-                        location: self.node_location(node),
-                    }));
+                        return Some(TopLevelItem::FunctionDeclaration(FunctionDeclItem {
+                            name: name.to_owned(),
+                            return_type,
+                            is_static,
+                            export_macros: export_macros
+                                .into_iter()
+                                .map(|s| s.to_owned())
+                                .collect(),
+                            location: self.node_location(node),
+                        }));
+                    }
                 }
 
                 // Variable or type declaration - parse as statement
@@ -389,7 +401,198 @@ impl Parser {
                     body_location,
                 }))
             }
+            "expression_statement" => {
+                // Check if this is a special macro
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "call_expression" {
+                        let func_node = if let Some(fn_node) = child.child_by_field_name("function")
+                        {
+                            fn_node
+                        } else {
+                            if let Some(first_child) = child.child(0) {
+                                first_child
+                            } else {
+                                continue;
+                            }
+                        };
+
+                        if func_node.kind() == "identifier" {
+                            let func_name =
+                                std::str::from_utf8(&source[func_node.byte_range()]).unwrap_or("");
+
+                            // G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC (Type, cleanup_func)
+                            // Check this BEFORE the G_DEFINE_ check since it starts with G_DEFINE_
+                            if func_name == "G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC" {
+                                let args_node =
+                                    child.child_by_field_name("arguments").or_else(|| {
+                                        let mut cursor = child.walk();
+                                        child
+                                            .children(&mut cursor)
+                                            .find(|c| c.kind() == "argument_list")
+                                    });
+
+                                if let Some(args_node) = args_node {
+                                    let mut arg_values = Vec::new();
+                                    self.collect_identifiers(args_node, source, &mut arg_values);
+
+                                    if arg_values.len() >= 2 {
+                                        return Some(TopLevelItem::Preprocessor(
+                                            PreprocessorDirective::AutoCleanupClearFunc {
+                                                type_name: arg_values[0].to_owned(),
+                                                cleanup_function: arg_values[1].to_owned(),
+                                                location: self.node_location(node),
+                                            },
+                                        ));
+                                    }
+                                }
+                            }
+
+                            // G_DEFINE_AUTOPTR_CLEANUP_FUNC (Type, cleanup_func)
+                            if func_name == "G_DEFINE_AUTOPTR_CLEANUP_FUNC" {
+                                // Try both "arguments" field name and looking for argument_list
+                                // child
+                                let args_node =
+                                    child.child_by_field_name("arguments").or_else(|| {
+                                        let mut cursor = child.walk();
+                                        child
+                                            .children(&mut cursor)
+                                            .find(|c| c.kind() == "argument_list")
+                                    });
+
+                                if let Some(args_node) = args_node {
+                                    let mut arg_values = Vec::new();
+                                    self.collect_identifiers(args_node, source, &mut arg_values);
+
+                                    if arg_values.len() >= 2 {
+                                        return Some(TopLevelItem::Preprocessor(
+                                            PreprocessorDirective::AutoptrCleanupFunc {
+                                                type_name: arg_values[0].to_owned(),
+                                                cleanup_function: arg_values[1].to_owned(),
+                                                location: self.node_location(node),
+                                            },
+                                        ));
+                                    }
+                                }
+                            }
+
+                            // G_DECLARE/G_DEFINE handled by visit_node
+                            if func_name.starts_with("G_DECLARE_")
+                                || func_name.starts_with("G_DEFINE_")
+                            {
+                                return None;
+                            }
+                        }
+                    }
+                }
+
+                // Other top-level expression statements
+                self.parse_statement(node, source)
+                    .map(TopLevelItem::Declaration)
+            }
+            "ERROR" => {
+                // Try to extract function definitions from ERROR nodes
+                // (e.g., functions with custom loop macros that tree-sitter can't parse)
+                self.try_extract_function_from_error(node, source)
+            }
             _ => None,
+        }
+    }
+
+    /// Try to extract a function definition from an ERROR node
+    /// This handles cases where tree-sitter fails to parse a function due to
+    /// custom macros
+    fn try_extract_function_from_error(&self, node: Node, source: &[u8]) -> Option<TopLevelItem> {
+        // Look for function-like structure: storage_class? type function_declarator {
+        // ... }
+        let mut has_function_declarator = false;
+        let mut function_declarator = None;
+        let mut is_static = false;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "storage_class_specifier" => {
+                    let text = std::str::from_utf8(&source[child.byte_range()]).ok()?;
+                    if text == "static" {
+                        is_static = true;
+                    }
+                }
+                "function_declarator" => {
+                    has_function_declarator = true;
+                    function_declarator = Some(child);
+                }
+                _ => {}
+            }
+        }
+
+        if !has_function_declarator {
+            return None;
+        }
+
+        let func_decl = function_declarator?;
+        let name = self.extract_declarator_name(func_decl, source)?;
+
+        // Extract parameters
+        let parameters = if let Some(params_node) = func_decl.child_by_field_name("parameters") {
+            self.extract_parameters(params_node, source)
+        } else {
+            Vec::new()
+        };
+
+        // Extract body statements from ERROR children
+        let mut body_statements = Vec::new();
+        self.extract_statements_from_error_children(node, source, &mut body_statements);
+
+        let body_location = None;
+
+        // Extract return type
+        let return_type = self.extract_return_type(node, source);
+
+        Some(TopLevelItem::FunctionDefinition(FunctionDefItem {
+            name: name.to_owned(),
+            return_type,
+            is_static,
+            parameters,
+            body_statements,
+            location: self.node_location(node),
+            body_location,
+        }))
+    }
+
+    /// Extract statements from children of an ERROR node (for functions without
+    /// clear compound_statement)
+    fn extract_statements_from_error_children(
+        &self,
+        node: Node,
+        source: &[u8],
+        statements: &mut Vec<Statement>,
+    ) {
+        let mut cursor = node.walk();
+        let mut in_body = false;
+
+        for child in node.children(&mut cursor) {
+            // Start collecting after the opening brace
+            if child.kind() == "{" {
+                in_body = true;
+                continue;
+            }
+
+            // Stop at closing brace
+            if child.kind() == "}" {
+                break;
+            }
+
+            if in_body {
+                // Skip preprocessor tokens/directives
+                if child.kind().starts_with("#") {
+                    continue;
+                }
+
+                if let Some(stmt) = self.parse_statement(child, source) {
+                    statements.push(stmt);
+                }
+            }
         }
     }
 

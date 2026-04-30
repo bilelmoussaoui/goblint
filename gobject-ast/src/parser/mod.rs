@@ -250,7 +250,14 @@ impl Parser {
                 }
             }
             "expression_statement" => {
-                // Might be a GObject macro parsed as an expression
+                // Try to parse as a top-level item first (handles
+                // G_DEFINE_AUTOPTR_CLEANUP_FUNC, etc.)
+                if let Some(item) = self.parse_top_level_item(node, source) {
+                    file_model.top_level_items.push(item);
+                    return;
+                }
+
+                // Fallback: Might be a GObject macro parsed as an expression
                 // Recurse to find identifiers
                 let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {

@@ -54,46 +54,36 @@ impl Parser {
         let mut update = None;
         let mut body = Vec::new();
         let mut cursor = node.walk();
+        let mut semicolon_count = 0;
 
         for child in node.children(&mut cursor) {
             match child.kind() {
+                ";" => {
+                    semicolon_count += 1;
+                }
                 "declaration" => {
                     // Initializer is a declaration - we don't track this as an
                     // expression The declaration will be
                     // parsed separately
                 }
-                "expression_statement" => {
-                    // Initializer expression
-                    if initializer.is_none() {
-                        // Parse the expression inside the expression_statement
-                        let mut expr_cursor = child.walk();
-                        for expr_child in child.children(&mut expr_cursor) {
-                            if Parser::is_expression_node(&expr_child) {
-                                if let Some(expr) = self.parse_expression(expr_child, source) {
-                                    initializer = Some(Box::new(expr));
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
                 "compound_statement" => {
                     body = self.parse_function_body(child, source);
                 }
-                "(" | ")" | ";" => {
+                "(" | ")" => {
                     // Skip delimiters
                 }
                 _ => {
                     if Parser::is_expression_node(&child) {
                         let expr = self.parse_expression(child, source)?;
-                        // First expression is condition, second is update
-                        if condition.is_none() {
-                            condition = Some(Box::new(expr));
-                        } else if update.is_none() {
-                            update = Some(Box::new(expr));
+                        // Assign based on semicolon position
+                        match semicolon_count {
+                            0 => initializer = Some(Box::new(expr)),
+                            1 => condition = Some(Box::new(expr)),
+                            2 => update = Some(Box::new(expr)),
+                            _ => {}
                         }
                     } else if child.is_named() {
-                        // Single statement body
+                        // Single statement body (not in compound_statement)
                         if let Some(stmt) = self.parse_statement(child, source) {
                             body.push(stmt);
                         }
@@ -274,12 +264,30 @@ impl Parser {
                 // clauses)
                 None
             }
-            "preproc_function_def"
-            | "preproc_def"
-            | "preproc_call"
-            | "preproc_defined"
-            | "preproc_include" => {
-                // Preprocessor definitions - don't need to parse
+            "preproc_function_def" | "preproc_def" => {
+                // Parse #define directives (function-like or object-like)
+                let name_node = node.child_by_field_name("name")?;
+                let name = std::str::from_utf8(&source[name_node.byte_range()])
+                    .ok()?
+                    .to_owned();
+
+                // Extract value if present
+                let value = node.child_by_field_name("value").and_then(|value_node| {
+                    std::str::from_utf8(&source[value_node.byte_range()])
+                        .ok()
+                        .map(|s| s.to_owned())
+                });
+
+                Some(Statement::Preprocessor(
+                    crate::model::top_level::PreprocessorDirective::Define {
+                        name,
+                        value,
+                        location: self.node_location(node),
+                    },
+                ))
+            }
+            "preproc_call" | "preproc_defined" | "preproc_include" => {
+                // Other preprocessor directives - skip for now
                 None
             }
             "enum_specifier"
@@ -292,6 +300,16 @@ impl Parser {
             }
             "function_definition" => {
                 // Nested function definitions (GNU C extension) - skip for now
+                // BUT: tree-sitter sometimes mist parses "else if" inside #ifdef as
+                // function_definition In that case, try to extract the body
+                // compound_statement
+                if let Some(body) = node.child_by_field_name("body") {
+                    if body.kind() == "compound_statement" {
+                        return self
+                            .parse_compound_statement(body, source)
+                            .map(Statement::Compound);
+                    }
+                }
                 None
             }
             "attributed_statement" => {
@@ -344,8 +362,19 @@ impl Parser {
                 }))
             }
             "ERROR" => {
-                // Parse errors - skip gracefully
-                None
+                // Parse errors - but try to extract statements from any compound_statement
+                // blocks within the error node (e.g., custom loop macros)
+                let mut statements = Vec::new();
+                self.extract_statements_from_error_node(node, source, &mut statements);
+
+                if statements.is_empty() {
+                    None
+                } else {
+                    Some(Statement::Compound(CompoundStatement {
+                        statements,
+                        location: self.node_location(node),
+                    }))
+                }
             }
             _ => {
                 // Unknown statement type - fail loudly so we implement it immediately
@@ -355,6 +384,102 @@ impl Parser {
                     node.start_position().row + 1,
                     node.start_position().column + 1
                 )
+            }
+        }
+    }
+
+    /// Recursively extract statements from ERROR nodes by looking for
+    /// compound_statement blocks within them (e.g., from custom loop macros)
+    fn extract_statements_from_error_node(
+        &self,
+        node: Node,
+        source: &[u8],
+        statements: &mut Vec<Statement>,
+    ) {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            // Skip keywords and punctuation that aren't statements
+            if !child.is_named() {
+                continue;
+            }
+
+            match child.kind() {
+                "compound_statement" => {
+                    // Found a block - parse it
+                    if let Some(stmt) = self.parse_statement(child, source) {
+                        statements.push(stmt);
+                    }
+                }
+                "ERROR" => {
+                    // Recursively search nested errors
+                    self.extract_statements_from_error_node(child, source, statements);
+                }
+                // Skip keywords and other non-statement nodes
+                "else"
+                | "if"
+                | "while"
+                | "for"
+                | "do"
+                | "switch"
+                | "case"
+                | "default"
+                | "return"
+                | "break"
+                | "continue"
+                | "goto"
+                | "static"
+                | "const"
+                | "volatile"
+                | "register"
+                | "auto"
+                | "extern"
+                | "typedef"
+                | "struct"
+                | "union"
+                | "enum"
+                | "sizeof"
+                | "type_identifier"
+                | "identifier"
+                | "primitive_type"
+                | "call_expression"
+                | "binary_expression"
+                | "unary_expression"
+                | "assignment_expression"
+                | "update_expression"
+                | "conditional_expression"
+                | "cast_expression"
+                | "field_expression"
+                | "subscript_expression"
+                | "parenthesized_expression"
+                | "number_literal"
+                | "string_literal"
+                | "char_literal"
+                | "true"
+                | "false"
+                | "null"
+                | "storage_class_specifier"
+                | "type_qualifier"
+                | "function_declarator"
+                | "pointer_declarator"
+                | "array_declarator"
+                | "parameter_list"
+                | "parameter_declaration"
+                | "abstract_pointer_declarator"
+                | "abstract_array_declarator"
+                | "abstract_function_declarator" => {
+                    // Skip these - they're not statements
+                }
+                _ => {
+                    // Try to parse as a statement if it looks like one
+                    if child.kind().ends_with("_statement") || child.kind() == "declaration" {
+                        if let Some(stmt) = self.parse_statement(child, source) {
+                            statements.push(stmt);
+                        }
+                    } else if child.has_error() {
+                        // Recursively search nodes with errors
+                        self.extract_statements_from_error_node(child, source, statements);
+                    }
+                }
             }
         }
     }
