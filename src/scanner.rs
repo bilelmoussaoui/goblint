@@ -107,7 +107,6 @@ pub struct RuleEntry {
 macro_rules! for_each_rule {
     ($callback:ident) => {
         $callback! {
-            (g_declare_semicolon, GDeclareSemicolon, 2, 0, false),
             (include_order, IncludeOrder, 2, 0, false),
             (use_pragma_once, UsePragmaOnce, 2, 0, false),
             (missing_implementation, MissingImplementation, 2, 0, false),

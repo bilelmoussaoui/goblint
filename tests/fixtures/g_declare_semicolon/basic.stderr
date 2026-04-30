@@ -1,7 +1,0 @@
-basic.c:4:57: g_declare_semicolon: G_DEFINE_FINAL_TYPE macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
-basic.h:6:58: g_declare_semicolon: G_DECLARE_FINAL_TYPE macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
-basic.c:9:89: g_declare_semicolon: G_DEFINE_FINAL_TYPE_WITH_CODE macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
-basic.h:13:31: g_declare_semicolon: G_DECLARE_FINAL_TYPE macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
-basic.c:17:43: g_declare_semicolon: G_DEFINE_TYPE_WITH_PRIVATE macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
-basic.h:17:55: g_declare_semicolon: G_DECLARE_FINAL_TYPE macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.
-basic.h:28:30: g_declare_semicolon: G_DECLARE_INTERFACE macro should end with a semicolon. Without it, tree-sitter may misparse following declarations.

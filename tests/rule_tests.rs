@@ -256,7 +256,6 @@ macro_rules! rule_test {
 }
 
 rule_test!(deprecated_add_private, goblint::rules::DeprecatedAddPrivate);
-rule_test!(g_declare_semicolon, goblint::rules::GDeclareSemicolon);
 rule_test!(g_error_init, goblint::rules::GErrorInit);
 rule_test!(g_error_leak, goblint::rules::GErrorLeak);
 rule_test!(g_source_id_not_stored, goblint::rules::GSourceIdNotStored);

@@ -100,7 +100,6 @@ pub struct ConfigOption {
 }
 
 pub mod deprecated_add_private;
-pub mod g_declare_semicolon;
 pub mod g_error_init;
 pub mod g_error_leak;
 pub mod g_object_virtual_methods_chain_up;
@@ -154,7 +153,6 @@ pub mod use_g_variant_new_typed;
 pub mod use_pragma_once;
 
 pub use deprecated_add_private::DeprecatedAddPrivate;
-pub use g_declare_semicolon::GDeclareSemicolon;
 pub use g_error_init::GErrorInit;
 pub use g_error_leak::GErrorLeak;
 pub use g_object_virtual_methods_chain_up::GObjectVirtualMethodsChainUp;
