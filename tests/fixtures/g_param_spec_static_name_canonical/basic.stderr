@@ -1,1 +1,0 @@
-basic.c:9:26: g_param_spec_static_name_canonical: Property name 'display_name' should use dashes instead of underscores. Use 'display-name' for consistency with GObject conventions

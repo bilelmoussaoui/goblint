@@ -1,0 +1,2 @@
+signal_new.c:5:18: signal_canonical_name: Signal name 'value_changed' should use hyphens instead of underscores: 'value-changed'
+signal_new.c:11:18: signal_canonical_name: Signal name 'item_selected' should use hyphens instead of underscores: 'item-selected'

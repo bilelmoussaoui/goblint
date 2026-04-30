@@ -1,0 +1,4 @@
+signal_lookup_and_group.c:5:39: signal_canonical_name: Signal name 'value_changed' should use hyphens instead of underscores: 'value-changed'
+signal_lookup_and_group.c:7:35: signal_canonical_name: Signal name 'item_selected' should use hyphens instead of underscores: 'item-selected'
+signal_lookup_and_group.c:8:41: signal_canonical_name: Signal name 'state_updated' should use hyphens instead of underscores: 'state-updated'
+signal_lookup_and_group.c:9:42: signal_canonical_name: Signal name 'notify_ready' should use hyphens instead of underscores: 'notify-ready'

@@ -1,0 +1,4 @@
+signal_connect.c:5:27: signal_canonical_name: Signal name 'value_changed' should use hyphens instead of underscores: 'value-changed'
+signal_connect.c:6:33: signal_canonical_name: Signal name 'item_selected' should use hyphens instead of underscores: 'item-selected'
+signal_connect.c:7:35: signal_canonical_name: Signal name 'state_updated' should use hyphens instead of underscores: 'state-updated'
+signal_connect.c:8:32: signal_canonical_name: Signal name 'notify_user' should use hyphens instead of underscores: 'notify-user'

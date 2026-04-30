@@ -268,8 +268,8 @@ rule_test!(
     goblint::rules::GParamSpecNullNickBlurb
 );
 rule_test!(
-    g_param_spec_static_name_canonical,
-    goblint::rules::GParamSpecStaticNameCanonical
+    property_canonical_name,
+    goblint::rules::PropertyCanonicalName
 );
 rule_test!(
     g_param_spec_static_strings,
@@ -295,6 +295,7 @@ rule_test!(
     property_switch_exhaustiveness,
     goblint::rules::PropertySwitchExhaustiveness
 );
+rule_test!(signal_canonical_name, goblint::rules::SignalCanonicalName);
 rule_test!(signal_enum_coverage, goblint::rules::SignalEnumCoverage);
 rule_test!(
     use_g_object_new_with_properties,

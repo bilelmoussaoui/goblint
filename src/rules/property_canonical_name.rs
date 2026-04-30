@@ -3,11 +3,11 @@ use gobject_ast::{CallExpression, Expression, types::Property};
 use super::{Fix, Rule};
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
-pub struct GParamSpecStaticNameCanonical;
+pub struct PropertyCanonicalName;
 
-impl Rule for GParamSpecStaticNameCanonical {
+impl Rule for PropertyCanonicalName {
     fn name(&self) -> &'static str {
-        "g_param_spec_static_name_canonical"
+        "property_canonical_name"
     }
 
     fn description(&self) -> &'static str {
@@ -39,7 +39,7 @@ impl Rule for GParamSpecStaticNameCanonical {
     }
 }
 
-impl GParamSpecStaticNameCanonical {
+impl PropertyCanonicalName {
     fn check_call(
         &self,
         file_path: &std::path::Path,
