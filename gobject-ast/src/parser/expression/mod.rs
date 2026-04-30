@@ -54,9 +54,7 @@ impl Parser {
             "field_expression" => {
                 // Parse field_expression: base->field or base.field
                 let argument_node = node.child_by_field_name("argument")?;
-                let base = std::str::from_utf8(&source[argument_node.byte_range()])
-                    .ok()?
-                    .to_owned();
+                let base = Box::new(self.parse_expression(argument_node, source)?);
 
                 let operator_node = node.child_by_field_name("operator")?;
                 let operator_str = std::str::from_utf8(&source[operator_node.byte_range()]).ok()?;
@@ -119,15 +117,9 @@ impl Parser {
                 }))
             }
             "subscript_expression" => self.parse_subscript_expression(node, source),
-            "initializer_list" => {
-                let text = std::str::from_utf8(&source[node.byte_range()])
-                    .ok()?
-                    .to_owned();
-                Some(Expression::InitializerList(InitializerListExpression {
-                    text,
-                    location: self.node_location(node),
-                }))
-            }
+            "initializer_list" => self
+                .parse_initializer_list(node, source)
+                .map(Expression::InitializerList),
             "char_literal" => {
                 let value = std::str::from_utf8(&source[node.byte_range()])
                     .ok()?
@@ -149,14 +141,16 @@ impl Parser {
                 }))
             }
             "compound_literal_expression" => {
-                // Compound literal: (struct foo){.x = 1}
-                let text = std::str::from_utf8(&source[node.byte_range()])
-                    .ok()?
-                    .to_owned();
-                Some(Expression::Generic(GenericExpression {
-                    text,
-                    location: self.node_location(node),
-                }))
+                // Compound literal: (Type){.x = 1, .y = 2}
+                // Parse the initializer_list child
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "initializer_list" {
+                        return self.parse_expression(child, source);
+                    }
+                }
+                // Fallback if no initializer_list found
+                None
             }
             "comma_expression" => {
                 // Comma operator: (a, b, c) → value is rightmost expression
@@ -225,5 +219,93 @@ impl Parser {
                 )
             }
         }
+    }
+
+    fn parse_initializer_list(
+        &self,
+        node: Node,
+        source: &[u8],
+    ) -> Option<crate::model::InitializerListExpression> {
+        use crate::model::expression::{Designator, InitializerItem};
+
+        let mut items = Vec::new();
+        let mut cursor = node.walk();
+
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "{" | "}" | "," => {
+                    // Skip delimiters
+                    continue;
+                }
+                "initializer_pair" => {
+                    // Designated initializer: .field = value or [index] = value
+                    let mut pair_cursor = child.walk();
+                    let mut designator = None;
+                    let mut value = None;
+
+                    for pair_child in child.children(&mut pair_cursor) {
+                        match pair_child.kind() {
+                            "field_designator" => {
+                                // .field_name
+                                let field_text =
+                                    std::str::from_utf8(&source[pair_child.byte_range()]).ok()?;
+                                // Remove the leading '.'
+                                let field_name = field_text.strip_prefix('.')?.to_owned();
+                                designator = Some(Designator::Field(field_name));
+                            }
+                            "subscript_designator" => {
+                                // [index_expression]
+                                // Parse the expression inside the brackets
+                                let mut sub_cursor = pair_child.walk();
+                                for sub_child in pair_child.children(&mut sub_cursor) {
+                                    if sub_child.kind() != "[" && sub_child.kind() != "]" {
+                                        if let Some(index_expr) =
+                                            self.parse_expression(sub_child, source)
+                                        {
+                                            designator =
+                                                Some(Designator::Subscript(Box::new(index_expr)));
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            "=" => {
+                                // Skip the equals sign
+                                continue;
+                            }
+                            _ => {
+                                // This should be the value expression
+                                if Parser::is_expression_node(&pair_child) {
+                                    value = self.parse_expression(pair_child, source);
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(val) = value {
+                        items.push(InitializerItem {
+                            designator,
+                            value: Box::new(val),
+                        });
+                    }
+                }
+                _ => {
+                    // Direct value (no designator): just an expression
+                    if Parser::is_expression_node(&child) {
+                        if let Some(expr) = self.parse_expression(child, source) {
+                            items.push(InitializerItem {
+                                designator: None,
+                                value: Box::new(expr),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(crate::model::InitializerListExpression {
+            items,
+            location: self.node_location(node),
+        })
     }
 }

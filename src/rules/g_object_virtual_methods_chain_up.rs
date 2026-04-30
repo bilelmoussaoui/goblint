@@ -1,4 +1,4 @@
-use gobject_ast::Statement;
+use gobject_ast::{Expression, Statement};
 
 use super::Rule;
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -141,9 +141,15 @@ impl GObjectVirtualMethodsChainUp {
         text.contains("_CLASS") && text.contains("parent")
     }
 
-    fn looks_like_parent_class_variable(&self, var_name: &str) -> bool {
+    fn looks_like_parent_class_variable(&self, expr: &Expression) -> bool {
         // Common variable names that hold parent class:
         // parent_object_class, parent_class, object_class, klass, parent_klass
+
+        // Extract the variable name from the expression
+        let var_name = match expr {
+            Expression::Identifier(id) => &id.name,
+            _ => return false, // Not a simple variable reference
+        };
 
         let var_lower = var_name.to_lowercase();
 

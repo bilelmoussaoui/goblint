@@ -2,17 +2,20 @@ mod break_stmt;
 mod compound_stmt;
 mod continue_stmt;
 mod expression_stmt;
+mod for_stmt;
 mod goto_stmt;
 mod if_stmt;
 mod labeled_stmt;
 mod return_stmt;
 mod switch_stmt;
 mod variable_decl;
+mod while_stmt;
 
 pub use break_stmt::BreakStatement;
 pub use compound_stmt::CompoundStatement;
 pub use continue_stmt::ContinueStatement;
 pub use expression_stmt::ExpressionStmt;
+pub use for_stmt::ForStatement;
 pub use goto_stmt::GotoStatement;
 pub use if_stmt::IfStatement;
 pub use labeled_stmt::LabeledStatement;
@@ -20,6 +23,7 @@ pub use return_stmt::ReturnStatement;
 use serde::{Deserialize, Serialize};
 pub use switch_stmt::{CaseLabel, SwitchCase, SwitchStatement};
 pub use variable_decl::VariableDecl;
+pub use while_stmt::{DoWhileStatement, WhileStatement};
 
 use crate::model::{Argument, CallExpression, Expression, SourceLocation};
 
@@ -33,6 +37,9 @@ pub enum Statement {
     Labeled(LabeledStatement),
     Compound(CompoundStatement),
     Switch(SwitchStatement),
+    For(ForStatement),
+    While(WhileStatement),
+    DoWhile(DoWhileStatement),
     Break(BreakStatement),
     Continue(ContinueStatement),
 }
@@ -70,6 +77,21 @@ impl Statement {
                     }
                 }
             }
+            Statement::For(for_stmt) => {
+                for stmt in &for_stmt.body {
+                    stmt.walk(f);
+                }
+            }
+            Statement::While(while_stmt) => {
+                for stmt in &while_stmt.body {
+                    stmt.walk(f);
+                }
+            }
+            Statement::DoWhile(do_while) => {
+                for stmt in &do_while.body {
+                    stmt.walk(f);
+                }
+            }
             _ => {}
         }
     }
@@ -80,6 +102,21 @@ impl Statement {
             Statement::Expression(expr_stmt) => vec![&expr_stmt.expr],
             Statement::Return(ret) => ret.value.as_ref().into_iter().collect(),
             Statement::Declaration(decl) => decl.initializer.as_ref().into_iter().collect(),
+            Statement::For(for_stmt) => {
+                let mut exprs = Vec::new();
+                if let Some(init) = &for_stmt.initializer {
+                    exprs.push(&**init);
+                }
+                if let Some(cond) = &for_stmt.condition {
+                    exprs.push(&**cond);
+                }
+                if let Some(update) = &for_stmt.update {
+                    exprs.push(&**update);
+                }
+                exprs
+            }
+            Statement::While(while_stmt) => vec![&*while_stmt.condition],
+            Statement::DoWhile(do_while) => vec![&*do_while.condition],
             _ => vec![],
         }
     }
@@ -94,6 +131,9 @@ impl Statement {
             Statement::Labeled(l) => &l.location,
             Statement::Compound(c) => &c.location,
             Statement::Switch(s) => &s.location,
+            Statement::For(f) => &f.location,
+            Statement::While(w) => &w.location,
+            Statement::DoWhile(d) => &d.location,
             Statement::Break(b) => &b.location,
             Statement::Continue(c) => &c.location,
         }

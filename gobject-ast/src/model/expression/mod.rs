@@ -20,7 +20,7 @@ pub use cast::CastExpression;
 pub use conditional::ConditionalExpression;
 pub use field_access::FieldAccessExpression;
 pub use identifier::IdentifierExpression;
-pub use initializer_list::InitializerListExpression;
+pub use initializer_list::{Designator, InitializerItem, InitializerListExpression};
 pub use literal::{
     BooleanExpression, CharLiteralExpression, CommentExpression, GenericExpression, NullExpression,
     NumberLiteralExpression, StringLiteralExpression,
@@ -201,6 +201,51 @@ impl Expression {
                 "false".to_string()
             }),
             _ => None,
+        }
+    }
+
+    /// Generate a text representation of an expression
+    /// Used for field access text generation where we need to reconstruct
+    /// expressions like "function()->field"
+    pub fn to_text(&self) -> String {
+        match self {
+            Expression::Identifier(id) => id.name.clone(),
+            Expression::NumberLiteral(n) => n.value.clone(),
+            Expression::StringLiteral(s) => s.value.clone(),
+            Expression::CharLiteral(c) => c.value.clone(),
+            Expression::Boolean(b) => if b.value { "true" } else { "false" }.to_string(),
+            Expression::Call(call) => {
+                let func = call.function.to_text();
+                let args = call
+                    .arguments
+                    .iter()
+                    .map(|arg| match arg {
+                        crate::model::expression::Argument::Expression(e) => e.to_text(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}({})", func, args)
+            }
+            Expression::FieldAccess(f) => f.text(),
+            Expression::Unary(u) => {
+                format!("{}{}", u.operator.as_str(), u.operand.to_text())
+            }
+            Expression::Binary(b) => {
+                format!(
+                    "{} {} {}",
+                    b.left.to_text(),
+                    b.operator.as_str(),
+                    b.right.to_text()
+                )
+            }
+            Expression::Cast(c) => {
+                format!("({}){}", c.type_info.full_text, c.operand.to_text())
+            }
+            Expression::Subscript(s) => {
+                format!("{}[{}]", s.array.to_text(), s.index.to_text())
+            }
+            // For other complex expressions, just return a placeholder
+            _ => "<expr>".to_string(),
         }
     }
 

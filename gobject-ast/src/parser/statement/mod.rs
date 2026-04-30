@@ -15,18 +15,12 @@ use super::Parser;
 use crate::model::{CompoundStatement, Statement};
 
 impl Parser {
-    /// Parse loop statements (for, while, do-while) and switch statements as
-    /// generic compound statements We don't need the loop details for most
-    /// linting rules, just need to recognize them as statements so they
-    /// don't get skipped
+    /// Parse generic statement bodies (for SEH statements, etc.)
     fn parse_loop_statement(&self, node: Node, source: &[u8]) -> Option<CompoundStatement> {
-        // Parse the body of the loop/switch
         let mut cursor = node.walk();
         let mut body_statements = Vec::new();
 
         for child in node.children(&mut cursor) {
-            // Look for the loop/switch body (usually a compound_statement or single
-            // statement)
             if child.kind() == "compound_statement" {
                 body_statements = self.parse_function_body(child, source);
                 break;
@@ -35,11 +29,7 @@ impl Parser {
                 && child.kind() != ";"
                 && child.kind() != "("
                 && child.kind() != ")"
-                && child.kind() != "case"
-                && child.kind() != "default"
-                && child.kind() != ":"
             {
-                // Single statement body or case labels
                 if let Some(stmt) = self.parse_statement(child, source) {
                     body_statements.push(stmt);
                 }
@@ -48,6 +38,153 @@ impl Parser {
 
         Some(CompoundStatement {
             statements: body_statements,
+            location: self.node_location(node),
+        })
+    }
+
+    fn parse_for_statement(
+        &self,
+        node: Node,
+        source: &[u8],
+    ) -> Option<crate::model::statement::ForStatement> {
+        use crate::model::statement::ForStatement;
+
+        let mut initializer = None;
+        let mut condition = None;
+        let mut update = None;
+        let mut body = Vec::new();
+        let mut cursor = node.walk();
+
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "declaration" => {
+                    // Initializer is a declaration - we don't track this as an
+                    // expression The declaration will be
+                    // parsed separately
+                }
+                "expression_statement" => {
+                    // Initializer expression
+                    if initializer.is_none() {
+                        // Parse the expression inside the expression_statement
+                        let mut expr_cursor = child.walk();
+                        for expr_child in child.children(&mut expr_cursor) {
+                            if Parser::is_expression_node(&expr_child) {
+                                if let Some(expr) = self.parse_expression(expr_child, source) {
+                                    initializer = Some(Box::new(expr));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                "compound_statement" => {
+                    body = self.parse_function_body(child, source);
+                }
+                "(" | ")" | ";" => {
+                    // Skip delimiters
+                }
+                _ => {
+                    if Parser::is_expression_node(&child) {
+                        let expr = self.parse_expression(child, source)?;
+                        // First expression is condition, second is update
+                        if condition.is_none() {
+                            condition = Some(Box::new(expr));
+                        } else if update.is_none() {
+                            update = Some(Box::new(expr));
+                        }
+                    } else if child.is_named() {
+                        // Single statement body
+                        if let Some(stmt) = self.parse_statement(child, source) {
+                            body.push(stmt);
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(ForStatement {
+            initializer,
+            condition,
+            update,
+            body,
+            location: self.node_location(node),
+        })
+    }
+
+    fn parse_while_statement(
+        &self,
+        node: Node,
+        source: &[u8],
+    ) -> Option<crate::model::statement::WhileStatement> {
+        use crate::model::statement::WhileStatement;
+
+        let mut condition = None;
+        let mut body = Vec::new();
+        let mut cursor = node.walk();
+
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "compound_statement" => {
+                    body = self.parse_function_body(child, source);
+                }
+                "(" | ")" => {
+                    // Skip delimiters
+                }
+                _ => {
+                    if Parser::is_expression_node(&child) && condition.is_none() {
+                        condition = Some(Box::new(self.parse_expression(child, source)?));
+                    } else if child.is_named() {
+                        // Single statement body
+                        if let Some(stmt) = self.parse_statement(child, source) {
+                            body.push(stmt);
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(WhileStatement {
+            condition: condition?,
+            body,
+            location: self.node_location(node),
+        })
+    }
+
+    fn parse_do_while_statement(
+        &self,
+        node: Node,
+        source: &[u8],
+    ) -> Option<crate::model::statement::DoWhileStatement> {
+        use crate::model::statement::DoWhileStatement;
+
+        let mut condition = None;
+        let mut body = Vec::new();
+        let mut cursor = node.walk();
+
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "compound_statement" => {
+                    body = self.parse_function_body(child, source);
+                }
+                "(" | ")" | ";" | "while" | "do" => {
+                    // Skip keywords and delimiters
+                }
+                _ => {
+                    if Parser::is_expression_node(&child) {
+                        condition = Some(Box::new(self.parse_expression(child, source)?));
+                    } else if child.is_named() && body.is_empty() {
+                        // Single statement body (before the condition)
+                        if let Some(stmt) = self.parse_statement(child, source) {
+                            body.push(stmt);
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(DoWhileStatement {
+            body,
+            condition: condition?,
             location: self.node_location(node),
         })
     }
@@ -104,13 +241,13 @@ impl Parser {
             "switch_statement" => self
                 .parse_switch_statement(node, source)
                 .map(Statement::Switch),
-            "for_statement" | "while_statement" | "do_statement" => {
-                // Loop statements - we don't need to parse them in detail for
-                // linting rules, but we need to recognize them as statements so
-                // they aren't silently skipped
-                self.parse_loop_statement(node, source)
-                    .map(Statement::Compound)
-            }
+            "for_statement" => self.parse_for_statement(node, source).map(Statement::For),
+            "while_statement" => self
+                .parse_while_statement(node, source)
+                .map(Statement::While),
+            "do_statement" => self
+                .parse_do_while_statement(node, source)
+                .map(Statement::DoWhile),
             "preproc_if" | "preproc_ifdef" | "preproc_elif" | "preproc_else" => {
                 // Preprocessor conditionals - parse the body statements
                 self.parse_preproc_conditional(node, source)
