@@ -1,0 +1,5 @@
+target/
+gobject-ast/target/
+tree-sitter-c-gobject/target/
+# The submodule is only needed for grammar regeneration, not for Rust builds
+tree-sitter-c-gobject/tree-sitter-c/
