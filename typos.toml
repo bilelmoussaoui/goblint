@@ -1,0 +1,4 @@
+[default.extend-words]
+# GObject Introspection Repository file format (.gir) and its scanner (g-ir-scanner)
+gir = "gir"
+GIR = "GIR"
