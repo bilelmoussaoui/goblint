@@ -1,3 +1,6 @@
+[files]
+extend-exclude = ["tree-sitter-c-gobject/src/*.c", "tree-sitter-c-gobject/src/*.h"]
+
 [default.extend-words]
 # GObject Introspection Repository file format (.gir) and its scanner (g-ir-scanner)
 gir = "gir"
