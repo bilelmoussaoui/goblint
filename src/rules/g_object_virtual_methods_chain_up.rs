@@ -1,4 +1,4 @@
-use gobject_ast::{Expression, Statement};
+use gobject_ast::Statement;
 
 use super::Rule;
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
@@ -98,29 +98,22 @@ impl GObjectVirtualMethodsChainUp {
     ) -> bool {
         use gobject_ast::Expression;
 
-        match expr {
-            // Field access: parent_class->dispose
-            Expression::FieldAccess(field)
-                if field.field == method_type
-                    // Check if the base looks like a parent class
-                    && (self.looks_like_parent_class_variable(&field.base)
-                        || self.looks_like_parent_class_cast(&field.text())) =>
-            {
-                return true;
-            }
-            // Call expression: might contain field access as part of it
-            // e.g., G_OBJECT_CLASS(parent_class)->dispose(object)
-            Expression::Call(call) => {
-                // Check if the function itself is a field access
-                if let Expression::FieldAccess(field) = &*call.function
-                    && field.field == method_type
-                    && (self.looks_like_parent_class_variable(&field.base)
-                        || self.looks_like_parent_class_cast(&field.text()))
-                {
-                    return true;
-                }
-            }
-            _ => {}
+        // The chain-up lives inside a call: `<parent_base>->method(args)`
+        // <parent_base> is either a direct identifier or a CLASS-macro call.
+        let field_access = match expr {
+            Expression::FieldAccess(f) => Some(f),
+            Expression::Call(call) => match &*call.function {
+                Expression::FieldAccess(f) => Some(f),
+                _ => None,
+            },
+            _ => None,
+        };
+
+        if let Some(field) = field_access
+            && field.field == method_type
+            && self.looks_like_parent_class_base(&field.base)
+        {
+            return true;
         }
 
         // Recursively check sub-expressions
@@ -133,43 +126,43 @@ impl GObjectVirtualMethodsChainUp {
         found
     }
 
-    fn looks_like_parent_class_cast(&self, text: &str) -> bool {
-        // Common patterns for parent class access:
-        // G_OBJECT_CLASS (parent_class)
-        // G_OBJECT_CLASS (my_class_parent_class)
-        // FOO_CLASS (parent_class)
-        text.contains("_CLASS") && text.contains("parent")
+    /// Returns true when `expr` looks like a parent-class base, i.e.:
+    ///   - a plain identifier: `parent_class`, `object_class`, `klass`, …
+    ///   - a CLASS-macro call: `G_OBJECT_CLASS(parent_class)`,
+    ///     `FOO_CLASS(klass)`, …
+    fn looks_like_parent_class_base(&self, expr: &gobject_ast::Expression) -> bool {
+        use gobject_ast::{Expression, model::expression::Argument};
+
+        match expr {
+            Expression::Identifier(id) => self.is_parent_class_name(&id.name),
+            Expression::Call(call) => {
+                // Function must be an ALL_CAPS identifier ending in _CLASS
+                let func_is_class_macro = matches!(&*call.function,
+                    Expression::Identifier(id) if id.name.ends_with("_CLASS")
+                );
+                if !func_is_class_macro {
+                    return false;
+                }
+                // At least one argument must look like a parent class identifier
+                call.arguments.iter().any(|arg| {
+                    let Argument::Expression(e) = arg;
+                    matches!(&**e, Expression::Identifier(id) if self.is_parent_class_name(&id.name))
+                })
+            }
+            _ => false,
+        }
     }
 
-    fn looks_like_parent_class_variable(&self, expr: &Expression) -> bool {
-        // Common variable names that hold parent class:
-        // parent_object_class, parent_class, object_class, klass, parent_klass
-
-        // Extract the variable name from the expression
-        let var_name = match expr {
-            Expression::Identifier(id) => &id.name,
-            _ => return false, // Not a simple variable reference
-        };
-
-        let var_lower = var_name.to_lowercase();
-
-        // Check for explicit parent references
-        if var_lower.contains("parent")
-            && (var_lower.contains("class") || var_lower.contains("klass"))
-        {
+    fn is_parent_class_name(&self, name: &str) -> bool {
+        let lower = name.to_lowercase();
+        // parent_class, parent_klass, foo_parent_class, object_parent_class, …
+        if lower.contains("parent") && (lower.contains("class") || lower.contains("klass")) {
             return true;
         }
-
-        // Check for *_class or *_klass variables (object_class, gobject_class, etc.)
-        if var_lower.ends_with("_class") || var_lower.ends_with("_klass") {
+        // object_class, gobject_class, widget_class, …
+        if lower.ends_with("_class") || lower.ends_with("_klass") {
             return true;
         }
-
-        // Just "klass" or "class" by itself
-        if var_lower == "klass" || var_lower == "class" {
-            return true;
-        }
-
-        false
+        lower == "klass"
     }
 }
