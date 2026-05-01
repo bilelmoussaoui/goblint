@@ -4,6 +4,13 @@ use anyhow::Result;
 use gobject_ast::{Parser, Project};
 
 fn main() -> Result<()> {
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_target(true)
+        .with_line_number(true)
+        .init();
+
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
@@ -15,6 +22,8 @@ fn main() -> Result<()> {
     let path = PathBuf::from(&args[1]);
     let mut parser = Parser::new()?;
 
+    tracing::info!("Starting to parse: {}", path.display());
+
     let project = if path.is_dir() {
         eprintln!("Parsing directory: {}", path.display());
         parser.parse_directory(&path)?
@@ -22,6 +31,8 @@ fn main() -> Result<()> {
         eprintln!("Parsing file: {}", path.display());
         parser.parse_file(&path)?
     };
+
+    tracing::info!("Finished parsing, found {} files", project.files.len());
 
     print_project(&project);
 

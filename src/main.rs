@@ -79,6 +79,13 @@ fn parse_glib_version_arg(s: &str) -> Result<(u32, u32), String> {
 fn main() -> Result<()> {
     let args = Args::parse();
 
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_target(true)
+        .with_line_number(true)
+        .init();
+
     // Load configuration
     let mut config = config::Config::load(&args.config)?;
 

@@ -110,6 +110,7 @@ macro_rules! for_each_rule {
             (include_order, IncludeOrder, 2, 0, false),
             (use_pragma_once, UsePragmaOnce, 2, 0, false),
             (missing_implementation, MissingImplementation, 2, 0, false),
+            (missing_autoptr_cleanup, MissingAutoptrCleanup, 2, 0, false),
             (no_g_auto_macros, NoGAutoMacros, 2, 0, false),
             (deprecated_add_private, DeprecatedAddPrivate, 2, 0, false),
             (matching_declare_define, MatchingDeclareDefine, 2, 70, false),
@@ -160,6 +161,7 @@ macro_rules! for_each_rule {
             (use_g_ascii_functions, UseGAsciiFunctions, 2, 0, false),
             (use_g_strlcpy, UseGStrlcpy, 2, 0, false),
             (untranslated_string, UntranslatedString, 2, 0, false),
+            (dead_code_functions, DeadCodeFunctions, 2, 0, false),
         }
     };
 }

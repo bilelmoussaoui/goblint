@@ -282,6 +282,10 @@ rule_test!(
     goblint::rules::MatchingDeclareDefine
 );
 rule_test!(
+    missing_autoptr_cleanup,
+    goblint::rules::MissingAutoptrCleanup
+);
+rule_test!(
     missing_implementation,
     goblint::rules::MissingImplementation
 );

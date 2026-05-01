@@ -16,7 +16,54 @@ impl Parser {
     ) -> Option<GObjectType> {
         // Recursively find all identifiers in parent node
         let mut arg_values = Vec::new();
-        self.collect_identifiers(parent, source, &mut arg_values);
+
+        // Special handling for function_declarator nodes (from declarations with
+        // parameter_list) These have parameter_declaration children OR direct
+        // identifier children
+        if parent.kind() == "function_declarator" {
+            // Find parameter_list child
+            let mut cursor = parent.walk();
+            for child in parent.children(&mut cursor) {
+                if child.kind() == "parameter_list" {
+                    let mut params_cursor = child.walk();
+                    for param in child.children(&mut params_cursor) {
+                        if param.kind() == "parameter_declaration" {
+                            // Extract the type_identifier from the parameter_declaration
+                            let mut param_cursor = param.walk();
+                            for param_child in param.children(&mut param_cursor) {
+                                if param_child.kind() == "type_identifier"
+                                    || param_child.kind() == "identifier"
+                                {
+                                    if let Ok(text) =
+                                        std::str::from_utf8(&source[param_child.byte_range()])
+                                    {
+                                        arg_values.push(text);
+                                    }
+                                    break;
+                                }
+                            }
+                        } else if param.kind() == "identifier" || param.kind() == "type_identifier"
+                        {
+                            // Direct identifier children (e.g., in ERROR nodes)
+                            if let Ok(text) = std::str::from_utf8(&source[param.byte_range()]) {
+                                arg_values.push(text);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        } else {
+            // Normal case: argument_list or call_expression
+            self.collect_identifiers(parent, source, &mut arg_values);
+        }
+
+        tracing::debug!(
+            "extract_gobject_from_identifier for {} (parent: {}): collected identifiers: {:?}",
+            macro_name,
+            parent.kind(),
+            arg_values
+        );
 
         // Remove the macro name itself from the list
         arg_values.retain(|name| *name != macro_name);
@@ -441,6 +488,14 @@ impl Parser {
         source: &'a [u8],
         result: &mut Vec<&'a str>,
     ) {
+        // Direct identifier or type_identifier nodes
+        if node.kind() == "identifier" || node.kind() == "type_identifier" {
+            if let Ok(text) = std::str::from_utf8(&source[node.byte_range()]) {
+                result.push(text);
+                return;
+            }
+        }
+
         // Only parse if this is actually an expression node
         if Parser::is_expression_node(&node) {
             if let Some(expr) = self.parse_expression(node, source) {
@@ -449,12 +504,11 @@ impl Parser {
             }
         }
 
-        // If not an expression, recurse into children
+        // If not an expression, recurse into ALL children (not just named ones)
+        // because some tree-sitter grammars don't mark all nodes as named
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if child.is_named() {
-                self.collect_identifiers(child, source, result);
-            }
+            self.collect_identifiers(child, source, result);
         }
     }
 }

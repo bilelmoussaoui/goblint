@@ -133,6 +133,7 @@ impl Parser {
 
     /// Parse a top-level item (declaration, definition, preprocessor directive,
     /// etc.)
+    #[tracing::instrument(skip(self, node, source), fields(node_kind = node.kind(), line = node.start_position().row + 1))]
     pub(super) fn parse_top_level_item(&self, node: Node, source: &[u8]) -> Option<TopLevelItem> {
         match node.kind() {
             "preproc_include" => {
@@ -296,6 +297,8 @@ impl Parser {
                 None
             }
             "declaration" => {
+                tracing::debug!("Processing declaration node");
+
                 // Check for enum declarations
                 if let Some(enum_info) = self.extract_enum(node, source) {
                     return Some(TopLevelItem::TypeDefinition(TypeDefItem::Enum {
@@ -309,12 +312,15 @@ impl Parser {
                 if let Some(func_decl) = func_declarator {
                     // Extract function name
                     if let Some(name) = self.extract_declarator_name(func_decl, source) {
+                        tracing::debug!("Found function declarator with name: {}", name);
+
                         // Skip macro "declarations" - macros are all uppercase with underscores
                         // e.g., G_DECLARE_FINAL_TYPE, MY_MACRO_CALL, etc.
                         if name
                             .chars()
                             .all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit())
                         {
+                            tracing::debug!("Skipping macro declaration: {}", name);
                             return None;
                         }
 
@@ -503,6 +509,51 @@ impl Parser {
     /// This handles cases where tree-sitter fails to parse a function due to
     /// custom macros
     fn try_extract_function_from_error(&self, node: Node, source: &[u8]) -> Option<TopLevelItem> {
+        // First check if there's a call_expression (e.g.,
+        // G_DEFINE_AUTOPTR_CLEANUP_FUNC)
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "call_expression" {
+                // Check if this is G_DEFINE_AUTOPTR_CLEANUP_FUNC
+                let func_node = if let Some(fn_node) = child.child_by_field_name("function") {
+                    fn_node
+                } else if let Some(first_child) = child.child(0) {
+                    first_child
+                } else {
+                    continue;
+                };
+
+                if func_node.kind() == "identifier" {
+                    let func_name =
+                        std::str::from_utf8(&source[func_node.byte_range()]).unwrap_or("");
+
+                    if func_name == "G_DEFINE_AUTOPTR_CLEANUP_FUNC" {
+                        let args_node = child.child_by_field_name("arguments").or_else(|| {
+                            let mut cursor = child.walk();
+                            child
+                                .children(&mut cursor)
+                                .find(|c| c.kind() == "argument_list")
+                        });
+
+                        if let Some(args_node) = args_node {
+                            let mut arg_values = Vec::new();
+                            self.collect_identifiers(args_node, source, &mut arg_values);
+
+                            if arg_values.len() >= 2 {
+                                return Some(TopLevelItem::Preprocessor(
+                                    PreprocessorDirective::AutoptrCleanupFunc {
+                                        type_name: arg_values[0].to_owned(),
+                                        cleanup_function: arg_values[1].to_owned(),
+                                        location: self.node_location(node),
+                                    },
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Look for function-like structure: storage_class? type function_declarator {
         // ... }
         let mut has_function_declarator = false;

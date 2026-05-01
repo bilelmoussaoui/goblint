@@ -34,6 +34,8 @@ heck = "0.5"
 tower-lsp = { version = "0.20", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-std"], optional = true }
 serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tempfile = "3"

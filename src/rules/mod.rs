@@ -99,6 +99,7 @@ pub struct ConfigOption {
     pub description: &'static str,
 }
 
+pub mod dead_code_functions;
 pub mod deprecated_add_private;
 pub mod g_error_init;
 pub mod g_error_leak;
@@ -109,6 +110,7 @@ pub mod g_source_id_not_stored;
 pub mod g_task_source_tag;
 pub mod include_order;
 pub mod matching_declare_define;
+pub mod missing_autoptr_cleanup;
 pub mod missing_implementation;
 pub mod no_g_auto_macros;
 pub mod property_canonical_name;
@@ -153,6 +155,7 @@ pub mod use_g_value_set_static_string;
 pub mod use_g_variant_new_typed;
 pub mod use_pragma_once;
 
+pub use dead_code_functions::DeadCodeFunctions;
 pub use deprecated_add_private::DeprecatedAddPrivate;
 pub use g_error_init::GErrorInit;
 pub use g_error_leak::GErrorLeak;
@@ -163,6 +166,7 @@ pub use g_source_id_not_stored::GSourceIdNotStored;
 pub use g_task_source_tag::GTaskSourceTag;
 pub use include_order::IncludeOrder;
 pub use matching_declare_define::MatchingDeclareDefine;
+pub use missing_autoptr_cleanup::MissingAutoptrCleanup;
 pub use missing_implementation::MissingImplementation;
 pub use no_g_auto_macros::NoGAutoMacros;
 pub use property_canonical_name::PropertyCanonicalName;
