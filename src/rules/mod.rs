@@ -99,7 +99,6 @@ pub struct ConfigOption {
     pub description: &'static str,
 }
 
-pub mod dead_code_functions;
 pub mod deprecated_add_private;
 pub mod g_error_init;
 pub mod g_error_leak;
@@ -155,7 +154,6 @@ pub mod use_g_value_set_static_string;
 pub mod use_g_variant_new_typed;
 pub mod use_pragma_once;
 
-pub use dead_code_functions::DeadCodeFunctions;
 pub use deprecated_add_private::DeprecatedAddPrivate;
 pub use g_error_init::GErrorInit;
 pub use g_error_leak::GErrorLeak;

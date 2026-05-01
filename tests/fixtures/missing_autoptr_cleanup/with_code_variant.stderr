@@ -1,0 +1,1 @@
+with_code_variant.c:15:1: missing_autoptr_cleanup: Boxed type 'MyBoxedWithCode' is missing G_DEFINE_AUTOPTR_CLEANUP_FUNC macro

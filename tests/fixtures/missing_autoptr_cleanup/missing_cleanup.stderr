@@ -1,0 +1,1 @@
+missing_cleanup.c:15:1: missing_autoptr_cleanup: Boxed type 'MyBoxed' is missing G_DEFINE_AUTOPTR_CLEANUP_FUNC macro
