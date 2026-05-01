@@ -19,7 +19,7 @@ impl Parser {
     pub fn new() -> Result<Self> {
         let mut parser = TSParser::new();
         parser
-            .set_language(&tree_sitter_c::LANGUAGE.into())
+            .set_language(&tree_sitter_c_gobject::LANGUAGE.into())
             .context("Failed to load C grammar")?;
 
         Ok(Self { parser })
@@ -155,7 +155,11 @@ impl Parser {
                 }) => {
                     gobject_types.push(gobject_type.as_mut());
                 }
-                TopLevelItem::Preprocessor(PreprocessorDirective::Conditional { body, .. }) => {
+                TopLevelItem::Preprocessor(PreprocessorDirective::Conditional { body, .. })
+                | TopLevelItem::Preprocessor(PreprocessorDirective::GObjectDeclsBlock {
+                    body,
+                    ..
+                }) => {
                     self.collect_gobject_types_mut(body, gobject_types);
                 }
                 _ => {}
@@ -170,210 +174,50 @@ impl Parser {
     ) -> Vec<&'a str> {
         let mut result = Vec::new();
 
-        // The declaration node includes export macros when they're on the line before
-        // Get the first line of the declaration
-        let decl_start = decl_node.start_byte();
-        let mut first_line_end = decl_start;
-        while first_line_end < source.len() && source[first_line_end] != b'\n' {
-            first_line_end += 1;
-        }
+        // With the fixed grammar, macro_modifier nodes are now properly parsed
+        // Just walk children and extract macro_modifier nodes
+        let mut cursor = decl_node.walk();
 
-        // Get the first line text
-        if let Ok(first_line) = std::str::from_utf8(&source[decl_start..first_line_end]) {
-            // Look for export macros in the first line
-            for word in first_line.split_whitespace() {
-                if word.ends_with("_EXPORT")
-                    || word.starts_with("G_DEPRECATED")
-                    || word == "G_GNUC_DEPRECATED"
-                    || word == "G_GNUC_WARN_UNUSED_RESULT"
-                {
-                    result.push(word);
-                    break; // Only take the first one
-                }
+        for child in decl_node.children(&mut cursor) {
+            if child.kind() == "macro_modifier" {
+                let text = std::str::from_utf8(&source[child.byte_range()]).unwrap_or("");
+                result.push(text.trim());
             }
         }
 
         result
     }
 
-    /// Try to extract G_DECLARE/G_DEFINE macros from a node's children
-    /// (recursively) Returns true if any were found and added to file_model
-    fn try_extract_gobject_macros(
+    /// Extract GObject type from a gobject_type_macro or macro_modifier node
+    /// The grammar now properly parses argument_list with identifier children
+    fn extract_gobject_from_macro_modifier(
         &self,
         node: Node,
         source: &[u8],
-        file_model: &mut FileModel,
-    ) -> bool {
-        let mut found = false;
-        let mut cursor = node.walk();
+    ) -> Option<crate::model::types::GObjectType> {
+        // Get macro name from the text (before parentheses)
+        let full_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
+        let macro_name = full_text.split('(').next()?.trim();
 
-        tracing::debug!(
-            "try_extract_gobject_macros on {} node at line {}",
-            node.kind(),
-            node.start_position().row + 1
-        );
-
-        for child in node.children(&mut cursor) {
-            if child.kind() == "identifier" {
-                let text = std::str::from_utf8(&source[child.byte_range()]).unwrap_or("");
-                if text.starts_with("G_DECLARE_") || text.starts_with("G_DEFINE_") {
-                    tracing::info!(
-                        "Found {} in {} node at line {}",
-                        text,
-                        node.kind(),
-                        node.start_position().row + 1
-                    );
-                    if let Some(gobject_type) =
-                        self.extract_gobject_from_identifier(child, node, source, text)
-                    {
-                        use crate::top_level::{PreprocessorDirective, TopLevelItem};
-                        let location = self.node_location(child);
-                        tracing::info!(
-                            "Successfully extracted GObject type: {}",
-                            gobject_type.type_name
-                        );
-                        file_model.top_level_items.push(TopLevelItem::Preprocessor(
-                            PreprocessorDirective::GObjectType {
-                                gobject_type: Box::new(gobject_type),
-                                location,
-                            },
-                        ));
-                        found = true;
-                    }
-                }
-            } else if child.kind() == "call_expression" {
-                // Handle call_expression nodes (for expression_statement cases)
-                if let Some(func_node) = child.child_by_field_name("function") {
-                    if func_node.kind() == "identifier" {
-                        let func_name =
-                            std::str::from_utf8(&source[func_node.byte_range()]).unwrap_or("");
-                        if func_name.starts_with("G_DECLARE_") || func_name.starts_with("G_DEFINE_")
-                        {
-                            tracing::info!(
-                                "Found {} in call_expression at line {}",
-                                func_name,
-                                node.start_position().row + 1
-                            );
-                            if let Some(gobject_type) = self.extract_gobject_from_identifier(
-                                func_node, child, source, func_name,
-                            ) {
-                                use crate::top_level::{PreprocessorDirective, TopLevelItem};
-                                let location = self.node_location(node);
-                                tracing::info!(
-                                    "Successfully extracted GObject type: {}",
-                                    gobject_type.type_name
-                                );
-                                file_model.top_level_items.push(TopLevelItem::Preprocessor(
-                                    PreprocessorDirective::GObjectType {
-                                        gobject_type: Box::new(gobject_type),
-                                        location,
-                                    },
-                                ));
-                                found = true;
-                            }
-                        }
-                    }
-                }
-            } else if child.kind() == "ERROR"
-                || child.kind() == "function_declarator"
-                || child.kind() == "function_definition"
-            {
-                // Recurse into ERROR nodes, function_declarator nodes, and function_definition
-                // nodes to find G_DECLARE/G_DEFINE macros (tree-sitter
-                // sometimes parses G_DECLARE as function_definition)
-                tracing::debug!(
-                    "Recursing into {} node at line {}",
-                    child.kind(),
-                    child.start_position().row + 1
-                );
-                if self.try_extract_gobject_macros(child, source, file_model) {
-                    found = true;
-                }
-            }
-        }
-
-        found
+        // Call the existing extraction logic which will collect identifiers from the
+        // node
+        self.extract_gobject_from_identifier(node, node, source, macro_name)
     }
 
     fn visit_node(&self, node: Node, source: &[u8], file_model: &mut FileModel) {
-        // For declaration, ERROR, and function_definition nodes, check for
-        // G_DECLARE/G_DEFINE identifiers before/after parsing because
-        // tree-sitter sometimes mispars them or merges multiple declarations
-        if node.kind() == "declaration"
-            || node.kind() == "ERROR"
-            || node.kind() == "function_definition"
-        {
-            tracing::debug!(
-                "Visiting {} node at line {}",
-                node.kind(),
-                node.start_position().row + 1
-            );
-            let found_gobject_macro = self.try_extract_gobject_macros(node, source, file_model);
-
-            // If we found a GObject macro, we might still want to parse other content in
-            // the node So don't return early, let it continue through normal
-            // parsing
-            if found_gobject_macro {
-                tracing::info!(
-                    "Found GObject macro in {}, continuing to parse other items",
-                    node.kind()
-                );
-                // Still try to parse the node itself for function declarations etc.
-                if let Some(item) = self.parse_top_level_item(node, source) {
-                    file_model.top_level_items.push(item);
-                }
-
-                // For ERROR nodes, also recurse to children for other items
-                if node.kind() == "ERROR" {
-                    let mut cursor = node.walk();
-                    for child in node.children(&mut cursor) {
-                        if child.kind() != "identifier" {
-                            self.visit_node(child, source, file_model);
-                        }
-                    }
-                }
-                return;
-            }
-        }
-
-        // Try to parse as a top-level item first
+        // Try to parse this node as a top-level item. If successful, don't
+        // recurse — children are handled inside parse_top_level_item itself
+        // (e.g. via parse_conditional_body for #ifdef blocks).
         if let Some(item) = self.parse_top_level_item(node, source) {
-            // Simply push the item - the tree structure is already built
             file_model.top_level_items.push(item);
             return;
         }
 
-        // Only recurse for nodes that may contain top-level items
-        // (preprocessor blocks, translation unit)
-        match node.kind() {
-            "preproc_if" | "preproc_ifdef" | "preproc_elif" | "preproc_else" => {
-                // Preprocessor conditionals may contain declarations
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    self.visit_node(child, source, file_model);
-                }
-            }
-            "translation_unit" => {
-                // Top-level node - recurse to find all items
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    self.visit_node(child, source, file_model);
-                }
-            }
-            "expression_statement" => {
-                // Try to parse as a top-level item first (handles
-                // G_DEFINE_AUTOPTR_CLEANUP_FUNC, etc.)
-                if let Some(item) = self.parse_top_level_item(node, source) {
-                    file_model.top_level_items.push(item);
-                    return;
-                }
-
-                // Fallback: Might be a GObject macro parsed as an expression
-                self.try_extract_gobject_macros(node, source, file_model);
-            }
-            _ => {
-                // Other nodes are fully handled by TopLevelItem - don't recurse
-            }
+        // Only recurse when the node wasn't recognized as a top-level item
+        // (translation_unit, unrecognized wrapper nodes, etc.)
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.visit_node(child, source, file_model);
         }
     }
 

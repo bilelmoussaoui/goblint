@@ -147,7 +147,8 @@ impl Statement {
                 | PreprocessorDirective::AutoptrCleanupFunc { location, .. }
                 | PreprocessorDirective::AutoCleanupClearFunc { location, .. }
                 | PreprocessorDirective::MacroWithCode { location, .. }
-                | PreprocessorDirective::Conditional { location, .. } => location,
+                | PreprocessorDirective::Conditional { location, .. }
+                | PreprocessorDirective::GObjectDeclsBlock { location, .. } => location,
             },
         }
     }

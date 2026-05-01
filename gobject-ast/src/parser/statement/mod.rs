@@ -246,6 +246,8 @@ impl Parser {
             "{"
             | "}"
             | ";"
+            | "("
+            | ")"
             | "comment"
             | "identifier"
             | "number_literal"
@@ -259,9 +261,31 @@ impl Parser {
             | "parenthesized_expression"
             | "type_identifier"
             | "true"
-            | "false" => {
-                // Skip delimiters, comments, and loose expressions (can appear in for loop
-                // clauses)
+            | "false"
+            | "macro_modifier"
+            | "storage_class_specifier"
+            | "type_qualifier"
+            | "primitive_type"
+            | "sized_type_specifier"
+            | "function_declarator"
+            | "pointer_declarator"
+            | "array_declarator"
+            | "argument_list"
+            | "if"
+            | "else"
+            | "while"
+            | "for"
+            | "do"
+            | "switch"
+            | "case"
+            | "default"
+            | "return"
+            | "break"
+            | "continue"
+            | "goto" => {
+                // Skip delimiters, comments, keywords, declaration modifiers, declarators,
+                // and loose expressions (can appear in for loop clauses or as part of
+                // declarations)
                 None
             }
             "preproc_function_def" | "preproc_def" => {

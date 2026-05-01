@@ -354,10 +354,11 @@ impl FileModel {
         use crate::top_level::PreprocessorDirective;
 
         Box::new(items.iter().flat_map(move |item| match item {
-            TopLevelItem::Preprocessor(PreprocessorDirective::Conditional { body, .. }) => {
-                Box::new(std::iter::once(item).chain(self.iter_items_recursive(body)))
-                    as Box<dyn Iterator<Item = &'a TopLevelItem>>
-            }
+            TopLevelItem::Preprocessor(PreprocessorDirective::Conditional { body, .. })
+            | TopLevelItem::Preprocessor(PreprocessorDirective::GObjectDeclsBlock {
+                body, ..
+            }) => Box::new(std::iter::once(item).chain(self.iter_items_recursive(body)))
+                as Box<dyn Iterator<Item = &'a TopLevelItem>>,
             _ => Box::new(std::iter::once(item)) as Box<dyn Iterator<Item = &'a TopLevelItem>>,
         }))
     }

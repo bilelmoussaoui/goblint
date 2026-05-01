@@ -146,7 +146,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tree-sitter",
- "tree-sitter-c",
+ "tree-sitter-c-gobject",
 ]
 
 [[package]]
@@ -547,10 +547,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tree-sitter-c"
-version = "0.24.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a3aad8f0129083a59fe8596157552d2bb7148c492d44c21558d68ca1c722707"
+name = "tree-sitter-c-gobject"
+version = "0.1.0"
 dependencies = [
  "cc",
  "tree-sitter-language",

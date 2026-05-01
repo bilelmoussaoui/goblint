@@ -1,3 +1,4 @@
 /target
 gobject-ast/target
 website/rules.json
+tree-sitter-c-gobject/target

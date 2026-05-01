@@ -17,7 +17,7 @@ fn main() -> Result<()> {
     let source = fs::read(file_path)?;
 
     let mut parser = Parser::new();
-    parser.set_language(&tree_sitter_c::LANGUAGE.into())?;
+    parser.set_language(&tree_sitter_c_gobject::LANGUAGE.into())?;
 
     let tree = parser.parse(&source, None).unwrap();
     let root = tree.root_node();

@@ -5,70 +5,51 @@ use crate::model::{top_level::*, *};
 
 impl Parser {
     /// Extract return type from a function declaration or definition
-    fn extract_return_type(&self, node: Node, source: &[u8]) -> TypeInfo {
-        // Get the full text of the function
-        let func_text = std::str::from_utf8(&source[node.byte_range()]).unwrap_or("");
-
-        // Find the function name to know where the return type ends
-        let declarator = node.child_by_field_name("declarator");
-        let func_name_offset = if let Some(decl) = declarator {
-            // Find function_declarator within the declarator
-            if let Some(func_decl) = self.find_function_declarator(decl) {
-                if let Some(name_node) = func_decl.child_by_field_name("declarator") {
-                    name_node.start_byte() - node.start_byte()
-                } else {
-                    // Fallback: just use position of (
-                    func_text.find('(').unwrap_or(func_text.len())
-                }
-            } else {
-                func_text.find('(').unwrap_or(func_text.len())
-            }
-        } else {
-            func_text.find('(').unwrap_or(func_text.len())
-        };
-
-        // Extract everything before the function name as the return type
-        let before_name = &func_text[..func_name_offset].trim();
-
-        // Split by whitespace to get all parts
-        let parts: Vec<&str> = before_name.split_whitespace().collect();
-
-        // Filter out storage classes (static, extern, inline)
-        let mut type_parts = Vec::new();
+    pub(super) fn extract_return_type(&self, node: Node, source: &[u8]) -> TypeInfo {
+        let mut cursor = node.walk();
+        let mut type_node = None;
         let mut is_const = false;
 
-        for part in parts {
-            match part {
-                "static" | "extern" | "inline" => {
-                    // Skip storage class specifiers
+        // Find the type node by walking children
+        // Now that grammar is fixed, macro_modifier will be a separate node we can skip
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "type_identifier" => {
+                    if type_node.is_none() {
+                        type_node = Some(child);
+                    }
                 }
-                "const" => {
-                    is_const = true;
+                "primitive_type" | "sized_type_specifier" | "struct_specifier" => {
+                    // Found the type
+                    if type_node.is_none() {
+                        type_node = Some(child);
+                    }
                 }
-                _ => {
-                    type_parts.push(part);
+                "type_qualifier" => {
+                    // Check if it's const
+                    let text = std::str::from_utf8(&source[child.byte_range()]).unwrap_or("");
+                    if text == "const" {
+                        is_const = true;
+                    }
                 }
+                "macro_modifier" => {
+                    // Skip macro modifiers - handled by grammar now
+                }
+                "pointer_declarator" | "function_declarator" => {
+                    // Stop when we hit the declarator
+                    break;
+                }
+                _ => {}
             }
         }
 
-        // Join the type parts
-        let full_type_text = type_parts.join(" ");
-
-        // Find the byte position of the return type in the source BEFORE we modify it
-        let type_start_offset = if !full_type_text.is_empty() {
-            before_name.find(&full_type_text).unwrap_or(0)
+        // Extract type text
+        let (full_type_text, start_byte, end_byte) = if let Some(type_n) = type_node {
+            let text = std::str::from_utf8(&source[type_n.byte_range()]).unwrap_or("void");
+            (text.to_string(), type_n.start_byte(), type_n.end_byte())
         } else {
-            0
-        };
-
-        let start_byte = node.start_byte() + type_start_offset;
-        let end_byte = start_byte + full_type_text.len();
-
-        // Default to void if empty (after removing pointers for checking)
-        let full_type_text = if full_type_text.replace('*', "").trim().is_empty() {
-            "void".to_string()
-        } else {
-            full_type_text
+            // No type found, default to void
+            (String::from("void"), node.start_byte(), node.start_byte())
         };
 
         let full_text = if is_const {
@@ -77,8 +58,6 @@ impl Parser {
             full_type_text.clone()
         };
 
-        // Use the function's line/column as approximation - the critical parts are the
-        // byte offsets
         let location = SourceLocation::new(
             node.start_position().row + 1,
             node.start_position().column + 1,
@@ -135,6 +114,7 @@ impl Parser {
     /// etc.)
     #[tracing::instrument(skip(self, node, source), fields(node_kind = node.kind(), line = node.start_position().row + 1))]
     pub(super) fn parse_top_level_item(&self, node: Node, source: &[u8]) -> Option<TopLevelItem> {
+        tracing::trace!("parse_top_level_item: {}", node.kind());
         match node.kind() {
             "preproc_include" => {
                 let path_node = node.child_by_field_name("path")?;
@@ -279,6 +259,17 @@ impl Parser {
                     },
                 ))
             }
+            "gobject_decls_block" => {
+                // Parse G_BEGIN_DECLS ... G_END_DECLS block
+                let body = self.parse_conditional_body(node, source);
+
+                Some(TopLevelItem::Preprocessor(
+                    PreprocessorDirective::GObjectDeclsBlock {
+                        body,
+                        location: self.node_location(node),
+                    },
+                ))
+            }
             "type_definition" => {
                 // Check for typedef enum
                 if let Some(enum_info) = self.extract_enum(node, source) {
@@ -313,16 +304,6 @@ impl Parser {
                     // Extract function name
                     if let Some(name) = self.extract_declarator_name(func_decl, source) {
                         tracing::debug!("Found function declarator with name: {}", name);
-
-                        // Skip macro "declarations" - macros are all uppercase with underscores
-                        // e.g., G_DECLARE_FINAL_TYPE, MY_MACRO_CALL, etc.
-                        if name
-                            .chars()
-                            .all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit())
-                        {
-                            tracing::debug!("Skipping macro declaration: {}", name);
-                            return None;
-                        }
 
                         // Check for static storage class
                         let decl_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
@@ -407,243 +388,69 @@ impl Parser {
                     body_location,
                 }))
             }
-            "expression_statement" => {
-                // Check if this is a special macro
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "call_expression" {
-                        let func_node = if let Some(fn_node) = child.child_by_field_name("function")
-                        {
-                            fn_node
-                        } else {
-                            if let Some(first_child) = child.child(0) {
-                                first_child
+            "expression_statement" => self
+                .parse_statement(node, source)
+                .map(TopLevelItem::Declaration),
+            "gobject_type_macro" => {
+                let full_text = std::str::from_utf8(&source[node.byte_range()]).unwrap_or("");
+                let macro_name = full_text.split('(').next().unwrap_or("").trim();
+
+                // Route cleanup-func macros before the generic G_DEFINE_ handler
+                if macro_name == "G_DEFINE_AUTOPTR_CLEANUP_FUNC"
+                    || macro_name == "G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC"
+                    || macro_name == "G_DEFINE_AUTO_CLEANUP_FREE_FUNC"
+                {
+                    let args_node = node
+                        .children(&mut node.walk())
+                        .find(|c| c.kind() == "argument_list");
+                    if let Some(args_node) = args_node {
+                        let mut args = Vec::new();
+                        self.collect_identifiers(args_node, source, &mut args);
+                        if args.len() >= 2 {
+                            let directive = if macro_name == "G_DEFINE_AUTOPTR_CLEANUP_FUNC" {
+                                PreprocessorDirective::AutoptrCleanupFunc {
+                                    type_name: args[0].to_owned(),
+                                    cleanup_function: args[1].to_owned(),
+                                    location: self.node_location(node),
+                                }
                             } else {
-                                continue;
-                            }
-                        };
-
-                        if func_node.kind() == "identifier" {
-                            let func_name =
-                                std::str::from_utf8(&source[func_node.byte_range()]).unwrap_or("");
-
-                            // G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC (Type, cleanup_func)
-                            // Check this BEFORE the G_DEFINE_ check since it starts with G_DEFINE_
-                            if func_name == "G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC" {
-                                let args_node =
-                                    child.child_by_field_name("arguments").or_else(|| {
-                                        let mut cursor = child.walk();
-                                        child
-                                            .children(&mut cursor)
-                                            .find(|c| c.kind() == "argument_list")
-                                    });
-
-                                if let Some(args_node) = args_node {
-                                    let mut arg_values = Vec::new();
-                                    self.collect_identifiers(args_node, source, &mut arg_values);
-
-                                    if arg_values.len() >= 2 {
-                                        return Some(TopLevelItem::Preprocessor(
-                                            PreprocessorDirective::AutoCleanupClearFunc {
-                                                type_name: arg_values[0].to_owned(),
-                                                cleanup_function: arg_values[1].to_owned(),
-                                                location: self.node_location(node),
-                                            },
-                                        ));
-                                    }
+                                PreprocessorDirective::AutoCleanupClearFunc {
+                                    type_name: args[0].to_owned(),
+                                    cleanup_function: args[1].to_owned(),
+                                    location: self.node_location(node),
                                 }
-                            }
-
-                            // G_DEFINE_AUTOPTR_CLEANUP_FUNC (Type, cleanup_func)
-                            if func_name == "G_DEFINE_AUTOPTR_CLEANUP_FUNC" {
-                                // Try both "arguments" field name and looking for argument_list
-                                // child
-                                let args_node =
-                                    child.child_by_field_name("arguments").or_else(|| {
-                                        let mut cursor = child.walk();
-                                        child
-                                            .children(&mut cursor)
-                                            .find(|c| c.kind() == "argument_list")
-                                    });
-
-                                if let Some(args_node) = args_node {
-                                    let mut arg_values = Vec::new();
-                                    self.collect_identifiers(args_node, source, &mut arg_values);
-
-                                    if arg_values.len() >= 2 {
-                                        return Some(TopLevelItem::Preprocessor(
-                                            PreprocessorDirective::AutoptrCleanupFunc {
-                                                type_name: arg_values[0].to_owned(),
-                                                cleanup_function: arg_values[1].to_owned(),
-                                                location: self.node_location(node),
-                                            },
-                                        ));
-                                    }
-                                }
-                            }
-
-                            // G_DECLARE/G_DEFINE handled by visit_node
-                            if func_name.starts_with("G_DECLARE_")
-                                || func_name.starts_with("G_DEFINE_")
-                            {
-                                return None;
-                            }
+                            };
+                            return Some(TopLevelItem::Preprocessor(directive));
                         }
                     }
+                    return None;
                 }
 
-                // Other top-level expression statements
-                self.parse_statement(node, source)
-                    .map(TopLevelItem::Declaration)
+                if let Some(gobject_type) = self.extract_gobject_from_macro_modifier(node, source) {
+                    return Some(TopLevelItem::Preprocessor(
+                        PreprocessorDirective::GObjectType {
+                            gobject_type: Box::new(gobject_type),
+                            location: self.node_location(node),
+                        },
+                    ));
+                }
+                None
             }
             "ERROR" => {
-                // Try to extract function definitions from ERROR nodes
-                // (e.g., functions with custom loop macros that tree-sitter can't parse)
-                self.try_extract_function_from_error(node, source)
+                let snippet = std::str::from_utf8(&source[node.byte_range()])
+                    .unwrap_or("<invalid utf8>")
+                    .chars()
+                    .take(80)
+                    .collect::<String>();
+                tracing::warn!(
+                    "Unhandled ERROR node at {}:{} — fix the grammar. Content: {:?}",
+                    node.start_position().row + 1,
+                    node.start_position().column + 1,
+                    snippet,
+                );
+                None
             }
             _ => None,
-        }
-    }
-
-    /// Try to extract a function definition from an ERROR node
-    /// This handles cases where tree-sitter fails to parse a function due to
-    /// custom macros
-    fn try_extract_function_from_error(&self, node: Node, source: &[u8]) -> Option<TopLevelItem> {
-        // First check if there's a call_expression (e.g.,
-        // G_DEFINE_AUTOPTR_CLEANUP_FUNC)
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "call_expression" {
-                // Check if this is G_DEFINE_AUTOPTR_CLEANUP_FUNC
-                let func_node = if let Some(fn_node) = child.child_by_field_name("function") {
-                    fn_node
-                } else if let Some(first_child) = child.child(0) {
-                    first_child
-                } else {
-                    continue;
-                };
-
-                if func_node.kind() == "identifier" {
-                    let func_name =
-                        std::str::from_utf8(&source[func_node.byte_range()]).unwrap_or("");
-
-                    if func_name == "G_DEFINE_AUTOPTR_CLEANUP_FUNC" {
-                        let args_node = child.child_by_field_name("arguments").or_else(|| {
-                            let mut cursor = child.walk();
-                            child
-                                .children(&mut cursor)
-                                .find(|c| c.kind() == "argument_list")
-                        });
-
-                        if let Some(args_node) = args_node {
-                            let mut arg_values = Vec::new();
-                            self.collect_identifiers(args_node, source, &mut arg_values);
-
-                            if arg_values.len() >= 2 {
-                                return Some(TopLevelItem::Preprocessor(
-                                    PreprocessorDirective::AutoptrCleanupFunc {
-                                        type_name: arg_values[0].to_owned(),
-                                        cleanup_function: arg_values[1].to_owned(),
-                                        location: self.node_location(node),
-                                    },
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Look for function-like structure: storage_class? type function_declarator {
-        // ... }
-        let mut has_function_declarator = false;
-        let mut function_declarator = None;
-        let mut is_static = false;
-
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            match child.kind() {
-                "storage_class_specifier" => {
-                    let text = std::str::from_utf8(&source[child.byte_range()]).ok()?;
-                    if text == "static" {
-                        is_static = true;
-                    }
-                }
-                "function_declarator" => {
-                    has_function_declarator = true;
-                    function_declarator = Some(child);
-                }
-                _ => {}
-            }
-        }
-
-        if !has_function_declarator {
-            return None;
-        }
-
-        let func_decl = function_declarator?;
-        let name = self.extract_declarator_name(func_decl, source)?;
-
-        // Extract parameters
-        let parameters = if let Some(params_node) = func_decl.child_by_field_name("parameters") {
-            self.extract_parameters(params_node, source)
-        } else {
-            Vec::new()
-        };
-
-        // Extract body statements from ERROR children
-        let mut body_statements = Vec::new();
-        self.extract_statements_from_error_children(node, source, &mut body_statements);
-
-        let body_location = None;
-
-        // Extract return type
-        let return_type = self.extract_return_type(node, source);
-
-        Some(TopLevelItem::FunctionDefinition(FunctionDefItem {
-            name: name.to_owned(),
-            return_type,
-            is_static,
-            parameters,
-            body_statements,
-            location: self.node_location(node),
-            body_location,
-        }))
-    }
-
-    /// Extract statements from children of an ERROR node (for functions without
-    /// clear compound_statement)
-    fn extract_statements_from_error_children(
-        &self,
-        node: Node,
-        source: &[u8],
-        statements: &mut Vec<Statement>,
-    ) {
-        let mut cursor = node.walk();
-        let mut in_body = false;
-
-        for child in node.children(&mut cursor) {
-            // Start collecting after the opening brace
-            if child.kind() == "{" {
-                in_body = true;
-                continue;
-            }
-
-            // Stop at closing brace
-            if child.kind() == "}" {
-                break;
-            }
-
-            if in_body {
-                // Skip preprocessor tokens/directives
-                if child.kind().starts_with("#") {
-                    continue;
-                }
-
-                if let Some(stmt) = self.parse_statement(child, source) {
-                    statements.push(stmt);
-                }
-            }
         }
     }
 

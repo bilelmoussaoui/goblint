@@ -14,12 +14,25 @@ fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        eprintln!("Usage: gobject-ast <file.c|file.h|directory>");
+        eprintln!("Usage: gobject-ast <file.c|file.h|directory> [raw_tree]");
         eprintln!("\nParse a C/header file or directory and print the AST model");
+        eprintln!("  raw_tree: Print raw tree-sitter AST instead of parsed model");
         std::process::exit(1);
     }
 
     let path = PathBuf::from(&args[1]);
+    let show_raw = args.len() > 2 && args[2] == "raw_tree";
+
+    if show_raw {
+        // Print raw tree-sitter output
+        let source = std::fs::read(&path)?;
+        let mut ts_parser = tree_sitter::Parser::new();
+        ts_parser.set_language(&tree_sitter_c_gobject::LANGUAGE.into())?;
+        let tree = ts_parser.parse(&source, None).unwrap();
+        print_raw_tree(tree.root_node(), &source, 0);
+        return Ok(());
+    }
+
     let mut parser = Parser::new()?;
 
     tracing::info!("Starting to parse: {}", path.display());
@@ -37,6 +50,35 @@ fn main() -> Result<()> {
     print_project(&project);
 
     Ok(())
+}
+
+fn print_raw_tree(node: tree_sitter::Node, source: &[u8], depth: usize) {
+    let indent = "  ".repeat(depth);
+    let text = if node.child_count() == 0 {
+        let s = std::str::from_utf8(&source[node.byte_range()]).unwrap_or("");
+        if s.len() > 50 {
+            format!(" '{}'...", &s[..50])
+        } else {
+            format!(" '{}'", s)
+        }
+    } else {
+        String::new()
+    };
+    println!(
+        "{}{} [{}:{}->{}:{}]{}",
+        indent,
+        node.kind(),
+        node.start_position().row,
+        node.start_position().column,
+        node.end_position().row,
+        node.end_position().column,
+        text
+    );
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        print_raw_tree(child, source, depth + 1);
+    }
 }
 
 fn print_project(project: &Project) {

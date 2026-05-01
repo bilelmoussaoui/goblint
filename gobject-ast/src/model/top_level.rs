@@ -85,6 +85,11 @@ pub enum PreprocessorDirective {
         body: Vec<TopLevelItem>,
         location: SourceLocation,
     },
+    /// G_BEGIN_DECLS ... G_END_DECLS block
+    GObjectDeclsBlock {
+        body: Vec<TopLevelItem>,
+        location: SourceLocation,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
