@@ -1831,6 +1831,10 @@
         {
           "type": "identifier",
           "named": true
+        },
+        {
+          "type": "macro_modifier",
+          "named": true
         }
       ]
     }

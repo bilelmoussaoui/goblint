@@ -32,6 +32,22 @@ module.exports = grammar(C, {
   ],
 
   rules: {
+    // Allow macro modifiers (G_GNUC_CONST, G_GNUC_DEPRECATED, G_GNUC_DEPRECATED_FOR(...), etc.)
+    // after the parameter list in function declarations.
+    // The upstream rule only allows attribute_specifier (__attribute__((...))), but GLib/GObject
+    // code uses ALL_CAPS macro shorthands that our macro_modifier rule already handles.
+    _function_declaration_declarator: ($, _original) => prec.right(1,
+      seq(
+        field('declarator', $._declarator),
+        field('parameters', $.parameter_list),
+        optional($.gnu_asm_expression),
+        repeat(choice(
+          $.attribute_specifier,
+          $.macro_modifier,
+        )),
+      )
+    ),
+
     _top_level_item: ($, original) => choice(
       $.gobject_type_macro,
       $.gobject_decls_block,
