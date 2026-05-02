@@ -283,7 +283,7 @@ impl Parser {
                     // can see which types are referenced inside the struct.
                     let struct_fields = node
                         .child_by_field_name("type")
-                        .filter(|n| n.kind() == "struct_specifier")
+                        .filter(|n| matches!(n.kind(), "struct_specifier" | "union_specifier"))
                         .and_then(|s| s.child_by_field_name("body"))
                         .map(|body| self.extract_struct_fields_from_body(body, source))
                         .unwrap_or_default();
@@ -493,7 +493,7 @@ impl Parser {
 
         let mut cursor = declaration_node.walk();
         for child in declaration_node.children(&mut cursor) {
-            if child.kind() == "struct_specifier" {
+            if matches!(child.kind(), "struct_specifier" | "union_specifier") {
                 if let Some(body) = child.child_by_field_name("body") {
                     let name = child
                         .child_by_field_name("name")
