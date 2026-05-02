@@ -12,7 +12,7 @@ pub struct SizeofExpression {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SizeofOperand {
-    Type(String),                // sizeof(MyType) or sizeof(struct MyType *)
+    Type(crate::TypeInfo),       // sizeof(MyType) or sizeof(struct MyType *)
     Expression(Box<Expression>), // sizeof(expr)
 }
 
@@ -22,7 +22,7 @@ impl SizeofExpression {
     /// likely types)
     pub fn type_name(&self) -> Option<String> {
         match &self.operand {
-            Some(SizeofOperand::Type(t)) => Some(t.clone()),
+            Some(SizeofOperand::Type(t)) => Some(t.base_type.clone()),
             // If it's a simple identifier, it's likely a type name
             Some(SizeofOperand::Expression(expr)) => expr.extract_variable_name(),
             None => None,

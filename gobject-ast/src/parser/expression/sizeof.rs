@@ -28,7 +28,8 @@ impl Parser {
                     let type_text = std::str::from_utf8(&source[child.byte_range()])
                         .ok()?
                         .to_owned();
-                    operand = Some(SizeofOperand::Type(type_text));
+                    let type_info = crate::TypeInfo::new(type_text, self.node_location(child));
+                    operand = Some(SizeofOperand::Type(type_info));
                 }
 
                 // Parenthesized expression is ambiguous - could be type or expression

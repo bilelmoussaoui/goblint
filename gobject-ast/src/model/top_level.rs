@@ -101,16 +101,31 @@ pub enum ConditionalKind {
     Else,
 }
 
+/// A parsed field from a struct body (e.g. `GObject parent` → field_type =
+/// "GObject")
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StructField {
+    pub field_type: super::TypeInfo,
+    /// Field name, if present (anonymous bitfields have none)
+    pub field_name: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TypeDefItem {
     Typedef {
         name: String,
-        target_type: String,
+        target_type: super::TypeInfo,
+        /// Fields when the typedef wraps a struct body:
+        /// `typedef struct { FieldType field; } Name;`
+        #[serde(default)]
+        struct_fields: Vec<StructField>,
         location: SourceLocation,
     },
     Struct {
         name: String,
         has_body: bool,
+        #[serde(default)]
+        fields: Vec<StructField>,
         location: SourceLocation,
     },
     Enum {

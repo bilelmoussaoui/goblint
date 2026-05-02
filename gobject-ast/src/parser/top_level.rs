@@ -279,9 +279,19 @@ impl Parser {
                 }
                 // Check for typedef
                 if let Some(typedef) = self.extract_typedef_from_type_definition(node, source) {
+                    // When typedef wraps a struct body, parse field declarations so rules
+                    // can see which types are referenced inside the struct.
+                    let struct_fields = node
+                        .child_by_field_name("type")
+                        .filter(|n| n.kind() == "struct_specifier")
+                        .and_then(|s| s.child_by_field_name("body"))
+                        .map(|body| self.extract_struct_fields_from_body(body, source))
+                        .unwrap_or_default();
+
                     return Some(TopLevelItem::TypeDefinition(TypeDefItem::Typedef {
                         name: typedef.name,
                         target_type: typedef.target_type,
+                        struct_fields,
                         location: self.node_location(node),
                     }));
                 }
@@ -295,6 +305,13 @@ impl Parser {
                     return Some(TopLevelItem::TypeDefinition(TypeDefItem::Enum {
                         enum_info: Box::new(enum_info),
                     }));
+                }
+
+                // Check for a standalone struct definition: `struct _Foo { ... };`
+                // This is a declaration whose first named child is a struct_specifier
+                // with a body.  No typedef alias — just the struct itself.
+                if let Some(struct_item) = self.try_parse_struct_definition(node, source) {
+                    return Some(struct_item);
                 }
 
                 // Check if this is a function declaration
@@ -454,6 +471,136 @@ impl Parser {
         }
     }
 
+    /// If `declaration_node` is a *pure* struct definition (`struct _Foo { …
+    /// };`), produce a `TypeDefItem::Struct` with parsed fields.
+    ///
+    /// Returns `None` for:
+    /// - Anonymous inline structs used as a variable type: `static const struct
+    ///   { … } arr[];`
+    /// - Forward declarations without a body: `struct _Foo;`
+    /// - Declarations that also declare a variable: `struct _Foo { … } var;`
+    fn try_parse_struct_definition(
+        &self,
+        declaration_node: Node,
+        source: &[u8],
+    ) -> Option<TopLevelItem> {
+        // If the declaration also declares a variable (has a `declarator` field
+        // like `struct _Foo { … } var;`), let it fall through to parse_statement
+        // so the variable declaration is not lost.
+        if declaration_node.child_by_field_name("declarator").is_some() {
+            return None;
+        }
+
+        let mut cursor = declaration_node.walk();
+        for child in declaration_node.children(&mut cursor) {
+            if child.kind() == "struct_specifier" {
+                if let Some(body) = child.child_by_field_name("body") {
+                    let name = child
+                        .child_by_field_name("name")
+                        .and_then(|n| std::str::from_utf8(&source[n.byte_range()]).ok())
+                        .unwrap_or("")
+                        .to_owned();
+
+                    // Skip anonymous structs (e.g. `static const struct { … } arr[];`).
+                    // We already checked for declarator above, but an anonymous struct
+                    // with no declarator is an unusual edge case — skip it too.
+                    if name.is_empty() {
+                        return None;
+                    }
+
+                    let fields = self.extract_struct_fields_from_body(body, source);
+
+                    return Some(TopLevelItem::TypeDefinition(TypeDefItem::Struct {
+                        name,
+                        has_body: true,
+                        fields,
+                        location: self.node_location(declaration_node),
+                    }));
+                }
+            }
+        }
+        None
+    }
+
+    /// Extract field declarations from a `field_declaration_list` tree-sitter
+    /// node.
+    fn extract_struct_fields_from_body(
+        &self,
+        body: Node,
+        source: &[u8],
+    ) -> Vec<crate::model::top_level::StructField> {
+        use crate::model::top_level::StructField;
+
+        let mut fields = Vec::new();
+        let mut cursor = body.walk();
+
+        for child in body.children(&mut cursor) {
+            match child.kind() {
+                "field_declaration" => {
+                    let Some(type_node) = child.child_by_field_name("type") else {
+                        continue;
+                    };
+
+                    let type_text: Option<String> = match type_node.kind() {
+                        "type_identifier" | "primitive_type" => {
+                            std::str::from_utf8(&source[type_node.byte_range()])
+                                .ok()
+                                .map(|s| s.trim().to_owned())
+                        }
+                        "struct_specifier" | "enum_specifier" => {
+                            // `struct Nested { … }` inline — grab the tag name if any
+                            type_node
+                                .child_by_field_name("name")
+                                .and_then(|n| std::str::from_utf8(&source[n.byte_range()]).ok())
+                                .map(|s| s.to_owned())
+                        }
+                        _ => None,
+                    };
+
+                    let Some(text) = type_text else { continue };
+                    if text.is_empty() {
+                        continue;
+                    }
+
+                    let field_type = crate::TypeInfo::new(text, self.node_location(type_node));
+
+                    let field_name = child
+                        .child_by_field_name("declarator")
+                        .and_then(|d| self.extract_field_declarator_name(d, source))
+                        .map(|s| s.to_owned());
+
+                    fields.push(StructField {
+                        field_type,
+                        field_name,
+                    });
+                }
+                // Recurse into nested anonymous struct/union bodies
+                "field_declaration_list" => {
+                    fields.extend(self.extract_struct_fields_from_body(child, source));
+                }
+                _ => {}
+            }
+        }
+
+        fields
+    }
+
+    /// Like `extract_declarator_name` but also handles `field_identifier`
+    /// (used in struct field declarators).
+    fn extract_field_declarator_name<'a>(
+        &self,
+        declarator: Node,
+        source: &'a [u8],
+    ) -> Option<&'a str> {
+        if matches!(declarator.kind(), "field_identifier" | "identifier") {
+            return std::str::from_utf8(&source[declarator.byte_range()]).ok();
+        }
+        if let Some(inner) = declarator.child_by_field_name("declarator") {
+            return self.extract_field_declarator_name(inner, source);
+        }
+        None
+    }
+
     pub(super) fn extract_typedef_from_type_definition(
         &self,
         node: Node,
@@ -462,15 +609,29 @@ impl Parser {
         // type_definition has "declarator" for the typedef name and "type" for what
         // it's typedef'ing
         let declarator_node = node.child_by_field_name("declarator")?;
-        let name = std::str::from_utf8(&source[declarator_node.byte_range()]).ok()?;
+
+        // For simple typedefs (`typedef Struct Name`), the declarator IS the name.
+        // For function-pointer typedefs (`typedef RetType (*Name)(params)`), the
+        // declarator is a function_declarator tree — drill into it to get just the
+        // identifier.  Same for array typedefs (`typedef int Name[N]`).
+        let name = if matches!(declarator_node.kind(), "type_identifier" | "identifier") {
+            std::str::from_utf8(&source[declarator_node.byte_range()])
+                .ok()?
+                .to_owned()
+        } else {
+            self.extract_declarator_name(declarator_node, source)?
+                .to_owned()
+        };
 
         let type_node = node.child_by_field_name("type")?;
-        let target_type = std::str::from_utf8(&source[type_node.byte_range()]).ok()?;
+        let target_text = std::str::from_utf8(&source[type_node.byte_range()]).ok()?;
+        let target_type =
+            crate::TypeInfo::new(target_text.to_owned(), self.node_location(type_node));
 
         Some(TypedefInfo {
-            name: name.to_owned(),
+            name,
             location: self.node_location(node),
-            target_type: target_type.to_owned(),
+            target_type,
         })
     }
 
