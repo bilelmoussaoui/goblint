@@ -459,8 +459,14 @@ impl Parser {
                     .chars()
                     .take(80)
                     .collect::<String>();
+                let file = self
+                    .current_file
+                    .as_deref()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("<unknown>");
                 tracing::warn!(
-                    "Unhandled ERROR node at {}:{} — fix the grammar. Content: {:?}",
+                    "Unhandled ERROR node in {} at {}:{} — fix the grammar. Content: {:?}",
+                    file,
                     node.start_position().row + 1,
                     node.start_position().column + 1,
                     snippet,

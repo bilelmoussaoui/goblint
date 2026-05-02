@@ -13,6 +13,7 @@ use crate::model::*;
 
 pub struct Parser {
     parser: TSParser,
+    current_file: Option<std::path::PathBuf>,
 }
 
 impl Parser {
@@ -22,7 +23,10 @@ impl Parser {
             .set_language(&tree_sitter_c_gobject::LANGUAGE.into())
             .context("Failed to load C grammar")?;
 
-        Ok(Self { parser })
+        Ok(Self {
+            parser,
+            current_file: None,
+        })
     }
 
     /// Helper to create SourceLocation from a tree-sitter Node
@@ -105,6 +109,7 @@ impl Parser {
     }
 
     fn parse_single_file(&mut self, path: &Path, project: &mut Project) -> Result<()> {
+        self.current_file = Some(path.to_path_buf());
         let source = fs::read(path)?;
         let tree = self
             .parser
