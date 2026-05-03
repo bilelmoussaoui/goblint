@@ -149,18 +149,7 @@ impl Statement {
             Statement::DoWhile(d) => &d.location,
             Statement::Break(b) => &b.location,
             Statement::Continue(c) => &c.location,
-            Statement::Preprocessor(p) => match p {
-                PreprocessorDirective::Include { location, .. }
-                | PreprocessorDirective::Define { location, .. }
-                | PreprocessorDirective::Call { location, .. }
-                | PreprocessorDirective::Pragma { location, .. }
-                | PreprocessorDirective::GObjectType { location, .. }
-                | PreprocessorDirective::AutoptrCleanupFunc { location, .. }
-                | PreprocessorDirective::AutoCleanupClearFunc { location, .. }
-                | PreprocessorDirective::MacroWithCode { location, .. }
-                | PreprocessorDirective::Conditional { location, .. }
-                | PreprocessorDirective::GObjectDeclsBlock { location, .. } => location,
-            },
+            Statement::Preprocessor(p) => p.location(),
         }
     }
 

@@ -59,32 +59,6 @@ pub enum Expression {
 }
 
 impl Expression {
-    /// Get the byte range of this expression
-    pub fn byte_range(&self) -> (usize, usize) {
-        match self {
-            Expression::Call(c) => (c.location.start_byte, c.location.end_byte),
-            Expression::MacroCall(m) => (m.location.start_byte, m.location.end_byte),
-            Expression::Assignment(a) => (a.location.start_byte, a.location.end_byte),
-            Expression::Binary(b) => (b.location.start_byte, b.location.end_byte),
-            Expression::Unary(u) => (u.location.start_byte, u.location.end_byte),
-            Expression::Identifier(i) => (i.location.start_byte, i.location.end_byte),
-            Expression::FieldAccess(f) => (f.location.start_byte, f.location.end_byte),
-            Expression::StringLiteral(s) => (s.location.start_byte, s.location.end_byte),
-            Expression::NumberLiteral(n) => (n.location.start_byte, n.location.end_byte),
-            Expression::Null(n) => (n.location.start_byte, n.location.end_byte),
-            Expression::Boolean(b) => (b.location.start_byte, b.location.end_byte),
-            Expression::Cast(c) => (c.location.start_byte, c.location.end_byte),
-            Expression::Conditional(c) => (c.location.start_byte, c.location.end_byte),
-            Expression::Sizeof(s) => (s.location.start_byte, s.location.end_byte),
-            Expression::Subscript(s) => (s.location.start_byte, s.location.end_byte),
-            Expression::InitializerList(i) => (i.location.start_byte, i.location.end_byte),
-            Expression::CharLiteral(c) => (c.location.start_byte, c.location.end_byte),
-            Expression::Update(u) => (u.location.start_byte, u.location.end_byte),
-            Expression::Comment(c) => (c.location.start_byte, c.location.end_byte),
-            Expression::Generic(g) => (g.location.start_byte, g.location.end_byte),
-        }
-    }
-
     pub fn location(&self) -> &SourceLocation {
         match self {
             Expression::Call(c) => &c.location,
@@ -112,8 +86,8 @@ impl Expression {
 
     /// Convert this expression back to source text
     pub fn to_source_string(&self, source: &[u8]) -> Option<String> {
-        let (start, end) = self.byte_range();
-        std::str::from_utf8(&source[start..end])
+        let loc = self.location();
+        std::str::from_utf8(&source[loc.start_byte..loc.end_byte])
             .ok()
             .map(ToOwned::to_owned)
     }

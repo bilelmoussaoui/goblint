@@ -92,6 +92,23 @@ pub enum PreprocessorDirective {
     },
 }
 
+impl PreprocessorDirective {
+    pub fn location(&self) -> &SourceLocation {
+        match self {
+            Self::Include { location, .. }
+            | Self::Define { location, .. }
+            | Self::Call { location, .. }
+            | Self::Pragma { location, .. }
+            | Self::GObjectType { location, .. }
+            | Self::AutoptrCleanupFunc { location, .. }
+            | Self::AutoCleanupClearFunc { location, .. }
+            | Self::MacroWithCode { location, .. }
+            | Self::Conditional { location, .. }
+            | Self::GObjectDeclsBlock { location, .. } => location,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConditionalKind {
     Ifdef,
