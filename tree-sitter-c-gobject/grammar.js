@@ -17,6 +17,7 @@ module.exports = grammar(C, {
     $._gobject_begin_decls,           // G_BEGIN_DECLS
     $._gobject_end_decls,             // G_END_DECLS
     $._macro_modifier_name,           // any other ALL_CAPS identifier (CLUTTER_EXPORT etc.)
+    $._gobject_export_macro,          // ALL_CAPS macro immediately preceding G_DECLARE_*/G_DEFINE_*
   ],
 
   conflicts: ($, original) => [
@@ -51,12 +52,14 @@ module.exports = grammar(C, {
     _top_level_item: ($, original) => choice(
       $.gobject_type_macro,
       $.gobject_decls_block,
+      $.gobject_macro_statement,
       original,
     ),
 
     _block_item: ($, original) => choice(
       $.gobject_type_macro,
       $.gobject_decls_block,
+      $.gobject_macro_statement,
       original,
     ),
 
@@ -73,13 +76,18 @@ module.exports = grammar(C, {
 
     gobject_type_macro: $ => choice(
       // Standard macros (G_DECLARE_*, G_DEFINE_TYPE, etc.): all args comma-separated.
-      seq($._gobject_macro_name, $.argument_list),
+      // Optional leading export/deprecation modifiers (META_EXPORT, CLUTTER_EXPORT, …).
+      // Uses _gobject_export_macro (not macro_modifier) so the scanner only produces
+      // this token when peek-ahead confirms a G_DECLARE_*/G_DEFINE_* follows — no
+      // risk of the token leaking into G_DEFINE_*_WITH_CODE code-block bodies.
+      seq(repeat($._gobject_export_macro), $._gobject_macro_name, $.argument_list),
 
       // *_WITH_CODE macros: N comma-terminated regular args followed by a
       // whitespace-separated code block (G_ADD_PRIVATE, G_IMPLEMENT_INTERFACE, …).
       // Using a dedicated external token lets the scanner disambiguate at lex time
       // so no GLR conflicts arise.
       seq(
+        repeat($._gobject_export_macro),
         $._gobject_macro_name_with_code,
         '(',
         repeat1(seq($.expression, ',')),
@@ -99,6 +107,14 @@ module.exports = grammar(C, {
     gobject_code_block_item: $ => seq(
       $.identifier,
       $.argument_list,
+    ),
+
+    // Standalone macro call followed by semicolon: G_STATIC_ASSERT(...), etc.
+    // Handles cases where an ALL_CAPS macro (parsed as macro_modifier) appears
+    // as a standalone statement rather than a declaration modifier.
+    gobject_macro_statement: $ => seq(
+      $.macro_modifier,
+      ';',
     ),
 
     // Export / deprecation / availability macros used as declaration modifiers.

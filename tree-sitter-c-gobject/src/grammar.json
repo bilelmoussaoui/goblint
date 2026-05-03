@@ -23,6 +23,10 @@
           "name": "gobject_decls_block"
         },
         {
+          "type": "SYMBOL",
+          "name": "gobject_macro_statement"
+        },
+        {
           "type": "CHOICE",
           "members": [
             {
@@ -100,6 +104,10 @@
         {
           "type": "SYMBOL",
           "name": "gobject_decls_block"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "gobject_macro_statement"
         },
         {
           "type": "CHOICE",
@@ -9705,6 +9713,13 @@
           "type": "SEQ",
           "members": [
             {
+              "type": "REPEAT",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_gobject_export_macro"
+              }
+            },
+            {
               "type": "SYMBOL",
               "name": "_gobject_macro_name"
             },
@@ -9717,6 +9732,13 @@
         {
           "type": "SEQ",
           "members": [
+            {
+              "type": "REPEAT",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_gobject_export_macro"
+              }
+            },
             {
               "type": "SYMBOL",
               "name": "_gobject_macro_name_with_code"
@@ -9778,6 +9800,19 @@
         {
           "type": "SYMBOL",
           "name": "argument_list"
+        }
+      ]
+    },
+    "gobject_macro_statement": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "macro_modifier"
+        },
+        {
+          "type": "STRING",
+          "value": ";"
         }
       ]
     },
@@ -9923,6 +9958,10 @@
     {
       "type": "SYMBOL",
       "name": "_macro_modifier_name"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_gobject_export_macro"
     }
   ],
   "inline": [

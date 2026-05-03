@@ -7,6 +7,7 @@ typedef enum {
     GOBJECT_BEGIN_DECLS,           /* G_BEGIN_DECLS                              */
     GOBJECT_END_DECLS,             /* G_END_DECLS                                */
     MACRO_MODIFIER_NAME,           /* any other ALL_CAPS ident                  */
+    GOBJECT_EXPORT_MACRO,          /* ALL_CAPS ident immediately before G_DECLARE_* or G_DEFINE_* */
 } TokenType;
 
 void *tree_sitter_c_gobject_external_scanner_create(void) { return NULL; }
@@ -50,6 +51,29 @@ static bool followed_by_arrow(TSLexer *lexer) {
     return lexer->lookahead == '-';
 }
 
+/* Peek ahead (after whitespace) to check whether the next ALL_CAPS identifier
+ * is a GObject macro name (G_DECLARE_* or G_DEFINE_*).
+ * Call mark_end() BEFORE calling this so the token boundary is already saved.
+ * Returns true if followed by a GObject macro, false otherwise.
+ * Advances the lexer (caller relies on mark_end for the correct token end). */
+static bool followed_by_gobject_macro(TSLexer *lexer) {
+    skip_whitespace(lexer);
+
+    char buf[256];
+    int len = 0;
+    while (len < 255 &&
+           (lexer->lookahead == '_' ||
+            (lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
+            (lexer->lookahead >= '0' && lexer->lookahead <= '9'))) {
+        buf[len++] = (char)lexer->lookahead;
+        lexer->advance(lexer, false);
+    }
+    buf[len] = '\0';
+
+    return (len >= 10 && strncmp(buf, "G_DECLARE_", 10) == 0) ||
+           (len >= 9  && strncmp(buf, "G_DEFINE_",   9) == 0);
+}
+
 bool tree_sitter_c_gobject_external_scanner_scan(
     void *payload,
     TSLexer *lexer,
@@ -61,7 +85,8 @@ bool tree_sitter_c_gobject_external_scanner_scan(
                      valid_symbols[GOBJECT_MACRO_NAME_WITH_CODE]  ||
                      valid_symbols[GOBJECT_BEGIN_DECLS]           ||
                      valid_symbols[GOBJECT_END_DECLS]             ||
-                     valid_symbols[MACRO_MODIFIER_NAME];
+                     valid_symbols[MACRO_MODIFIER_NAME]           ||
+                     valid_symbols[GOBJECT_EXPORT_MACRO];
     if (!any_valid) return false;
 
     skip_whitespace(lexer);
@@ -120,12 +145,23 @@ bool tree_sitter_c_gobject_external_scanner_scan(
         return true;
     }
 
-    /* Any remaining all-caps identifier is a potential macro modifier
-     * (CLUTTER_EXPORT, G_MODULE_EXPORT, G_DEPRECATED, …).
-     * But if what follows (after any argument list) is '->' the identifier is
-     * a type-cast macro used in an expression (e.g. G_OBJECT_CLASS(x)->method),
-     * not a declaration modifier.  Return false so the regular lexer handles it
-     * as a plain identifier; tree-sitter resets the lexer position on false. */
+    /* Pin the token boundary to the end of the ALL_CAPS identifier.  All
+     * subsequent advances are look-ahead only. */
+    lexer->mark_end(lexer);
+
+    /* GOBJECT_EXPORT_MACRO: identifier immediately before G_DECLARE_* or G_DEFINE_* */
+    if (valid_symbols[GOBJECT_EXPORT_MACRO] && len >= 1) {
+        if (followed_by_gobject_macro(lexer)) {
+            lexer->result_symbol = GOBJECT_EXPORT_MACRO;
+            return true;
+        }
+        /* followed_by_gobject_macro() advanced into the next identifier.
+         * After this point the lexer sits at whatever follows that identifier
+         * (or at '(' if there was no next identifier). */
+    }
+
+    /* MACRO_MODIFIER_NAME: any remaining ALL_CAPS identifier that isn't
+     * followed by '->' (which would indicate a type-cast expression). */
     if (valid_symbols[MACRO_MODIFIER_NAME] && len >= 1) {
         if (followed_by_arrow(lexer)) return false;
         lexer->result_symbol = MACRO_MODIFIER_NAME;

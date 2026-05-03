@@ -1128,6 +1128,10 @@
           "named": true
         },
         {
+          "type": "gobject_macro_statement",
+          "named": true
+        },
+        {
           "type": "gobject_type_macro",
           "named": true
         },
@@ -1344,6 +1348,10 @@
         },
         {
           "type": "gobject_decls_block",
+          "named": true
+        },
+        {
+          "type": "gobject_macro_statement",
           "named": true
         },
         {
@@ -2234,6 +2242,10 @@
           "named": true
         },
         {
+          "type": "gobject_macro_statement",
+          "named": true
+        },
+        {
           "type": "gobject_type_macro",
           "named": true
         },
@@ -2295,6 +2307,21 @@
         },
         {
           "type": "while_statement",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "gobject_macro_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "macro_modifier",
           "named": true
         }
       ]
@@ -3039,6 +3066,10 @@
           "named": true
         },
         {
+          "type": "gobject_macro_statement",
+          "named": true
+        },
+        {
           "type": "gobject_type_macro",
           "named": true
         },
@@ -3143,6 +3174,10 @@
           "named": true
         },
         {
+          "type": "gobject_macro_statement",
+          "named": true
+        },
+        {
           "type": "gobject_type_macro",
           "named": true
         },
@@ -3215,6 +3250,10 @@
         },
         {
           "type": "gobject_decls_block",
+          "named": true
+        },
+        {
+          "type": "gobject_macro_statement",
           "named": true
         },
         {
@@ -3386,6 +3425,10 @@
           "named": true
         },
         {
+          "type": "gobject_macro_statement",
+          "named": true
+        },
+        {
           "type": "gobject_type_macro",
           "named": true
         },
@@ -3487,6 +3530,10 @@
         },
         {
           "type": "gobject_decls_block",
+          "named": true
+        },
+        {
+          "type": "gobject_macro_statement",
           "named": true
         },
         {
@@ -3939,6 +3986,10 @@
         },
         {
           "type": "gobject_decls_block",
+          "named": true
+        },
+        {
+          "type": "gobject_macro_statement",
           "named": true
         },
         {
