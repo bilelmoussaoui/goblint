@@ -98,14 +98,18 @@ impl Rule for DeadCode {
         // `struct _Foo` (keyed as "_Foo") referenced when `Foo` appears in code.
         let mut tag_to_typedef: HashMap<String, String> = HashMap::new();
 
-        for (path, file) in ast_context.iter_c_files() {
-            collect_type_defs_from_items(
+        // Alias maps must cover ALL files — a public header often holds the
+        // `typedef struct _Foo Foo` while the struct body lives in the .c file.
+        for (_path, file) in ast_context.iter_all_files() {
+            collect_typedef_aliases(
                 &file.top_level_items,
-                path,
-                &mut type_definitions,
                 &mut typedef_to_tag,
                 &mut tag_to_typedef,
             );
+        }
+
+        for (path, file) in ast_context.iter_c_files() {
+            collect_type_defs_from_items(&file.top_level_items, path, &mut type_definitions);
         }
 
         for (path, file) in ast_context.iter_header_files() {
@@ -113,13 +117,7 @@ impl Rule for DeadCode {
             if ast_context.is_public_header(path) == Some(true) {
                 continue;
             }
-            collect_type_defs_from_items(
-                &file.top_level_items,
-                path,
-                &mut type_definitions,
-                &mut typedef_to_tag,
-                &mut tag_to_typedef,
-            );
+            collect_type_defs_from_items(&file.top_level_items, path, &mut type_definitions);
         }
 
         // ── Step 2: Collect all function and type references ───────────────────
@@ -342,12 +340,45 @@ impl Rule for DeadCode {
 // ── Type definition collection
 // ─────────────────────────────────────────────────
 
+/// Collect typedef alias pairs from one file's items into typedef_to_tag and
+/// tag_to_typedef. Called for ALL files (including public headers) so that
+/// alias relationships are known even when the struct body is in a .c file and
+/// its `typedef struct _Foo Foo` declaration is in a public header.
+fn collect_typedef_aliases(
+    items: &[TopLevelItem],
+    typedef_to_tag: &mut HashMap<String, String>,
+    tag_to_typedef: &mut HashMap<String, String>,
+) {
+    for item in items {
+        match item {
+            TopLevelItem::TypeDefinition(TypeDefItem::Typedef {
+                name,
+                target_type,
+                struct_fields,
+                ..
+            }) if struct_fields.is_empty() && !target_type.base_type.is_empty() => {
+                typedef_to_tag.insert(name.clone(), target_type.base_type.clone());
+                // For `typedef struct _Foo Foo`, base_type is now "_Foo" and
+                // is_struct/is_union is set — build the reverse map too.
+                if target_type.is_struct || target_type.is_union {
+                    tag_to_typedef.insert(target_type.base_type.clone(), name.clone());
+                }
+            }
+            TopLevelItem::Preprocessor(
+                PreprocessorDirective::Conditional { body, .. }
+                | PreprocessorDirective::GObjectDeclsBlock { body, .. },
+            ) => {
+                collect_typedef_aliases(body, typedef_to_tag, tag_to_typedef);
+            }
+            _ => {}
+        }
+    }
+}
+
 fn collect_type_defs_from_items<'a>(
     items: &'a [TopLevelItem],
     path: &'a std::path::Path,
     defs: &mut HashMap<String, Vec<(&'a std::path::Path, gobject_ast::SourceLocation)>>,
-    typedef_to_tag: &mut HashMap<String, String>,
-    tag_to_typedef: &mut HashMap<String, String>,
 ) {
     for item in items {
         match item {
@@ -362,27 +393,10 @@ fn collect_type_defs_from_items<'a>(
                         .or_default()
                         .push((path, *location));
                 }
-                TypeDefItem::Typedef {
-                    name,
-                    target_type,
-                    tag_name,
-                    struct_fields,
-                    location,
-                } => {
+                TypeDefItem::Typedef { name, location, .. } => {
                     defs.entry(name.clone())
                         .or_default()
                         .push((path, *location));
-                    // Forward typedef aliases: `typedef struct _Foo Foo`.
-                    // typedef_to_tag: Foo → "struct _Foo" (full text, used in
-                    // the existing check against type_references).
-                    // tag_to_typedef: _Foo → Foo (clean tag name from the AST,
-                    // used when the struct definition is keyed as "_Foo").
-                    if struct_fields.is_empty() && !target_type.base_type.is_empty() {
-                        typedef_to_tag.insert(name.clone(), target_type.base_type.clone());
-                    }
-                    if let Some(tag) = tag_name {
-                        tag_to_typedef.insert(tag.clone(), name.clone());
-                    }
                 }
                 _ => {}
             },
@@ -391,7 +405,7 @@ fn collect_type_defs_from_items<'a>(
                 PreprocessorDirective::Conditional { body, .. }
                 | PreprocessorDirective::GObjectDeclsBlock { body, .. },
             ) => {
-                collect_type_defs_from_items(body, path, defs, typedef_to_tag, tag_to_typedef);
+                collect_type_defs_from_items(body, path, defs);
             }
             _ => {}
         }

@@ -59,10 +59,19 @@ impl std::fmt::Display for AutoCleanupMacro {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
-    /// The base type without qualifiers or pointers (e.g., "GFile", "int")
+    /// The base type without qualifiers, keywords, or pointers (e.g., "GFile",
+    /// "int", "CheckIfMarkerHitClosure")
     pub base_type: String,
     /// Whether the type has a const qualifier
     pub is_const: bool,
+    /// Whether the type was spelled with the `struct` keyword (e.g., `struct
+    /// Foo *`)
+    #[serde(default)]
+    pub is_struct: bool,
+    /// Whether the type was spelled with the `union` keyword (e.g., `union Foo
+    /// *`)
+    #[serde(default)]
+    pub is_union: bool,
     /// Number of pointer indirections (0 for value, 1 for *, 2 for **)
     pub pointer_depth: usize,
     /// The full type string as it appears in source (e.g., "const GFile *")
@@ -120,12 +129,22 @@ impl TypeInfo {
         // Count pointer depth
         let pointer_depth = without_const.chars().filter(|&c| c == '*').count();
 
-        // Extract base type (remove pointers and trim)
-        let base_type = without_const.replace('*', "").trim().to_string();
+        // Extract base type (remove pointers, trim, then strip struct/union keyword)
+        let raw_base = without_const.replace('*', "").trim().to_string();
+        let (base_type, is_struct, is_union) = if let Some(rest) = raw_base.strip_prefix("struct ")
+        {
+            (rest.trim().to_string(), true, false)
+        } else if let Some(rest) = raw_base.strip_prefix("union ") {
+            (rest.trim().to_string(), false, true)
+        } else {
+            (raw_base, false, false)
+        };
 
         Self {
             base_type,
             is_const,
+            is_struct,
+            is_union,
             pointer_depth,
             full_text: cleaned,
             location,
@@ -276,14 +295,14 @@ mod tests {
         assert_eq!(ti.auto_cleanup, Some(AutoCleanupMacro::Autofree));
         assert!(ti.is_const);
     }
-}
 
-#[test]
-fn test_autofree_with_type() {
-    let ti = TypeInfo::new(
-        "g_autofree FuZipFirmwareWriteItem *".to_string(),
-        SourceLocation::default(),
-    );
-    assert_eq!(ti.auto_cleanup, Some(AutoCleanupMacro::Autofree));
-    assert_eq!(ti.base_type, "FuZipFirmwareWriteItem");
+    #[test]
+    fn test_autofree_with_type() {
+        let ti = TypeInfo::new(
+            "g_autofree FuZipFirmwareWriteItem *".to_string(),
+            SourceLocation::default(),
+        );
+        assert_eq!(ti.auto_cleanup, Some(AutoCleanupMacro::Autofree));
+        assert_eq!(ti.base_type, "FuZipFirmwareWriteItem");
+    }
 }

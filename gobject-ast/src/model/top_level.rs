@@ -115,12 +115,6 @@ pub enum TypeDefItem {
     Typedef {
         name: String,
         target_type: super::TypeInfo,
-        /// For `typedef struct _Foo Foo` / `typedef union _Bar Bar`, the bare
-        /// tag name ("_Foo" / "_Bar") extracted from the struct/union
-        /// specifier. None for typedefs that don't alias a named struct
-        /// or union tag.
-        #[serde(default)]
-        tag_name: Option<String>,
         /// Fields when the typedef wraps a struct body:
         /// `typedef struct { FieldType field; } Name;`
         #[serde(default)]
