@@ -3,7 +3,7 @@ use tree_sitter::Node;
 use super::Parser;
 use crate::model::{
     Expression,
-    types::{ClassStruct, GObjectType, GObjectTypeKind, VirtualFunction},
+    types::{ClassStruct, DeclareKind, DefineKind, GObjectType, GObjectTypeKind, VirtualFunction},
 };
 
 impl Parser {
@@ -78,32 +78,24 @@ impl Parser {
 
             let type_macro = format!("{}_TYPE_{}", module_prefix, type_prefix);
 
-            let kind = match macro_name {
-                "G_DECLARE_FINAL_TYPE" => GObjectTypeKind::DeclareFinal {
-                    function_prefix: function_prefix.to_owned(),
-                    module_prefix: module_prefix.to_owned(),
-                    type_prefix: type_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DECLARE_DERIVABLE_TYPE" => GObjectTypeKind::DeclareDerivable {
-                    function_prefix: function_prefix.to_owned(),
-                    module_prefix: module_prefix.to_owned(),
-                    type_prefix: type_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DECLARE_INTERFACE" => GObjectTypeKind::DeclareInterface {
-                    function_prefix: function_prefix.to_owned(),
-                    module_prefix: module_prefix.to_owned(),
-                    type_prefix: type_prefix.to_owned(),
-                    prerequisite_type: parent_type.to_owned(),
-                },
+            let declare_kind = match macro_name {
+                "G_DECLARE_FINAL_TYPE" => DeclareKind::Final,
+                "G_DECLARE_DERIVABLE_TYPE" => DeclareKind::Derivable,
+                "G_DECLARE_INTERFACE" => DeclareKind::Interface,
                 _ => return None,
             };
 
             return Some(GObjectType {
                 type_name: type_name.to_owned(),
                 type_macro,
-                kind,
+                function_prefix: function_prefix.to_owned(),
+                parent_type: Some(parent_type.to_owned()),
+                flags: None,
+                kind: GObjectTypeKind::Declare {
+                    kind: declare_kind,
+                    module_prefix: module_prefix.to_owned(),
+                    type_prefix: type_prefix.to_owned(),
+                },
                 class_struct: None,
                 interfaces: Vec::new(),
                 has_private: false,
@@ -125,21 +117,6 @@ impl Parser {
 
             let type_macro = format!("TYPE_{}", type_name.to_uppercase());
 
-            let kind = if macro_name == "G_DEFINE_BOXED_TYPE" {
-                GObjectTypeKind::DefineBoxedType {
-                    function_prefix: function_prefix.to_owned(),
-                    copy_func: copy_func.to_owned(),
-                    free_func: free_func.to_owned(),
-                }
-            } else {
-                GObjectTypeKind::DefineBoxedTypeWithCode {
-                    function_prefix: function_prefix.to_owned(),
-                    copy_func: copy_func.to_owned(),
-                    free_func: free_func.to_owned(),
-                }
-            };
-
-            // For *_WITH_CODE, extract code block statements
             let (interfaces, has_private, code_block_statements) =
                 if macro_name.ends_with("_WITH_CODE") {
                     self.extract_code_block_info_from_parent(parent, source, &arg_values)
@@ -150,7 +127,13 @@ impl Parser {
             return Some(GObjectType {
                 type_name: type_name.to_owned(),
                 type_macro,
-                kind,
+                function_prefix: function_prefix.to_owned(),
+                parent_type: None,
+                flags: None,
+                kind: GObjectTypeKind::DefineBoxed {
+                    copy_func: copy_func.to_owned(),
+                    free_func: free_func.to_owned(),
+                },
                 class_struct: None,
                 interfaces,
                 has_private,
@@ -168,69 +151,53 @@ impl Parser {
 
             let type_macro = format!("TYPE_{}", type_name.to_uppercase());
 
+            // _WITH_PRIVATE variants always have a private struct
+            let has_private_from_macro = matches!(
+                macro_name,
+                "G_DEFINE_TYPE_WITH_PRIVATE"
+                    | "G_DEFINE_FINAL_TYPE_WITH_PRIVATE"
+                    | "G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE"
+            );
+
             let kind = match macro_name {
-                "G_DEFINE_TYPE" => GObjectTypeKind::DefineType {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_TYPE_WITH_PRIVATE" => GObjectTypeKind::DefineTypeWithPrivate {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_ABSTRACT_TYPE" => GObjectTypeKind::DefineAbstractType {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_TYPE_WITH_CODE" => GObjectTypeKind::DefineTypeWithCode {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_FINAL_TYPE" => GObjectTypeKind::DefineFinalType {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_FINAL_TYPE_WITH_CODE" => GObjectTypeKind::DefineFinalTypeWithCode {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_FINAL_TYPE_WITH_PRIVATE" => GObjectTypeKind::DefineFinalTypeWithPrivate {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_ABSTRACT_TYPE_WITH_CODE" => GObjectTypeKind::DefineAbstractTypeWithCode {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE" => {
-                    GObjectTypeKind::DefineAbstractTypeWithPrivate {
-                        function_prefix: function_prefix.to_owned(),
-                        parent_type: parent_type.to_owned(),
-                    }
+                "G_DEFINE_TYPE" => GObjectTypeKind::Define(DefineKind::Type),
+                "G_DEFINE_TYPE_WITH_PRIVATE" => {
+                    GObjectTypeKind::Define(DefineKind::TypeWithPrivate)
                 }
-                "G_DEFINE_INTERFACE" => GObjectTypeKind::DefineInterface {
-                    function_prefix: function_prefix.to_owned(),
-                    prerequisite_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_INTERFACE_WITH_CODE" => GObjectTypeKind::DefineInterfaceWithCode {
-                    function_prefix: function_prefix.to_owned(),
-                    prerequisite_type: parent_type.to_owned(),
-                },
-                "G_DEFINE_POINTER_TYPE" => GObjectTypeKind::DefinePointerType {
-                    function_prefix: function_prefix.to_owned(),
-                },
+                "G_DEFINE_ABSTRACT_TYPE" => GObjectTypeKind::Define(DefineKind::AbstractType),
+                "G_DEFINE_TYPE_WITH_CODE" => GObjectTypeKind::Define(DefineKind::TypeWithCode),
+                "G_DEFINE_FINAL_TYPE" => GObjectTypeKind::Define(DefineKind::FinalType),
+                "G_DEFINE_FINAL_TYPE_WITH_CODE" => {
+                    GObjectTypeKind::Define(DefineKind::FinalTypeWithCode)
+                }
+                "G_DEFINE_FINAL_TYPE_WITH_PRIVATE" => {
+                    GObjectTypeKind::Define(DefineKind::FinalTypeWithPrivate)
+                }
+                "G_DEFINE_ABSTRACT_TYPE_WITH_CODE" => {
+                    GObjectTypeKind::Define(DefineKind::AbstractTypeWithCode)
+                }
+                "G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE" => {
+                    GObjectTypeKind::Define(DefineKind::AbstractTypeWithPrivate)
+                }
+                "G_DEFINE_INTERFACE" => GObjectTypeKind::Define(DefineKind::Interface),
+                "G_DEFINE_INTERFACE_WITH_CODE" => {
+                    GObjectTypeKind::Define(DefineKind::InterfaceWithCode)
+                }
+                "G_DEFINE_POINTER_TYPE" => GObjectTypeKind::Define(DefineKind::Pointer),
                 // G_DEFINE_TYPE_EXTENDED(TypeName, prefix, ParentType, flags, CODE)
-                // 5-arg variant; flags is the 4th arg, code block handled below.
-                "G_DEFINE_TYPE_EXTENDED" => GObjectTypeKind::DefineTypeExtended {
-                    function_prefix: function_prefix.to_owned(),
-                    parent_type: parent_type.to_owned(),
-                    flags: extract_nth_expression_text(parent, source, 3),
-                },
+                "G_DEFINE_TYPE_EXTENDED" => GObjectTypeKind::Define(DefineKind::TypeExtended),
                 _ => return None,
+            };
+
+            let extended_flags = if macro_name == "G_DEFINE_TYPE_EXTENDED" {
+                Some(extract_nth_expression_text(parent, source, 3))
+            } else {
+                None
             };
 
             // For *_WITH_CODE macros and G_DEFINE_TYPE_EXTENDED, extract interfaces,
             // has_private, and code statements from the code block.
-            let (interfaces, has_private, code_block_statements) =
+            let (interfaces, has_private_from_code, code_block_statements) =
                 if macro_name.ends_with("_WITH_CODE") || macro_name == "G_DEFINE_TYPE_EXTENDED" {
                     self.extract_code_block_info_from_parent(parent, source, &arg_values)
                 } else {
@@ -240,10 +207,17 @@ impl Parser {
             return Some(GObjectType {
                 type_name: type_name.to_owned(),
                 type_macro,
+                function_prefix: function_prefix.to_owned(),
+                parent_type: if matches!(kind, GObjectTypeKind::Define(DefineKind::Pointer)) {
+                    None
+                } else {
+                    Some(parent_type.to_owned())
+                },
+                flags: extended_flags,
                 kind,
                 class_struct: None,
                 interfaces,
-                has_private,
+                has_private: has_private_from_macro || has_private_from_code,
                 code_block_statements,
                 export_macros: Vec::new(),
                 location: self.node_location(parent),

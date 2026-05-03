@@ -75,16 +75,8 @@ impl Rule for MissingExportMacro {
 
             // Check GObject type declarations (G_DECLARE_*)
             for gobject_type in file.iter_all_gobject_types() {
-                use gobject_ast::model::types::GObjectTypeKind;
-
                 // Only G_DECLARE_* types go in public headers
-                let is_declare = matches!(
-                    &gobject_type.kind,
-                    GObjectTypeKind::DeclareFinal { .. }
-                        | GObjectTypeKind::DeclareDerivable { .. }
-                        | GObjectTypeKind::DeclareInterface { .. }
-                );
-                if !is_declare {
+                if !gobject_type.kind.is_declare() {
                     continue;
                 }
 

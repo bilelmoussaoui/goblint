@@ -169,32 +169,17 @@ impl Rule for DeadCode {
                     function_references.insert(interface_impl.init_function.clone());
                 }
 
-                match &gobject_type.kind {
-                    GObjectTypeKind::DefineBoxedType {
-                        copy_func,
-                        free_func,
-                        ..
-                    }
-                    | GObjectTypeKind::DefineBoxedTypeWithCode {
-                        copy_func,
-                        free_func,
-                        ..
-                    } => {
-                        function_references.insert(copy_func.clone());
-                        function_references.insert(free_func.clone());
-                    }
-                    _ => {}
+                if let GObjectTypeKind::DefineBoxed {
+                    copy_func,
+                    free_func,
+                } = &gobject_type.kind
+                {
+                    function_references.insert(copy_func.clone());
+                    function_references.insert(free_func.clone());
                 }
 
                 // *_WITH_PRIVATE variants implicitly use {TypeName}Private
-                if gobject_type.has_private
-                    || matches!(
-                        gobject_type.kind,
-                        GObjectTypeKind::DefineTypeWithPrivate { .. }
-                            | GObjectTypeKind::DefineFinalTypeWithPrivate { .. }
-                            | GObjectTypeKind::DefineAbstractTypeWithPrivate { .. }
-                    )
-                {
+                if gobject_type.has_private {
                     let priv_name = format!("{}Private", gobject_type.type_name);
                     type_references.insert(priv_name.clone());
                     // Also mark the underscore-prefixed tag form (e.g.
@@ -212,11 +197,7 @@ impl Rule for DeadCode {
                 type_references.insert(format!("_{tn}"));
                 if gobject_type.is_interface() {
                     type_references.insert(format!("_{tn}Interface"));
-                } else if !matches!(
-                    gobject_type.kind,
-                    GObjectTypeKind::DefineBoxedType { .. }
-                        | GObjectTypeKind::DefineBoxedTypeWithCode { .. }
-                ) {
+                } else if !matches!(gobject_type.kind, GObjectTypeKind::DefineBoxed { .. }) {
                     type_references.insert(format!("_{tn}Class"));
                 }
 

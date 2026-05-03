@@ -46,13 +46,12 @@ impl Rule for MissingAutoptrCleanup {
 
         for (path, file) in ast_context.iter_all_files() {
             for gobject_type in file.iter_all_gobject_types() {
-                use gobject_ast::model::types::GObjectTypeKind;
+                use gobject_ast::model::types::{DefineKind, GObjectTypeKind};
 
                 match &gobject_type.kind {
                     // Boxed and pointer types don't have automatic autoptr support
-                    GObjectTypeKind::DefineBoxedType { .. }
-                    | GObjectTypeKind::DefineBoxedTypeWithCode { .. }
-                    | GObjectTypeKind::DefinePointerType { .. } => {
+                    GObjectTypeKind::DefineBoxed { .. }
+                    | GObjectTypeKind::Define(DefineKind::Pointer) => {
                         types_needing_cleanup.push((
                             path,
                             gobject_type.type_name.clone(),
@@ -61,18 +60,7 @@ impl Rule for MissingAutoptrCleanup {
                         ));
                     }
                     // Old-style GObject types without G_DECLARE_* need explicit autoptr
-                    GObjectTypeKind::DefineType { .. }
-                    | GObjectTypeKind::DefineTypeWithCode { .. }
-                    | GObjectTypeKind::DefineTypeWithPrivate { .. }
-                    | GObjectTypeKind::DefineAbstractType { .. }
-                    | GObjectTypeKind::DefineAbstractTypeWithCode { .. }
-                    | GObjectTypeKind::DefineAbstractTypeWithPrivate { .. }
-                    | GObjectTypeKind::DefineFinalType { .. }
-                    | GObjectTypeKind::DefineFinalTypeWithCode { .. }
-                    | GObjectTypeKind::DefineFinalTypeWithPrivate { .. }
-                    | GObjectTypeKind::DefineInterface { .. }
-                    | GObjectTypeKind::DefineInterfaceWithCode { .. }
-                    | GObjectTypeKind::DefineTypeExtended { .. } => {
+                    GObjectTypeKind::Define(_) => {
                         types_needing_cleanup.push((
                             path,
                             gobject_type.type_name.clone(),
@@ -81,9 +69,7 @@ impl Rule for MissingAutoptrCleanup {
                         ));
                     }
                     // Modern G_DECLARE_* types have autoptr built-in
-                    GObjectTypeKind::DeclareFinal { .. }
-                    | GObjectTypeKind::DeclareDerivable { .. }
-                    | GObjectTypeKind::DeclareInterface { .. } => {
+                    GObjectTypeKind::Declare { .. } => {
                         // These have autoptr automatically, skip
                     }
                 }
@@ -95,15 +81,8 @@ impl Rule for MissingAutoptrCleanup {
 
         for (_path, file) in ast_context.iter_all_files() {
             for gobject_type in file.iter_all_gobject_types() {
-                use gobject_ast::model::types::GObjectTypeKind;
-
-                match &gobject_type.kind {
-                    GObjectTypeKind::DeclareFinal { .. }
-                    | GObjectTypeKind::DeclareDerivable { .. }
-                    | GObjectTypeKind::DeclareInterface { .. } => {
-                        declared_types.insert(gobject_type.type_name.clone());
-                    }
-                    _ => {}
+                if gobject_type.kind.is_declare() {
+                    declared_types.insert(gobject_type.type_name.clone());
                 }
             }
         }

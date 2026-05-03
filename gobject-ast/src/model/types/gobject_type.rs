@@ -5,14 +5,19 @@ use crate::SourceLocation;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GObjectType {
-    pub type_name: String,  // e.g., "ClutterInputDeviceTool"
-    pub type_macro: String, // e.g., "CLUTTER_TYPE_INPUT_DEVICE_TOOL"
+    pub type_name: String,           // e.g., "ClutterInputDeviceTool"
+    pub type_macro: String,          // e.g., "CLUTTER_TYPE_INPUT_DEVICE_TOOL"
+    pub function_prefix: String,     // e.g., "clutter_input_device_tool"
+    pub parent_type: Option<String>, // e.g., "GObject"; None for boxed/pointer types
+    pub flags: Option<String>,       /* G_DEFINE_TYPE_EXTENDED flags arg, e.g.
+                                      * "G_TYPE_FLAG_ABSTRACT" */
     pub kind: GObjectTypeKind,
     pub class_struct: Option<ClassStruct>, // For derivable types
     pub interfaces: Vec<InterfaceImplementation>, // G_IMPLEMENT_INTERFACE
-    pub has_private: bool,                 // G_ADD_PRIVATE in G_DEFINE_TYPE_WITH_CODE
+    pub has_private: bool,                 /* G_ADD_PRIVATE in *_WITH_CODE, or *_WITH_PRIVATE
+                                            * macros */
     pub code_block_statements: Vec<super::super::Statement>, // Statements from *_WITH_CODE macros
-    pub export_macros: Vec<String>,        // e.g., ["CLUTTER_EXPORT"]
+    pub export_macros: Vec<String>,                          // e.g., ["CLUTTER_EXPORT"]
     pub location: SourceLocation,
 }
 
@@ -23,121 +28,57 @@ pub struct InterfaceImplementation {
 }
 
 impl GObjectType {
-    /// Get the function_prefix from this type
     pub fn function_prefix(&self) -> &str {
-        match &self.kind {
-            GObjectTypeKind::DeclareFinal {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DeclareDerivable {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DeclareInterface {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineType {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineTypeWithPrivate {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineAbstractType {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineTypeWithCode {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineFinalType {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineFinalTypeWithCode {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineFinalTypeWithPrivate {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineAbstractTypeWithCode {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineAbstractTypeWithPrivate {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineInterface {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineInterfaceWithCode {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineBoxedType {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineBoxedTypeWithCode {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefinePointerType {
-                function_prefix, ..
-            }
-            | GObjectTypeKind::DefineTypeExtended {
-                function_prefix, ..
-            } => function_prefix,
-        }
+        &self.function_prefix
     }
 
     /// Get the expected instance init function name based on the
     /// function_prefix
     pub fn init_function_name(&self) -> String {
-        format!("{}_init", self.function_prefix())
+        format!("{}_init", self.function_prefix)
     }
 
     /// Get the expected class_init function name based on the function_prefix
     pub fn class_init_function_name(&self) -> String {
-        format!("{}_class_init", self.function_prefix())
+        format!("{}_class_init", self.function_prefix)
     }
 
     /// Get the expected default_init function name for interfaces
     pub fn default_init_function_name(&self) -> String {
-        format!("{}_default_init", self.function_prefix())
+        format!("{}_default_init", self.function_prefix)
     }
 
     /// Check if this is an interface type
     pub fn is_interface(&self) -> bool {
         matches!(
             self.kind,
-            GObjectTypeKind::DeclareInterface { .. }
-                | GObjectTypeKind::DefineInterface { .. }
-                | GObjectTypeKind::DefineInterfaceWithCode { .. }
+            GObjectTypeKind::Declare {
+                kind: DeclareKind::Interface,
+                ..
+            } | GObjectTypeKind::Define(DefineKind::Interface | DefineKind::InterfaceWithCode)
         )
     }
 
     /// Extract properties from a class_init function
-    /// Looks for *_param_spec_* calls and extracts property metadata
     pub fn extract_properties(
         &self,
         class_init_func: &crate::top_level::FunctionDefItem,
     ) -> Vec<Property> {
         class_init_func
-            .find_calls_matching(|name| {
-                // Match any function ending with _param_spec_* pattern
-                // e.g., g_param_spec_string, cogl_param_spec_color, etc.
-                name.contains("_param_spec_")
-            })
+            .find_calls_matching(|name| name.contains("_param_spec_"))
             .iter()
             .filter_map(|call| Property::from_param_spec_call(call))
             .collect()
     }
 
     /// Extract signals from a class_init function
-    /// Looks for g_signal_new* calls and extracts signal metadata
     pub fn extract_signals(
         &self,
         class_init_func: &crate::top_level::FunctionDefItem,
         source: &[u8],
     ) -> Vec<Signal> {
         class_init_func
-            .find_calls_matching(|name| {
-                // Match g_signal_new, g_signal_newv, etc.
-                name.starts_with("g_signal_new")
-            })
+            .find_calls_matching(|name| name.starts_with("g_signal_new"))
             .iter()
             .filter_map(|call| Signal::from_g_signal_new_call(call, source))
             .collect()
@@ -157,89 +98,49 @@ pub struct VirtualFunction {
     pub parameters: Vec<Parameter>,
 }
 
+/// Which G_DECLARE_* variant was used
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeclareKind {
+    Final,
+    Derivable,
+    Interface,
+}
+
+/// Which G_DEFINE_* (non-boxed, non-pointer, non-extended) variant was used
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DefineKind {
+    Type,
+    TypeWithCode,
+    TypeWithPrivate,
+    FinalType,
+    FinalTypeWithCode,
+    FinalTypeWithPrivate,
+    AbstractType,
+    AbstractTypeWithCode,
+    AbstractTypeWithPrivate,
+    Interface,
+    InterfaceWithCode,
+    /// G_DEFINE_TYPE_EXTENDED
+    TypeExtended,
+    /// G_DEFINE_POINTER_TYPE
+    Pointer,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GObjectTypeKind {
-    DeclareFinal {
-        function_prefix: String, // e.g., "clutter_input_device_tool"
-        module_prefix: String,   // e.g., "CLUTTER"
-        type_prefix: String,     // e.g., "INPUT_DEVICE_TOOL"
-        parent_type: String,     // e.g., "GObject"
+    /// G_DECLARE_FINAL_TYPE / G_DECLARE_DERIVABLE_TYPE / G_DECLARE_INTERFACE
+    Declare {
+        kind: DeclareKind,
+        module_prefix: String, // e.g., "CLUTTER"
+        type_prefix: String,   // e.g., "INPUT_DEVICE_TOOL"
     },
-    DeclareDerivable {
-        function_prefix: String,
-        module_prefix: String,
-        type_prefix: String,
-        parent_type: String,
-    },
-    DeclareInterface {
-        function_prefix: String,
-        module_prefix: String,
-        type_prefix: String,
-        prerequisite_type: String,
-    },
-    DefineType {
-        function_prefix: String,
-        parent_type: String,
-    },
-    DefineTypeWithPrivate {
-        function_prefix: String,
-        parent_type: String,
-    },
-    DefineAbstractType {
-        function_prefix: String,
-        parent_type: String,
-    },
-    DefineTypeWithCode {
-        function_prefix: String,
-        parent_type: String,
-    },
-    DefineFinalType {
-        function_prefix: String,
-        parent_type: String,
-    },
-    DefineFinalTypeWithCode {
-        function_prefix: String,
-        parent_type: String,
-    },
-    DefineFinalTypeWithPrivate {
-        function_prefix: String,
-        parent_type: String,
-    },
-    DefineAbstractTypeWithCode {
-        function_prefix: String,
-        parent_type: String,
-    },
-    DefineAbstractTypeWithPrivate {
-        function_prefix: String,
-        parent_type: String,
-    },
-    DefineInterface {
-        function_prefix: String,
-        prerequisite_type: String,
-    },
-    DefineInterfaceWithCode {
-        function_prefix: String,
-        prerequisite_type: String,
-    },
-    DefineBoxedType {
-        function_prefix: String,
+    /// All G_DEFINE_TYPE* / G_DEFINE_INTERFACE* variants (not
+    /// boxed/pointer/extended)
+    Define(DefineKind),
+    /// G_DEFINE_BOXED_TYPE / G_DEFINE_BOXED_TYPE_WITH_CODE
+    DefineBoxed {
         copy_func: String,
         free_func: String,
-    },
-    DefineBoxedTypeWithCode {
-        function_prefix: String,
-        copy_func: String,
-        free_func: String,
-    },
-    DefinePointerType {
-        function_prefix: String,
-    },
-    DefineTypeExtended {
-        function_prefix: String,
-        parent_type: String,
-        /// Raw text of the flags argument (4th arg), e.g. "0" or
-        /// "G_TYPE_FLAG_ABSTRACT"
-        flags: String,
     },
 }
 
@@ -247,86 +148,73 @@ impl GObjectTypeKind {
     /// Returns the macro name for this type declaration/definition
     pub fn macro_name(&self) -> &'static str {
         match self {
-            Self::DeclareFinal { .. } => "G_DECLARE_FINAL_TYPE",
-            Self::DeclareDerivable { .. } => "G_DECLARE_DERIVABLE_TYPE",
-            Self::DeclareInterface { .. } => "G_DECLARE_INTERFACE",
-            Self::DefineType { .. } => "G_DEFINE_TYPE",
-            Self::DefineTypeWithPrivate { .. } => "G_DEFINE_TYPE_WITH_PRIVATE",
-            Self::DefineTypeWithCode { .. } => "G_DEFINE_TYPE_WITH_CODE",
-            Self::DefineFinalType { .. } => "G_DEFINE_FINAL_TYPE",
-            Self::DefineFinalTypeWithCode { .. } => "G_DEFINE_FINAL_TYPE_WITH_CODE",
-            Self::DefineFinalTypeWithPrivate { .. } => "G_DEFINE_FINAL_TYPE_WITH_PRIVATE",
-            Self::DefineAbstractType { .. } => "G_DEFINE_ABSTRACT_TYPE",
-            Self::DefineAbstractTypeWithCode { .. } => "G_DEFINE_ABSTRACT_TYPE_WITH_CODE",
-            Self::DefineAbstractTypeWithPrivate { .. } => "G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE",
-            Self::DefineInterface { .. } => "G_DEFINE_INTERFACE",
-            Self::DefineInterfaceWithCode { .. } => "G_DEFINE_INTERFACE_WITH_CODE",
-            Self::DefineBoxedType { .. } => "G_DEFINE_BOXED_TYPE",
-            Self::DefineBoxedTypeWithCode { .. } => "G_DEFINE_BOXED_TYPE_WITH_CODE",
-            Self::DefinePointerType { .. } => "G_DEFINE_POINTER_TYPE",
-            Self::DefineTypeExtended { .. } => "G_DEFINE_TYPE_EXTENDED",
+            Self::Declare { kind, .. } => match kind {
+                DeclareKind::Final => "G_DECLARE_FINAL_TYPE",
+                DeclareKind::Derivable => "G_DECLARE_DERIVABLE_TYPE",
+                DeclareKind::Interface => "G_DECLARE_INTERFACE",
+            },
+            Self::Define(kind) => match kind {
+                DefineKind::Type => "G_DEFINE_TYPE",
+                DefineKind::TypeWithCode => "G_DEFINE_TYPE_WITH_CODE",
+                DefineKind::TypeWithPrivate => "G_DEFINE_TYPE_WITH_PRIVATE",
+                DefineKind::FinalType => "G_DEFINE_FINAL_TYPE",
+                DefineKind::FinalTypeWithCode => "G_DEFINE_FINAL_TYPE_WITH_CODE",
+                DefineKind::FinalTypeWithPrivate => "G_DEFINE_FINAL_TYPE_WITH_PRIVATE",
+                DefineKind::AbstractType => "G_DEFINE_ABSTRACT_TYPE",
+                DefineKind::AbstractTypeWithCode => "G_DEFINE_ABSTRACT_TYPE_WITH_CODE",
+                DefineKind::AbstractTypeWithPrivate => "G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE",
+                DefineKind::Interface => "G_DEFINE_INTERFACE",
+                DefineKind::InterfaceWithCode => "G_DEFINE_INTERFACE_WITH_CODE",
+                DefineKind::TypeExtended => "G_DEFINE_TYPE_EXTENDED",
+                DefineKind::Pointer => "G_DEFINE_POINTER_TYPE",
+            },
+            Self::DefineBoxed { .. } => "G_DEFINE_BOXED_TYPE",
         }
     }
 
     /// Returns true if this is a G_DECLARE_* macro
     pub fn is_declare(&self) -> bool {
-        matches!(
-            self,
-            Self::DeclareFinal { .. }
-                | Self::DeclareDerivable { .. }
-                | Self::DeclareInterface { .. }
-        )
+        matches!(self, Self::Declare { .. })
     }
 
     /// Returns true if this is a G_DEFINE_* macro
     pub fn is_define(&self) -> bool {
-        matches!(
-            self,
-            Self::DefineType { .. }
-                | Self::DefineTypeWithPrivate { .. }
-                | Self::DefineTypeWithCode { .. }
-                | Self::DefineFinalType { .. }
-                | Self::DefineFinalTypeWithCode { .. }
-                | Self::DefineFinalTypeWithPrivate { .. }
-                | Self::DefineAbstractType { .. }
-                | Self::DefineAbstractTypeWithCode { .. }
-                | Self::DefineAbstractTypeWithPrivate { .. }
-                | Self::DefineInterface { .. }
-                | Self::DefineInterfaceWithCode { .. }
-                | Self::DefineBoxedType { .. }
-                | Self::DefineBoxedTypeWithCode { .. }
-                | Self::DefineTypeExtended { .. }
-        )
+        matches!(self, Self::Define(_) | Self::DefineBoxed { .. })
     }
 
     /// Check if a declare kind is compatible with a define kind
     pub fn is_compatible_with(&self, define: &Self) -> bool {
-        match self {
-            // G_DECLARE_FINAL_TYPE requires a final define so that
-            // G_TYPE_FLAG_FINAL is registered at runtime.
-            Self::DeclareFinal { .. } => matches!(
+        let Self::Declare { kind, .. } = self else {
+            return false;
+        };
+        match kind {
+            // G_DECLARE_FINAL_TYPE requires a final define
+            DeclareKind::Final => matches!(
                 define,
-                Self::DefineFinalType { .. }
-                    | Self::DefineFinalTypeWithCode { .. }
-                    | Self::DefineFinalTypeWithPrivate { .. }
+                Self::Define(
+                    DefineKind::FinalType
+                        | DefineKind::FinalTypeWithCode
+                        | DefineKind::FinalTypeWithPrivate
+                )
             ),
-            // G_DECLARE_DERIVABLE_TYPE covers both concrete and abstract types.
-            Self::DeclareDerivable { .. } => matches!(
+            // G_DECLARE_DERIVABLE_TYPE covers concrete and abstract types
+            DeclareKind::Derivable => matches!(
                 define,
-                Self::DefineType { .. }
-                    | Self::DefineTypeWithCode { .. }
-                    | Self::DefineTypeWithPrivate { .. }
-                    | Self::DefineAbstractType { .. }
-                    | Self::DefineAbstractTypeWithCode { .. }
-                    | Self::DefineAbstractTypeWithPrivate { .. }
-                    | Self::DefineTypeExtended { .. }
+                Self::Define(
+                    DefineKind::Type
+                        | DefineKind::TypeWithCode
+                        | DefineKind::TypeWithPrivate
+                        | DefineKind::AbstractType
+                        | DefineKind::AbstractTypeWithCode
+                        | DefineKind::AbstractTypeWithPrivate
+                        | DefineKind::TypeExtended
+                )
             ),
-            // G_DECLARE_INTERFACE requires G_DEFINE_INTERFACE.
-            Self::DeclareInterface { .. } => matches!(
+            // G_DECLARE_INTERFACE requires G_DEFINE_INTERFACE
+            DeclareKind::Interface => matches!(
                 define,
-                Self::DefineInterface { .. } | Self::DefineInterfaceWithCode { .. }
+                Self::Define(DefineKind::Interface | DefineKind::InterfaceWithCode)
             ),
-            _ => false,
         }
     }
 }

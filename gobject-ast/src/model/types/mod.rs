@@ -10,7 +10,8 @@ mod typedef;
 pub use enum_info::{EnumInfo, EnumValue};
 pub use function::Parameter;
 pub use gobject_type::{
-    ClassStruct, GObjectType, GObjectTypeKind, InterfaceImplementation, VirtualFunction,
+    ClassStruct, DeclareKind, DefineKind, GObjectType, GObjectTypeKind, InterfaceImplementation,
+    VirtualFunction,
 };
 pub use include::Include;
 pub use property::{ParamFlag, ParamSpecAssignment, Property, PropertyType};
