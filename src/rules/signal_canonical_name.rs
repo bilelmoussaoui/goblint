@@ -28,38 +28,10 @@ impl Rule for SignalCanonicalName {
         path: &std::path::Path,
         violations: &mut Vec<Violation>,
     ) {
+        use gobject_ast::Argument;
+
         for stmt in &func.body_statements {
-            stmt.walk(&mut |s| {
-                match s {
-                    gobject_ast::Statement::Expression(expr_stmt) => {
-                        self.check_expression(&expr_stmt.expr, path, violations);
-                    }
-                    gobject_ast::Statement::Declaration(decl) => {
-                        // Check declaration initializer
-                        if let Some(ref init_expr) = decl.initializer {
-                            self.check_expression(init_expr, path, violations);
-                        }
-                    }
-                    _ => {}
-                }
-            });
-        }
-    }
-}
-
-impl SignalCanonicalName {
-    /// Check an expression for signal function calls
-    fn check_expression(
-        &self,
-        expr: &gobject_ast::Expression,
-        path: &std::path::Path,
-        violations: &mut Vec<Violation>,
-    ) {
-        use gobject_ast::{Argument, Expression};
-
-        match expr {
-            Expression::Call(call) => {
-                // Check if this is a signal-related function
+            for call in stmt.iter_calls() {
                 let func_name = call.function_name();
                 match func_name.as_str() {
                     // Signal creation/lookup functions - signal name is first argument
@@ -89,36 +61,12 @@ impl SignalCanonicalName {
                     }
                     _ => {}
                 }
-
-                // Recursively check nested expressions
-                for arg in &call.arguments {
-                    let Argument::Expression(e) = arg;
-                    self.check_expression(e, path, violations);
-                }
             }
-            Expression::Binary(binary) => {
-                self.check_expression(&binary.left, path, violations);
-                self.check_expression(&binary.right, path, violations);
-            }
-            Expression::Unary(unary) => {
-                self.check_expression(&unary.operand, path, violations);
-            }
-            Expression::Assignment(assignment) => {
-                self.check_expression(&assignment.lhs, path, violations);
-                self.check_expression(&assignment.rhs, path, violations);
-            }
-            Expression::Cast(cast) => {
-                self.check_expression(&cast.operand, path, violations);
-            }
-            Expression::Conditional(cond) => {
-                self.check_expression(&cond.condition, path, violations);
-                self.check_expression(&cond.then_expr, path, violations);
-                self.check_expression(&cond.else_expr, path, violations);
-            }
-            _ => {}
         }
     }
+}
 
+impl SignalCanonicalName {
     /// Check a signal name argument (should be a string literal)
     fn check_signal_name_arg(
         &self,

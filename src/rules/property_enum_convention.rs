@@ -690,21 +690,20 @@ impl PropertyEnumConvention {
         let mut get_property_func = None;
         let mut set_property_func = None;
 
-        for stmt in &func.body_statements {
-            stmt.walk(&mut |s| {
-                if let gobject_ast::Statement::Expression(expr_stmt) = s
-                    && let gobject_ast::Expression::Assignment(assignment) = &expr_stmt.expr
-                    && let gobject_ast::Expression::FieldAccess(field) = &*assignment.lhs
-                    && let gobject_ast::Expression::Identifier(ident) = assignment.rhs.as_ref()
-                {
-                    // Check for object_class->get_property = func_name
-                    if field.field == "get_property" {
-                        get_property_func = Some(ident.name.to_string());
-                    } else if field.field == "set_property" {
-                        set_property_func = Some(ident.name.to_string());
-                    }
+        for assignment in func
+            .body_statements
+            .iter()
+            .flat_map(|s| s.iter_assignments())
+        {
+            if let gobject_ast::Expression::FieldAccess(field) = &*assignment.lhs
+                && let gobject_ast::Expression::Identifier(ident) = assignment.rhs.as_ref()
+            {
+                if field.field == "get_property" {
+                    get_property_func = Some(ident.name.to_string());
+                } else if field.field == "set_property" {
+                    set_property_func = Some(ident.name.to_string());
                 }
-            });
+            }
         }
 
         Some((

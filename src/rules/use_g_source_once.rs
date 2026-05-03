@@ -285,13 +285,12 @@ impl UseGSourceOnce {
         for stmt in statements {
             let mut found = false;
             stmt.walk(&mut |s| {
-                if self.statement_uses_identifier(s, callback_name) {
-                    // Check if this is inside a g_idle_add or g_timeout_add call
-                    // For now, we'll be conservative and just check if it's used in any expression
-                    // that's not a direct g_idle_add/g_timeout_add call
-                    if !self.is_source_add_statement(s, callback_name) {
-                        found = true;
-                    }
+                if !self.is_source_add_statement(s, callback_name)
+                    && s.expressions()
+                        .iter()
+                        .any(|e| e.contains_identifier(callback_name))
+                {
+                    found = true;
                 }
             });
             if found {
@@ -299,41 +298,6 @@ impl UseGSourceOnce {
             }
         }
         false
-    }
-
-    fn statement_uses_identifier(&self, stmt: &Statement, identifier: &str) -> bool {
-        match stmt {
-            Statement::Expression(expr_stmt) => {
-                self.expr_uses_identifier(&expr_stmt.expr, identifier)
-            }
-            Statement::Return(ret_stmt) => {
-                if let Some(value) = &ret_stmt.value {
-                    self.expr_uses_identifier(value, identifier)
-                } else {
-                    false
-                }
-            }
-            Statement::Declaration(decl) => {
-                if let Some(init) = &decl.initializer {
-                    self.expr_uses_identifier(init, identifier)
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        }
-    }
-
-    fn expr_uses_identifier(&self, expr: &Expression, identifier: &str) -> bool {
-        let mut found = false;
-        expr.walk(&mut |e| {
-            if let Expression::Identifier(id) = e
-                && id.name == identifier
-            {
-                found = true;
-            }
-        });
-        found
     }
 
     fn is_source_add_statement(&self, stmt: &Statement, callback_name: &str) -> bool {

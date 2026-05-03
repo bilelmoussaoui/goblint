@@ -106,39 +106,36 @@ impl SignalEnumCoverage {
 
             // Check if this class_init uses the array
             if !array_names.is_empty() {
-                uses_signal_enum = func.body_statements.iter().any(|stmt| {
-                    let mut found = false;
-                    stmt.walk(&mut |s| {
-                        if let gobject_ast::Statement::Expression(expr_stmt) = s
-                            && let Expression::Assignment(assignment) = &expr_stmt.expr
-                            && let Expression::Subscript(subscript) = &*assignment.lhs
-                            && let Expression::Identifier(id) = &*subscript.array
-                            && array_names.contains(&id.name.as_str())
-                        {
-                            found = true;
-                        }
+                uses_signal_enum = func
+                    .body_statements
+                    .iter()
+                    .flat_map(|s| s.iter_assignments())
+                    .any(|a| {
+                        matches!(&*a.lhs, Expression::Subscript(sub)
+                            if matches!(&*sub.array, Expression::Identifier(id)
+                                if array_names.contains(&id.name.as_str())))
                     });
-                    found
-                });
             }
 
             // If no array usage, check if signal names are used in assignments with
             // g_signal_new
             if !uses_signal_enum && !signal_names.is_empty() {
-                func.body_statements.iter().for_each(|stmt| {
-                    stmt.walk(&mut |s| {
-                        if let gobject_ast::Statement::Expression(expr_stmt) = s
-                            && let Expression::Assignment(assignment) = &expr_stmt.expr
-                            && let Expression::Subscript(subscript) = &*assignment.lhs
-                            && let Expression::Identifier(index_id) = &*subscript.index
+                uses_signal_enum = func
+                    .body_statements
+                    .iter()
+                    .flat_map(|s| s.iter_assignments())
+                    .any(|a| {
+                        if let Expression::Subscript(sub) = &*a.lhs
+                            && let Expression::Identifier(index_id) = &*sub.index
                             && signal_names.contains(&index_id.name.as_str())
-                            && let Expression::Call(call) = &*assignment.rhs
+                            && let Expression::Call(call) = &*a.rhs
                             && call.function_contains("g_signal_new")
                         {
-                            uses_signal_enum = true;
+                            true
+                        } else {
+                            false
                         }
                     });
-                });
             }
 
             if uses_signal_enum {
@@ -156,23 +153,22 @@ impl SignalEnumCoverage {
     ) -> std::collections::HashSet<String> {
         use gobject_ast::Expression;
 
-        let mut installed = std::collections::HashSet::new();
-
-        for stmt in &class_init.body_statements {
-            stmt.walk(&mut |s| {
-                // Array assignment: signals[SIGNAL_NAME] = g_signal_new(...)
-                if let gobject_ast::Statement::Expression(expr_stmt) = s
-                    && let Expression::Assignment(assignment) = &expr_stmt.expr
-                    && let Expression::Subscript(subscript) = &*assignment.lhs
-                    && let Expression::Identifier(enum_id) = &*subscript.index
-                    && let Expression::Call(call) = &*assignment.rhs
+        // Array assignment: signals[SIGNAL_NAME] = g_signal_new(...)
+        class_init
+            .body_statements
+            .iter()
+            .flat_map(|s| s.iter_assignments())
+            .filter_map(|a| {
+                if let Expression::Subscript(sub) = &*a.lhs
+                    && let Expression::Identifier(enum_id) = &*sub.index
+                    && let Expression::Call(call) = &*a.rhs
                     && call.function_contains("g_signal_new")
                 {
-                    installed.insert(enum_id.name.clone());
+                    Some(enum_id.name.clone())
+                } else {
+                    None
                 }
-            });
-        }
-
-        installed
+            })
+            .collect()
     }
 }
