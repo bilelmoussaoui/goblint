@@ -118,10 +118,12 @@ impl Expression {
             .map(ToOwned::to_owned)
     }
 
-    /// Recursively walk all nested expressions
-    pub fn walk<F>(&self, f: &mut F)
+    /// Recursively walk all nested expressions. The closure receives a
+    /// `&'s Expression` tied to `self`'s lifetime, so references extracted
+    /// inside the closure can be stored in an outer `Vec<&'s T>`.
+    pub fn walk<'s, F>(&'s self, f: &mut F)
     where
-        F: FnMut(&Expression),
+        F: FnMut(&'s Expression),
     {
         f(self);
         match self {

@@ -26,7 +26,7 @@ pub use variable_decl::VariableDecl;
 pub use while_stmt::{DoWhileStatement, WhileStatement};
 
 use super::top_level::PreprocessorDirective;
-use crate::model::{Argument, CallExpression, Expression, SourceLocation};
+use crate::model::{CallExpression, Expression, SourceLocation};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
@@ -47,10 +47,12 @@ pub enum Statement {
 }
 
 impl Statement {
-    /// Recursively visit all nested statements
-    pub fn walk<F>(&self, f: &mut F)
+    /// Recursively visit all nested statements. The closure receives a
+    /// `&'s Statement` tied to `self`'s lifetime, so references extracted
+    /// inside the closure can be stored in an outer `Vec<&'s T>`.
+    pub fn walk<'s, F>(&'s self, f: &mut F)
     where
-        F: FnMut(&Statement),
+        F: FnMut(&'s Statement),
     {
         f(self);
         match self {
@@ -98,12 +100,16 @@ impl Statement {
         }
     }
 
-    /// Get all direct expressions contained in this statement (non-recursive)
+    /// Get all direct expressions contained in this statement (non-recursive).
+    /// Includes conditions, initialisers, and all other expressions that are
+    /// immediate children of this statement node.
     pub fn expressions(&self) -> Vec<&Expression> {
         match self {
             Statement::Expression(expr_stmt) => vec![&expr_stmt.expr],
             Statement::Return(ret) => ret.value.as_ref().into_iter().collect(),
             Statement::Declaration(decl) => decl.initializer.as_ref().into_iter().collect(),
+            Statement::If(if_stmt) => vec![&if_stmt.condition],
+            Statement::Switch(switch) => vec![&switch.condition],
             Statement::For(for_stmt) => {
                 let mut exprs = Vec::new();
                 if let Some(init) = &for_stmt.initializer {
@@ -119,7 +125,12 @@ impl Statement {
             }
             Statement::While(while_stmt) => vec![&*while_stmt.condition],
             Statement::DoWhile(do_while) => vec![&*do_while.condition],
-            _ => vec![],
+            Statement::Goto(_)
+            | Statement::Labeled(_)
+            | Statement::Compound(_)
+            | Statement::Break(_)
+            | Statement::Continue(_)
+            | Statement::Preprocessor(_) => vec![],
         }
     }
 
@@ -153,373 +164,100 @@ impl Statement {
         }
     }
 
-    /// Recursively walk all expressions in this statement tree
-    /// Visits each expression once, including nested expressions within other
-    /// expressions
-    pub fn walk_expressions<F>(&self, f: &mut F)
+    /// Recursively walk all expressions in this statement tree.
+    /// Visits the direct expression of each statement (not sub-expressions —
+    /// call `Expression::walk` on the result if you need nested expressions).
+    pub fn walk_expressions<'s, F>(&'s self, f: &mut F)
     where
-        F: FnMut(&Expression),
+        F: FnMut(&'s Expression),
     {
-        // Visit direct expressions in this statement
-        for expr in self.expressions() {
-            f(expr);
-        }
-
-        // Recurse into nested statements
-        match self {
-            Statement::If(if_stmt) => {
-                f(&if_stmt.condition);
-                for stmt in &if_stmt.then_body {
-                    stmt.walk_expressions(f);
-                }
-                if let Some(else_body) = &if_stmt.else_body {
-                    for stmt in else_body {
-                        stmt.walk_expressions(f);
-                    }
-                }
+        self.walk(&mut |s| {
+            for expr in s.expressions() {
+                f(expr);
             }
-            Statement::Compound(compound) => {
-                for stmt in &compound.statements {
-                    stmt.walk_expressions(f);
-                }
-            }
-            Statement::Labeled(labeled) => {
-                labeled.statement.walk_expressions(f);
-            }
-            Statement::Switch(switch) => {
-                f(&switch.condition);
-                for case in &switch.cases {
-                    for stmt in &case.body {
-                        stmt.walk_expressions(f);
-                    }
-                }
-            }
-            _ => {}
-        }
+        });
     }
 
     /// Iterator over all switch statements in this statement tree (recursive)
-    pub fn iter_switches(&self) -> impl Iterator<Item = &SwitchStatement> {
-        Self::collect_switches(self).into_iter()
-    }
-
-    fn collect_switches(stmt: &Statement) -> Vec<&SwitchStatement> {
-        let mut results = Vec::new();
-        if let Statement::Switch(switch) = stmt {
-            results.push(switch);
-        }
-
-        // Recurse into nested statements
-        match stmt {
-            Statement::If(if_stmt) => {
-                for s in &if_stmt.then_body {
-                    results.extend(Self::collect_switches(s));
-                }
-                if let Some(else_body) = &if_stmt.else_body {
-                    for s in else_body {
-                        results.extend(Self::collect_switches(s));
-                    }
-                }
+    pub fn iter_switches<'s>(&'s self) -> impl Iterator<Item = &'s SwitchStatement> + 's {
+        let mut results: Vec<&'s SwitchStatement> = Vec::new();
+        self.walk(&mut |s| {
+            if let Statement::Switch(sw) = s {
+                results.push(sw);
             }
-            Statement::Compound(compound) => {
-                for s in &compound.statements {
-                    results.extend(Self::collect_switches(s));
-                }
-            }
-            Statement::Labeled(labeled) => {
-                results.extend(Self::collect_switches(&labeled.statement));
-            }
-            Statement::Switch(switch) => {
-                for case in &switch.cases {
-                    for s in &case.body {
-                        results.extend(Self::collect_switches(s));
-                    }
-                }
-            }
-            _ => {}
-        }
-        results
+        });
+        results.into_iter()
     }
 
     /// Iterator over all if statements in this statement tree (recursive)
-    pub fn iter_if_statements(&self) -> impl Iterator<Item = &IfStatement> {
-        Self::collect_if_statements(self).into_iter()
-    }
-
-    fn collect_if_statements(stmt: &Statement) -> Vec<&IfStatement> {
-        let mut results = Vec::new();
-        if let Statement::If(if_stmt) = stmt {
-            results.push(if_stmt);
-        }
-
-        // Recurse into nested statements
-        match stmt {
-            Statement::If(if_stmt) => {
-                for s in &if_stmt.then_body {
-                    results.extend(Self::collect_if_statements(s));
-                }
-                if let Some(else_body) = &if_stmt.else_body {
-                    for s in else_body {
-                        results.extend(Self::collect_if_statements(s));
-                    }
-                }
+    pub fn iter_if_statements<'s>(&'s self) -> impl Iterator<Item = &'s IfStatement> + 's {
+        let mut results: Vec<&'s IfStatement> = Vec::new();
+        self.walk(&mut |s| {
+            if let Statement::If(if_stmt) = s {
+                results.push(if_stmt);
             }
-            Statement::Compound(compound) => {
-                for s in &compound.statements {
-                    results.extend(Self::collect_if_statements(s));
-                }
-            }
-            Statement::Labeled(labeled) => {
-                results.extend(Self::collect_if_statements(&labeled.statement));
-            }
-            Statement::Switch(switch) => {
-                for case in &switch.cases {
-                    for s in &case.body {
-                        results.extend(Self::collect_if_statements(s));
-                    }
-                }
-            }
-            _ => {}
-        }
-        results
+        });
+        results.into_iter()
     }
 
     /// Iterator over all variable declarations in this statement tree
     /// (recursive)
-    pub fn iter_declarations(&self) -> impl Iterator<Item = &VariableDecl> {
-        Self::collect_declarations(self).into_iter()
-    }
-
-    fn collect_declarations(stmt: &Statement) -> Vec<&VariableDecl> {
-        let mut results = Vec::new();
-        if let Statement::Declaration(decl) = stmt {
-            results.push(decl);
-        }
-
-        // Recurse into nested statements
-        match stmt {
-            Statement::If(if_stmt) => {
-                for s in &if_stmt.then_body {
-                    results.extend(Self::collect_declarations(s));
-                }
-                if let Some(else_body) = &if_stmt.else_body {
-                    for s in else_body {
-                        results.extend(Self::collect_declarations(s));
-                    }
-                }
+    pub fn iter_declarations<'s>(&'s self) -> impl Iterator<Item = &'s VariableDecl> + 's {
+        let mut results: Vec<&'s VariableDecl> = Vec::new();
+        self.walk(&mut |s| {
+            if let Statement::Declaration(decl) = s {
+                results.push(decl);
             }
-            Statement::Compound(compound) => {
-                for s in &compound.statements {
-                    results.extend(Self::collect_declarations(s));
-                }
-            }
-            Statement::Labeled(labeled) => {
-                results.extend(Self::collect_declarations(&labeled.statement));
-            }
-            Statement::Switch(switch) => {
-                for case in &switch.cases {
-                    for s in &case.body {
-                        results.extend(Self::collect_declarations(s));
-                    }
-                }
-            }
-            _ => {}
-        }
-        results
+        });
+        results.into_iter()
     }
 
     /// Iterator over all return statements in this statement tree (recursive)
-    pub fn iter_returns(&self) -> impl Iterator<Item = &ReturnStatement> {
-        Self::collect_returns(self).into_iter()
+    pub fn iter_returns<'s>(&'s self) -> impl Iterator<Item = &'s ReturnStatement> + 's {
+        let mut results: Vec<&'s ReturnStatement> = Vec::new();
+        self.walk(&mut |s| {
+            if let Statement::Return(ret) = s {
+                results.push(ret);
+            }
+        });
+        results.into_iter()
     }
 
-    fn collect_returns(stmt: &Statement) -> Vec<&ReturnStatement> {
-        let mut results = Vec::new();
-        if let Statement::Return(ret) = stmt {
-            results.push(ret);
-        }
-
-        // Recurse into nested statements
-        match stmt {
-            Statement::If(if_stmt) => {
-                for s in &if_stmt.then_body {
-                    results.extend(Self::collect_returns(s));
-                }
-                if let Some(else_body) = &if_stmt.else_body {
-                    for s in else_body {
-                        results.extend(Self::collect_returns(s));
-                    }
+    /// Iterator over all top-level assignment statements in this statement tree
+    /// (recursive). Only yields assignments that are the entire expression
+    /// statement, not assignments nested inside other expressions.
+    pub fn iter_assignments<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s crate::model::Assignment> + 's {
+        let mut results: Vec<&'s crate::model::Assignment> = Vec::new();
+        self.walk(&mut |s| {
+            if let Statement::Expression(expr_stmt) = s {
+                if let Expression::Assignment(assign) = &expr_stmt.expr {
+                    results.push(assign);
                 }
             }
-            Statement::Compound(compound) => {
-                for s in &compound.statements {
-                    results.extend(Self::collect_returns(s));
-                }
-            }
-            Statement::Labeled(labeled) => {
-                results.extend(Self::collect_returns(&labeled.statement));
-            }
-            Statement::Switch(switch) => {
-                for case in &switch.cases {
-                    for s in &case.body {
-                        results.extend(Self::collect_returns(s));
-                    }
-                }
-            }
-            _ => {}
-        }
-        results
+        });
+        results.into_iter()
     }
 
-    /// Iterator over all assignments in this statement tree (recursive)
-    pub fn iter_assignments(&self) -> impl Iterator<Item = &crate::model::Assignment> {
-        Self::collect_assignments(self).into_iter()
-    }
+    /// Iterator over all call expressions in this statement tree (recursive).
+    /// Includes calls at all nesting levels within expressions (e.g. nested
+    /// arguments).
+    pub fn iter_calls<'s>(&'s self) -> impl Iterator<Item = &'s CallExpression> + 's {
+        // Two-step: first collect top-level expressions (avoids nested-closure
+        // invariance issue with &mut Vec), then walk each for nested calls.
+        let mut exprs: Vec<&'s Expression> = Vec::new();
+        self.walk_expressions(&mut |expr| exprs.push(expr));
 
-    fn collect_assignments(stmt: &Statement) -> Vec<&crate::model::Assignment> {
-        let mut results = Vec::new();
-        if let Statement::Expression(expr_stmt) = stmt {
-            if let Expression::Assignment(assignment) = &expr_stmt.expr {
-                results.push(assignment);
-            }
+        let mut results: Vec<&'s CallExpression> = Vec::new();
+        for expr in exprs {
+            expr.walk(&mut |e| {
+                if let Expression::Call(call) = e {
+                    results.push(call);
+                }
+            });
         }
-
-        // Recurse into nested statements
-        match stmt {
-            Statement::If(if_stmt) => {
-                for s in &if_stmt.then_body {
-                    results.extend(Self::collect_assignments(s));
-                }
-                if let Some(else_body) = &if_stmt.else_body {
-                    for s in else_body {
-                        results.extend(Self::collect_assignments(s));
-                    }
-                }
-            }
-            Statement::Compound(compound) => {
-                for s in &compound.statements {
-                    results.extend(Self::collect_assignments(s));
-                }
-            }
-            Statement::Labeled(labeled) => {
-                results.extend(Self::collect_assignments(&labeled.statement));
-            }
-            Statement::Switch(switch) => {
-                for case in &switch.cases {
-                    for s in &case.body {
-                        results.extend(Self::collect_assignments(s));
-                    }
-                }
-            }
-            _ => {}
-        }
-        results
-    }
-
-    /// Iterator over all call expressions in this statement tree (recursive)
-    pub fn iter_calls(&self) -> impl Iterator<Item = &CallExpression> {
-        Self::collect_calls(self).into_iter()
-    }
-
-    fn collect_calls(stmt: &Statement) -> Vec<&CallExpression> {
-        let mut results = Vec::new();
-
-        // Collect direct calls in this statement
-        match stmt {
-            Statement::Expression(expr_stmt) => {
-                Self::collect_calls_from_expr(&expr_stmt.expr, &mut results);
-            }
-            Statement::Return(ret) => {
-                if let Some(expr) = &ret.value {
-                    Self::collect_calls_from_expr(expr, &mut results);
-                }
-            }
-            Statement::Declaration(decl) => {
-                if let Some(expr) = &decl.initializer {
-                    Self::collect_calls_from_expr(expr, &mut results);
-                }
-            }
-            _ => {}
-        }
-
-        // Recurse into nested statements
-        match stmt {
-            Statement::If(if_stmt) => {
-                Self::collect_calls_from_expr(&if_stmt.condition, &mut results);
-                for s in &if_stmt.then_body {
-                    results.extend(Self::collect_calls(s));
-                }
-                if let Some(else_body) = &if_stmt.else_body {
-                    for s in else_body {
-                        results.extend(Self::collect_calls(s));
-                    }
-                }
-            }
-            Statement::Compound(compound) => {
-                for s in &compound.statements {
-                    results.extend(Self::collect_calls(s));
-                }
-            }
-            Statement::Labeled(labeled) => {
-                results.extend(Self::collect_calls(&labeled.statement));
-            }
-            Statement::Switch(switch) => {
-                Self::collect_calls_from_expr(&switch.condition, &mut results);
-                for case in &switch.cases {
-                    for s in &case.body {
-                        results.extend(Self::collect_calls(s));
-                    }
-                }
-            }
-            _ => {}
-        }
-
-        results
-    }
-
-    fn collect_calls_from_expr<'a>(expr: &'a Expression, results: &mut Vec<&'a CallExpression>) {
-        match expr {
-            Expression::Call(call) => {
-                results.push(call);
-                // Also check arguments for nested calls
-                for arg in &call.arguments {
-                    let Argument::Expression(arg_expr) = arg;
-                    Self::collect_calls_from_expr(arg_expr, results);
-                }
-            }
-            Expression::MacroCall(macro_call) => {
-                for arg in &macro_call.arguments {
-                    let Argument::Expression(arg_expr) = arg;
-                    Self::collect_calls_from_expr(arg_expr, results);
-                }
-            }
-            Expression::Assignment(assign) => {
-                Self::collect_calls_from_expr(&assign.rhs, results);
-            }
-            Expression::Binary(binary) => {
-                Self::collect_calls_from_expr(&binary.left, results);
-                Self::collect_calls_from_expr(&binary.right, results);
-            }
-            Expression::Unary(unary) => {
-                Self::collect_calls_from_expr(&unary.operand, results);
-            }
-            Expression::Cast(cast) => {
-                Self::collect_calls_from_expr(&cast.operand, results);
-            }
-            Expression::Conditional(cond) => {
-                Self::collect_calls_from_expr(&cond.condition, results);
-                Self::collect_calls_from_expr(&cond.then_expr, results);
-                Self::collect_calls_from_expr(&cond.else_expr, results);
-            }
-            Expression::Subscript(subscript) => {
-                Self::collect_calls_from_expr(&subscript.array, results);
-                Self::collect_calls_from_expr(&subscript.index, results);
-            }
-            Expression::Update(update) => {
-                Self::collect_calls_from_expr(&update.operand, results);
-            }
-            _ => {}
-        }
+        results.into_iter()
     }
 
     /// Extract the call expression if this is an expression statement with a
