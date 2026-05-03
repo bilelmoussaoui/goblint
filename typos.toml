@@ -1,7 +1,16 @@
 [files]
-extend-exclude = ["tree-sitter-c-gobject/src/*.c", "tree-sitter-c-gobject/src/*.h"]
+extend-exclude = [
+    "tree-sitter-c-gobject/src/*.c",
+    "tree-sitter-c-gobject/src/*.h",
+    "tree-sitter-c-gobject/src/node-types.json",
+]
 
 [default.extend-words]
 # GObject Introspection Repository file format (.gir) and its scanner (g-ir-scanner)
 gir = "gir"
 GIR = "GIR"
+# Windows Structured Exception Handling
+seh = "seh"
+SEH = "SEH"
+# Compiler warning flag syntax (-Wwarning-name)
+Wwarning = "Wwarning"
