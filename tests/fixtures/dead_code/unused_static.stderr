@@ -1,0 +1,1 @@
+unused_static.c:2:1: dead_code: Static function 'helper_never_called' is never used

@@ -1,12 +1,20 @@
-use std::{fs, path::Path};
+use std::{collections::HashSet, fs, path::Path};
 
 use globset::GlobSetBuilder;
-use goblint::{ast_context::AstContext, config::Config, fixer, rules::Rule};
+use goblint::{ast_context::AstContext, config::Config, fixer, meson::MesonHeaders, rules::Rule};
 
-/// Build an AstContext from a single C file copied into a temp directory.
+/// Build an AstContext from a single fixture file copied into a temp directory.
 /// Also copies any sibling .h files from the fixture directory.
+///
+/// If `public_headers_file` is provided, its lines are treated as filenames of
+/// public installed headers (resolved against the temp dir), faking meson info
+/// for rules that require it.
+///
 /// Returns the TempDir (must stay alive for the duration of the test).
-fn build_context_for_file(test_file: &Path) -> (AstContext, tempfile::TempDir) {
+fn build_context_for_file(
+    test_file: &Path,
+    public_headers_file: Option<&Path>,
+) -> (AstContext, tempfile::TempDir) {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let dest = temp_dir.path().join(test_file.file_name().unwrap());
     fs::copy(test_file, &dest).expect("failed to copy fixture");
@@ -25,8 +33,24 @@ fn build_context_for_file(test_file: &Path) -> (AstContext, tempfile::TempDir) {
         }
     }
 
+    // Build fake MesonHeaders from the per-test public_headers file. We do
+    // this after creating the temp dir so filenames resolve to the right paths.
+    let meson_headers = public_headers_file.map(|f| {
+        let installed = fs::read_to_string(f)
+            .unwrap_or_default()
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(|name| temp_dir.path().join(name))
+            .collect::<HashSet<_>>();
+        MesonHeaders {
+            gir: HashSet::new(),
+            installed,
+        }
+    });
+
     let ignore = GlobSetBuilder::new().build().unwrap();
-    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None, None)
+    let ctx = AstContext::build_with_ignore(temp_dir.path(), &ignore, None, meson_headers)
         .expect("failed to build AstContext");
 
     (ctx, temp_dir)
@@ -99,7 +123,13 @@ fn run_fixture_tests(rule_name: &str, rule: &dyn Rule) {
         let fixed_file = fixtures_dir.join(format!("{stem}.fixed.{ext}"));
 
         // --- violation check ---
-        let (ctx, temp_dir) = build_context_for_file(&test_file);
+        // If a <stem>.public_headers file exists, pass it to fake meson info.
+        let public_headers_file = fixtures_dir.join(format!("{stem}.public_headers"));
+        let public_headers_arg = public_headers_file
+            .exists()
+            .then_some(public_headers_file.as_path());
+
+        let (ctx, temp_dir) = build_context_for_file(&test_file, public_headers_arg);
         let config = Config::default();
 
         let mut violations = Vec::new();
@@ -191,7 +221,7 @@ fn run_fixture_tests(rule_name: &str, rule: &dyn Rule) {
             // --- post-fix violation check ---
             // Re-run the rule on the fixed file to verify which violations remain.
             let fixed_stderr_file = fixtures_dir.join(format!("{stem}.fixed.stderr"));
-            let (ctx_fixed, temp_dir_fixed) = build_context_for_file(&temp_c);
+            let (ctx_fixed, temp_dir_fixed) = build_context_for_file(&temp_c, public_headers_arg);
             let mut post_fix_violations = Vec::new();
             rule.check_all(&ctx_fixed, &config, &mut post_fix_violations);
             post_fix_violations.sort_by_key(|v| (v.line, v.column));
@@ -375,3 +405,5 @@ rule_test!(
 rule_test!(use_g_variant_new_typed, goblint::rules::UseGVariantNewTyped);
 rule_test!(untranslated_string, goblint::rules::UntranslatedString);
 rule_test!(use_pragma_once, goblint::rules::UsePragmaOnce);
+rule_test!(dead_code, goblint::rules::DeadCode);
+rule_test!(missing_export_macro, goblint::rules::MissingExportMacro);

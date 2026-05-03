@@ -1,0 +1,2 @@
+without_export.h:6:1: missing_export_macro: 'MyWidget' is missing an export macro (e.g., G_MODULE_EXPORT, *_EXPORT)
+without_export.h:8:1: missing_export_macro: Public function 'my_widget_show' in header is missing an export macro (e.g., G_MODULE_EXPORT, *_EXPORT)
