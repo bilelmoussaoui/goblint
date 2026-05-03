@@ -1,0 +1,1 @@
+used_in_g_new0.c:9:1: dead_code: Static function 'foo' is never used

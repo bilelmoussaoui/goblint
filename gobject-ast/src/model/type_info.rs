@@ -97,6 +97,11 @@ impl TypeInfo {
                     is_const = true;
                     filtered_parts.push(part);
                 }
+                _ if auto_cleanup.is_some() && part == auto_cleanup.as_ref().unwrap().name() => {
+                    // Skip the auto-cleanup macro name (e.g. g_autofree) — it
+                    // is already captured in auto_cleanup and must not end up
+                    // in base_type (e.g. "g_autofree MyType" → "MyType").
+                }
                 _ => {
                     filtered_parts.push(part);
                 }
@@ -271,4 +276,14 @@ mod tests {
         assert_eq!(ti.auto_cleanup, Some(AutoCleanupMacro::Autofree));
         assert!(ti.is_const);
     }
+}
+
+#[test]
+fn test_autofree_with_type() {
+    let ti = TypeInfo::new(
+        "g_autofree FuZipFirmwareWriteItem *".to_string(),
+        SourceLocation::default(),
+    );
+    assert_eq!(ti.auto_cleanup, Some(AutoCleanupMacro::Autofree));
+    assert_eq!(ti.base_type, "FuZipFirmwareWriteItem");
 }

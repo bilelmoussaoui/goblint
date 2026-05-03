@@ -93,6 +93,33 @@ impl Parser {
             }
         }
 
+        // When the declarator is a bare identifier leaf its .children() is
+        // empty so the loop above never ran. Two patterns:
+        //
+        // a) Normal non-pointer declaration (`int foo;`, `MyType foo;`):
+        //    the identifier is the variable name.
+        //
+        // b) tree-sitter-c splits `g_autofree MyType *var = NULL;` into two
+        //    nodes — declaration(`g_autofree MyType`) and expression(`*var=NULL`).
+        //    In this case the identifier is the actual type name and the real
+        //    variable name lives in the sibling expression statement.
+        //
+        // Distinguish the two by checking for an auto-cleanup macro in type_parts.
+        if var_name.is_none() && declarator.kind() == "identifier" {
+            let tentative = TypeInfo::new(type_parts.join(" "), SourceLocation::default());
+            if tentative.auto_cleanup.is_some() {
+                // Pattern (b): move identifier into type so base_type is correct.
+                // Use an empty placeholder for the variable name since it is
+                // unrecoverable from this node alone.
+                type_parts.push(declarator_text);
+                var_name = Some("");
+            } else {
+                // Pattern (a): identifier is the variable name.
+                var_name = Some(declarator_text);
+                var_name_location = self.node_location(declarator);
+            }
+        }
+
         // Build full type text
         let mut full_text = type_parts.join(" ");
         if pointer_depth > 0 {
