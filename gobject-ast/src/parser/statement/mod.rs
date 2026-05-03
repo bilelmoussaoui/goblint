@@ -347,7 +347,9 @@ impl Parser {
                 let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {
                     if child.kind() != "attribute_specifier" && child.is_named() {
-                        return self.parse_statement(child, source);
+                        if let Some(stmt) = self.parse_statement(child, source) {
+                            return Some(stmt);
+                        }
                     }
                 }
                 None
