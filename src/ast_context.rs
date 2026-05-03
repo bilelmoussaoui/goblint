@@ -1,6 +1,5 @@
 use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
+    path::Path,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -11,22 +10,24 @@ use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use rayon::prelude::*;
 
+use crate::meson::MesonHeaders;
+
 /// AST-based project context that replaces the old tree-sitter based
 /// ProjectContext
 pub struct AstContext {
     pub project: Project,
-    /// Set of public header files (from meson introspection)
-    /// Used for dead code analysis to distinguish public vs private APIs
-    pub public_headers: Option<HashSet<PathBuf>>,
+    /// Header visibility from meson introspection.
+    /// None means no meson info was available
+    pub meson_headers: Option<MesonHeaders>,
 }
 
 impl AstContext {
-    /// Build with ignore patterns and optional public headers
+    /// Build with ignore patterns and optional meson header visibility info
     pub fn build_with_ignore(
         directory: &Path,
         ignore_matcher: &GlobSet,
         spinner: Option<&ProgressBar>,
-        public_headers: Option<HashSet<PathBuf>>,
+        meson_headers: Option<MesonHeaders>,
     ) -> Result<Self> {
         // Collect all files first to get count
         // WalkBuilder respects .gitignore, .ignore, and other ignore files
@@ -74,7 +75,7 @@ impl AstContext {
 
         Ok(Self {
             project,
-            public_headers,
+            meson_headers,
         })
     }
 
@@ -122,16 +123,20 @@ impl AstContext {
             .map(|(path, file)| (path.as_path(), file))
     }
 
-    /// Check if a file path is a public header (installed by meson)
-    /// Returns None if public_headers information is not available
+    /// Check if a file path is a public header.
+    /// When GIR headers are available, only those count as public.
+    /// Otherwise falls back to the installed headers set.
+    /// Returns None if no meson info is available at all.
     pub fn is_public_header(&self, path: &Path) -> Option<bool> {
-        self.public_headers
-            .as_ref()
-            .map(|headers| headers.contains(path))
+        let h = self.meson_headers.as_ref()?;
+        if !h.gir.is_empty() {
+            return Some(h.gir.contains(path));
+        }
+        Some(h.installed.contains(path))
     }
 
     /// Check if public/private distinction is available
     pub fn has_public_private_info(&self) -> bool {
-        self.public_headers.is_some()
+        self.meson_headers.is_some()
     }
 }

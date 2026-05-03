@@ -313,17 +313,29 @@ impl MesonIntrospection {
     }
 }
 
-/// Get installed headers for a project
-/// This is the main entry point that combines build dir finding and header
-/// extraction
-pub fn get_public_headers(
+/// Header sets derived from meson introspection.
+pub struct MesonHeaders {
+    /// Headers passed to g-ir-scanner — the truly public API.
+    /// Empty means no GIR targets exist in this project.
+    pub gir: HashSet<PathBuf>,
+    /// All headers installed by the project (install_headers()).
+    /// Used as the public set when gir is empty.
+    pub installed: HashSet<PathBuf>,
+}
+
+/// Derive header visibility sets for a project.
+/// Returns None if no meson build directory is found.
+pub fn get_header_sets(
     project_root: &Path,
     config_build_dir: Option<&str>,
-) -> Result<Option<HashSet<PathBuf>>> {
+) -> Result<Option<MesonHeaders>> {
     let Some(introspection) = MesonIntrospection::for_project(project_root, config_build_dir)?
     else {
         return Ok(None);
     };
 
-    Ok(Some(introspection.get_installed_headers()))
+    Ok(Some(MesonHeaders {
+        gir: introspection.get_introspected_headers().unwrap_or_default(),
+        installed: introspection.get_installed_headers(),
+    }))
 }

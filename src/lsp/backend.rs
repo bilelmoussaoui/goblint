@@ -90,9 +90,9 @@ impl GObjectBackend {
             }
         };
 
-        // Get public headers from meson introspection (for dead code analysis)
-        let public_headers =
-            goblint::meson::get_public_headers(&workspace_root, config.build_dir.as_deref())
+        // Get header visibility from meson introspection (for dead code analysis)
+        let meson_headers =
+            goblint::meson::get_header_sets(&workspace_root, config.build_dir.as_deref())
                 .ok()
                 .flatten();
 
@@ -101,7 +101,7 @@ impl GObjectBackend {
             &workspace_root,
             &ignore_matcher,
             None,
-            public_headers,
+            meson_headers,
         ) {
             Ok(ctx) => ctx,
             Err(e) => {
