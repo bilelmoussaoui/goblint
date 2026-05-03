@@ -218,12 +218,20 @@ impl Parser {
                 "G_DEFINE_POINTER_TYPE" => GObjectTypeKind::DefinePointerType {
                     function_prefix: function_prefix.to_owned(),
                 },
+                // G_DEFINE_TYPE_EXTENDED(TypeName, prefix, ParentType, flags, CODE)
+                // 5-arg variant; flags is the 4th arg, code block handled below.
+                "G_DEFINE_TYPE_EXTENDED" => GObjectTypeKind::DefineTypeExtended {
+                    function_prefix: function_prefix.to_owned(),
+                    parent_type: parent_type.to_owned(),
+                    flags: extract_nth_expression_text(parent, source, 3),
+                },
                 _ => return None,
             };
 
-            // For *_WITH_CODE macros, extract interfaces, has_private, and code statements
+            // For *_WITH_CODE macros and G_DEFINE_TYPE_EXTENDED, extract interfaces,
+            // has_private, and code statements from the code block.
             let (interfaces, has_private, code_block_statements) =
-                if macro_name.ends_with("_WITH_CODE") {
+                if macro_name.ends_with("_WITH_CODE") || macro_name == "G_DEFINE_TYPE_EXTENDED" {
                     self.extract_code_block_info_from_parent(parent, source, &arg_values)
                 } else {
                     (Vec::new(), false, Vec::new())
@@ -455,6 +463,32 @@ impl Parser {
             self.collect_identifiers(child, source, result);
         }
     }
+}
+
+/// Return the raw source text of the n-th expression argument (0-indexed)
+/// inside a `gobject_type_macro` node that uses the `_WITH_CODE` grammar rule.
+/// Falls back to "0" when the argument is not found (e.g. it is a number
+/// literal whose node is not reached) or cannot be decoded.
+fn extract_nth_expression_text(parent: Node, source: &[u8], n: usize) -> String {
+    let mut expr_count = 0;
+    let mut cursor = parent.walk();
+    for child in parent.children(&mut cursor) {
+        if child.is_named() && child.kind() != "gobject_code_block" {
+            // Skip the macro name itself (first named child)
+            if expr_count == 0 {
+                expr_count += 1;
+                continue;
+            }
+            if expr_count - 1 == n {
+                return std::str::from_utf8(&source[child.byte_range()])
+                    .unwrap_or("0")
+                    .trim()
+                    .to_owned();
+            }
+            expr_count += 1;
+        }
+    }
+    "0".to_owned()
 }
 
 fn collect_identifiers_from_expr<'a>(

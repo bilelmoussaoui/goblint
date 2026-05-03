@@ -76,6 +76,9 @@ impl GObjectType {
             }
             | GObjectTypeKind::DefinePointerType {
                 function_prefix, ..
+            }
+            | GObjectTypeKind::DefineTypeExtended {
+                function_prefix, ..
             } => function_prefix,
         }
     }
@@ -231,6 +234,13 @@ pub enum GObjectTypeKind {
     DefinePointerType {
         function_prefix: String,
     },
+    DefineTypeExtended {
+        function_prefix: String,
+        parent_type: String,
+        /// Raw text of the flags argument (4th arg), e.g. "0" or
+        /// "G_TYPE_FLAG_ABSTRACT"
+        flags: String,
+    },
 }
 
 impl GObjectTypeKind {
@@ -254,6 +264,7 @@ impl GObjectTypeKind {
             Self::DefineBoxedType { .. } => "G_DEFINE_BOXED_TYPE",
             Self::DefineBoxedTypeWithCode { .. } => "G_DEFINE_BOXED_TYPE_WITH_CODE",
             Self::DefinePointerType { .. } => "G_DEFINE_POINTER_TYPE",
+            Self::DefineTypeExtended { .. } => "G_DEFINE_TYPE_EXTENDED",
         }
     }
 
@@ -284,6 +295,7 @@ impl GObjectTypeKind {
                 | Self::DefineInterfaceWithCode { .. }
                 | Self::DefineBoxedType { .. }
                 | Self::DefineBoxedTypeWithCode { .. }
+                | Self::DefineTypeExtended { .. }
         )
     }
 
@@ -307,6 +319,7 @@ impl GObjectTypeKind {
                     | Self::DefineAbstractType { .. }
                     | Self::DefineAbstractTypeWithCode { .. }
                     | Self::DefineAbstractTypeWithPrivate { .. }
+                    | Self::DefineTypeExtended { .. }
             ),
             // G_DECLARE_INTERFACE requires G_DEFINE_INTERFACE.
             Self::DeclareInterface { .. } => matches!(

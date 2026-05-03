@@ -71,7 +71,8 @@ impl Rule for MissingAutoptrCleanup {
                     | GObjectTypeKind::DefineFinalTypeWithCode { .. }
                     | GObjectTypeKind::DefineFinalTypeWithPrivate { .. }
                     | GObjectTypeKind::DefineInterface { .. }
-                    | GObjectTypeKind::DefineInterfaceWithCode { .. } => {
+                    | GObjectTypeKind::DefineInterfaceWithCode { .. }
+                    | GObjectTypeKind::DefineTypeExtended { .. } => {
                         types_needing_cleanup.push((
                             path,
                             gobject_type.type_name.clone(),

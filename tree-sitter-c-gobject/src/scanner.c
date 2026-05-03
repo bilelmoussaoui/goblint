@@ -128,6 +128,15 @@ bool tree_sitter_c_gobject_external_scanner_scan(
         return false;
     }
 
+    /* G_DEFINE_TYPE_EXTENDED — 5-arg variant with a code block as the last arg,
+     * same structure as *_WITH_CODE macros. Must be checked before the general
+     * G_DEFINE_* rule so the more-specific token wins. */
+    if (valid_symbols[GOBJECT_MACRO_NAME_WITH_CODE] &&
+        strcmp(buf, "G_DEFINE_TYPE_EXTENDED") == 0) {
+        lexer->result_symbol = GOBJECT_MACRO_NAME_WITH_CODE;
+        return true;
+    }
+
     /* G_DEFINE_*_WITH_CODE — must be checked before the general G_DEFINE_* rule
      * so the more-specific token wins. */
     if (valid_symbols[GOBJECT_MACRO_NAME_WITH_CODE] &&
