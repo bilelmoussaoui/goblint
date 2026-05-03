@@ -351,6 +351,30 @@ impl Parser {
                 }
                 None
             }
+            "struct_specifier" | "union_specifier" => {
+                // Standalone struct/union definition: `struct _Foo { ... };`
+                // tree-sitter-c parses these as a bare struct_specifier node
+                // (not wrapped in a declaration), with the semicolon as a
+                // separate sibling.
+                if let Some(body) = node.child_by_field_name("body") {
+                    let name = node
+                        .child_by_field_name("name")
+                        .and_then(|n| std::str::from_utf8(&source[n.byte_range()]).ok())
+                        .unwrap_or("")
+                        .to_owned();
+
+                    if !name.is_empty() {
+                        let fields = self.extract_struct_fields_from_body(body, source);
+                        return Some(TopLevelItem::TypeDefinition(TypeDefItem::Struct {
+                            name,
+                            has_body: true,
+                            fields,
+                            location: self.node_location(node),
+                        }));
+                    }
+                }
+                None
+            }
             "enum_specifier" => {
                 // Standalone enum (enum Name { ... } or anonymous enum { ... })
                 if let Some(enum_info) = self.extract_enum(node, source) {
