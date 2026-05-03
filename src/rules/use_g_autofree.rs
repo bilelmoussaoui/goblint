@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use gobject_ast::Statement;
-
 use super::Rule;
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
@@ -29,7 +27,11 @@ impl Rule for UseGAutofree {
         violations: &mut Vec<Violation>,
     ) {
         // Find all local pointer declarations
-        let local_vars = self.find_local_pointer_vars(&func.body_statements);
+        let local_vars: HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)> =
+            func.iter_local_declarations()
+                .filter(|d| !d.type_info.uses_auto_cleanup() && d.is_simple_identifier())
+                .map(|d| (d.name.clone(), (d.type_info.clone(), d.location)))
+                .collect();
 
         // For each variable, check if it's a candidate for g_autofree
         for (var_name, (type_info, location)) in &local_vars {
@@ -71,33 +73,6 @@ impl Rule for UseGAutofree {
 }
 
 impl UseGAutofree {
-    fn find_local_pointer_vars(
-        &self,
-        statements: &[Statement],
-    ) -> HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)> {
-        let mut result = HashMap::new();
-        self.collect_local_vars(statements, &mut result);
-        result
-    }
-
-    fn collect_local_vars(
-        &self,
-        statements: &[Statement],
-        result: &mut HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)>,
-    ) {
-        for stmt in statements {
-            for decl in stmt.iter_declarations() {
-                if decl.is_simple_identifier() {
-                    // Skip variables that already have auto cleanup attributes
-                    if decl.type_info.uses_auto_cleanup() {
-                        continue;
-                    }
-                    result.insert(decl.name.clone(), (decl.type_info.clone(), decl.location));
-                }
-            }
-        }
-    }
-
     fn is_autofree_allocation(&self, func_name: &str) -> bool {
         // Functions that allocate memory suitable for g_autofree
         matches!(

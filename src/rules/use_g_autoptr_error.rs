@@ -1,5 +1,3 @@
-use gobject_ast::Statement;
-
 use super::Rule;
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
@@ -38,7 +36,15 @@ impl UseGAutoptrError {
         violations: &mut Vec<Violation>,
     ) {
         // Find all GError* declarations
-        let gerror_vars = self.find_gerror_declarations(&func.body_statements);
+        let gerror_vars: Vec<(String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation))> = func
+            .iter_local_declarations()
+            .filter(|d| {
+                !d.type_info.uses_auto_cleanup()
+                    && d.type_info.is_base_type("GError")
+                    && d.type_info.is_pointer()
+            })
+            .map(|d| (d.name.clone(), (d.type_info.clone(), d.location)))
+            .collect();
 
         // For each GError* variable, check if it's manually freed
         for (var_name, (type_info, location)) in &gerror_vars {
@@ -52,35 +58,6 @@ impl UseGAutoptrError {
                         var_name
                     ),
                 ));
-            }
-        }
-    }
-
-    fn find_gerror_declarations(
-        &self,
-        statements: &[Statement],
-    ) -> Vec<(String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation))> {
-        let mut result = Vec::new();
-        self.collect_gerror_vars(statements, &mut result);
-        result
-    }
-
-    fn collect_gerror_vars(
-        &self,
-        statements: &[Statement],
-        result: &mut Vec<(String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation))>,
-    ) {
-        for stmt in statements {
-            for decl in stmt.iter_declarations() {
-                // Skip variables already using auto-cleanup macros
-                if decl.type_info.uses_auto_cleanup() {
-                    continue;
-                }
-
-                // Check if type is GError pointer
-                if decl.type_info.is_base_type("GError") && decl.type_info.is_pointer() {
-                    result.push((decl.name.clone(), (decl.type_info.clone(), decl.location)));
-                }
             }
         }
     }

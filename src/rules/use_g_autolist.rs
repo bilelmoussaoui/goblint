@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use gobject_ast::Statement;
-
 use super::Rule;
 use crate::{ast_context::AstContext, config::Config, rules::Violation};
 
@@ -40,7 +38,16 @@ impl UseGAutolist {
         violations: &mut Vec<Violation>,
     ) {
         // Find all GList*/GSList* declarations
-        let list_vars = self.find_list_vars(&func.body_statements);
+        let list_vars: HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)> = func
+            .iter_local_declarations()
+            .filter(|d| {
+                !d.type_info.uses_auto_cleanup()
+                    && (d.type_info.base_type == "GList" || d.type_info.base_type == "GSList")
+                    && d.type_info.is_pointer()
+                    && d.is_simple_identifier()
+            })
+            .map(|d| (d.name.clone(), (d.type_info.clone(), d.location)))
+            .collect();
 
         // For each list variable, check if it's freed with
         // g_list_free_full/g_slist_free_full
@@ -79,33 +86,6 @@ impl UseGAutolist {
                 }
             }
         }
-    }
-
-    /// Find all GList*/GSList* variable declarations
-    fn find_list_vars(
-        &self,
-        statements: &[Statement],
-    ) -> HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)> {
-        let mut result = HashMap::new();
-
-        for stmt in statements {
-            for decl in stmt.iter_declarations() {
-                // Skip variables already using auto-cleanup macros
-                if decl.type_info.uses_auto_cleanup() {
-                    continue;
-                }
-
-                // Look for GList* or GSList*
-                if (decl.type_info.base_type == "GList" || decl.type_info.base_type == "GSList")
-                    && decl.type_info.is_pointer()
-                    && decl.is_simple_identifier()
-                {
-                    result.insert(decl.name.clone(), (decl.type_info.clone(), decl.location));
-                }
-            }
-        }
-
-        result
     }
 
     /// Check if any call to the free function uses a basic destructor (g_free,

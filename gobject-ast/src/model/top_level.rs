@@ -194,6 +194,13 @@ impl FunctionDefItem {
             .collect()
     }
 
+    /// Iterate all local variable declarations in the function body recursively
+    pub fn iter_local_declarations(&self) -> impl Iterator<Item = &super::statement::VariableDecl> {
+        self.body_statements
+            .iter()
+            .flat_map(|s| s.iter_declarations())
+    }
+
     /// Collect all return values from the function body
     pub fn collect_return_values(&self) -> Vec<&super::expression::Expression> {
         self.body_statements

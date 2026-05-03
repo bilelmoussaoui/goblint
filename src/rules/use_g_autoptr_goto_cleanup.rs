@@ -77,34 +77,22 @@ impl UseGAutoptrGotoCleanup {
     ) -> HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)> {
         let mut result = HashMap::new();
 
-        // First pass: find all local pointer declarations
-        let mut local_vars = HashMap::new();
-        self.collect_local_pointer_declarations(statements, &mut local_vars);
+        let local_vars: HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)> =
+            statements
+                .iter()
+                .flat_map(|s| s.iter_declarations())
+                .filter(|d| {
+                    !d.type_info.uses_auto_cleanup()
+                        && d.type_info.is_pointer()
+                        && d.is_simple_identifier()
+                })
+                .map(|d| (d.name.clone(), (d.type_info.clone(), d.location)))
+                .collect();
 
         // Second pass: find assignments to those variables from allocation functions
         self.collect_allocated_vars(statements, &local_vars, &mut result);
 
         result
-    }
-
-    fn collect_local_pointer_declarations(
-        &self,
-        statements: &[Statement],
-        result: &mut HashMap<String, (gobject_ast::TypeInfo, gobject_ast::SourceLocation)>,
-    ) {
-        for stmt in statements {
-            for decl in stmt.iter_declarations() {
-                // Skip variables already using auto-cleanup macros
-                if decl.type_info.uses_auto_cleanup() {
-                    continue;
-                }
-
-                // Only track pointer types
-                if decl.type_info.is_pointer() && decl.is_simple_identifier() {
-                    result.insert(decl.name.clone(), (decl.type_info.clone(), decl.location));
-                }
-            }
-        }
     }
 
     fn collect_allocated_vars(
