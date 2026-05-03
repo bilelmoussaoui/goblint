@@ -322,6 +322,11 @@ impl Parser {
                 // Type definitions inside function bodies (rare but valid C)
                 None
             }
+            "gobject_type_macro" | "gobject_macro_statement" | "gobject_decls_block" => {
+                // GObject macros inside function bodies (G_DEFINE_TYPE inside a block,
+                // G_STATIC_ASSERT statements, G_BEGIN_DECLS/G_END_DECLS, etc.)
+                None
+            }
             "function_definition" => {
                 // Nested function definitions (GNU C extension) - skip for now
                 // BUT: tree-sitter sometimes mist parses "else if" inside #ifdef as
