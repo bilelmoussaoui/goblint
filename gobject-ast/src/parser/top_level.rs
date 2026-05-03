@@ -291,6 +291,7 @@ impl Parser {
                     return Some(TopLevelItem::TypeDefinition(TypeDefItem::Typedef {
                         name: typedef.name,
                         target_type: typedef.target_type,
+                        tag_name: typedef.tag_name,
                         struct_fields,
                         location: self.node_location(node),
                     }));
@@ -577,8 +578,9 @@ impl Parser {
                                 .ok()
                                 .map(|s| s.trim().to_owned())
                         }
-                        "struct_specifier" | "enum_specifier" => {
-                            // `struct Nested { … }` inline — grab the tag name if any
+                        "struct_specifier" | "union_specifier" | "enum_specifier" => {
+                            // `struct/union/enum Tag { … }` or bare tag ref —
+                            // grab the tag name so type_references tracks it.
                             type_node
                                 .child_by_field_name("name")
                                 .and_then(|n| std::str::from_utf8(&source[n.byte_range()]).ok())
@@ -658,10 +660,23 @@ impl Parser {
         let target_type =
             crate::TypeInfo::new(target_text.to_owned(), self.node_location(type_node));
 
+        // For `typedef struct _Foo Foo` / `typedef union _Bar Bar`, extract the
+        // bare tag name ("_Foo" / "_Bar") from the struct/union specifier's name
+        // field so callers don't have to strip the "struct"/"union" keyword.
+        let tag_name = if matches!(type_node.kind(), "struct_specifier" | "union_specifier") {
+            type_node
+                .child_by_field_name("name")
+                .and_then(|n| std::str::from_utf8(&source[n.byte_range()]).ok())
+                .map(|s| s.to_owned())
+        } else {
+            None
+        };
+
         Some(TypedefInfo {
             name,
             location: self.node_location(node),
             target_type,
+            tag_name,
         })
     }
 

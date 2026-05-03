@@ -94,6 +94,9 @@ impl Rule for DeadCode {
         // referenced whenever the tag is referenced (code often uses the tag
         // directly rather than the alias).
         let mut typedef_to_tag: HashMap<String, String> = HashMap::new();
+        // Reverse map: bare tag name → typedef alias name.  Used to consider
+        // `struct _Foo` (keyed as "_Foo") referenced when `Foo` appears in code.
+        let mut tag_to_typedef: HashMap<String, String> = HashMap::new();
 
         for (path, file) in ast_context.iter_c_files() {
             collect_type_defs_from_items(
@@ -101,6 +104,7 @@ impl Rule for DeadCode {
                 path,
                 &mut type_definitions,
                 &mut typedef_to_tag,
+                &mut tag_to_typedef,
             );
         }
 
@@ -114,6 +118,7 @@ impl Rule for DeadCode {
                 path,
                 &mut type_definitions,
                 &mut typedef_to_tag,
+                &mut tag_to_typedef,
             );
         }
 
@@ -191,7 +196,29 @@ impl Rule for DeadCode {
                             | GObjectTypeKind::DefineAbstractTypeWithPrivate { .. }
                     )
                 {
-                    type_references.insert(format!("{}Private", gobject_type.type_name));
+                    let priv_name = format!("{}Private", gobject_type.type_name);
+                    type_references.insert(priv_name.clone());
+                    // Also mark the underscore-prefixed tag form (e.g.
+                    // `struct _ShellGLSLEffectPrivate` forward-declared before
+                    // G_DEFINE_TYPE_WITH_PRIVATE).
+                    type_references.insert(format!("_{priv_name}"));
+                }
+
+                // GObject private structs are used implicitly by the type
+                // machinery — never flag them as dead code.
+                //   _TypeName          — instance struct (all types)
+                //   _TypeNameClass     — class vtable (derivable/abstract)
+                //   _TypeNameInterface — interface vtable (interfaces only)
+                let tn = &gobject_type.type_name;
+                type_references.insert(format!("_{tn}"));
+                if gobject_type.is_interface() {
+                    type_references.insert(format!("_{tn}Interface"));
+                } else if !matches!(
+                    gobject_type.kind,
+                    GObjectTypeKind::DefineBoxedType { .. }
+                        | GObjectTypeKind::DefineBoxedTypeWithCode { .. }
+                ) {
+                    type_references.insert(format!("_{tn}Class"));
                 }
 
                 for stmt in &gobject_type.code_block_statements {
@@ -288,6 +315,17 @@ impl Rule for DeadCode {
             {
                 continue;
             }
+            // Reverse: if `_Foo` is a tag with typedef alias `Foo`, consider
+            // the tag referenced whenever the alias appears in code.  This
+            // covers the common pattern where a union/struct is forward-declared
+            // as `typedef union _Foo Foo;` and then defined as `union _Foo {...}`
+            // but code only ever spells `Foo`, not `_Foo`.
+            if tag_to_typedef
+                .get(type_name)
+                .is_some_and(|alias| type_references.contains(alias))
+            {
+                continue;
+            }
 
             for (def_path, location) in defs {
                 violations.push(self.violation(
@@ -309,6 +347,7 @@ fn collect_type_defs_from_items<'a>(
     path: &'a std::path::Path,
     defs: &mut HashMap<String, Vec<(&'a std::path::Path, gobject_ast::SourceLocation)>>,
     typedef_to_tag: &mut HashMap<String, String>,
+    tag_to_typedef: &mut HashMap<String, String>,
 ) {
     for item in items {
         match item {
@@ -326,19 +365,23 @@ fn collect_type_defs_from_items<'a>(
                 TypeDefItem::Typedef {
                     name,
                     target_type,
+                    tag_name,
                     struct_fields,
                     location,
-                    ..
                 } => {
                     defs.entry(name.clone())
                         .or_default()
                         .push((path, *location));
-                    // Record the tag alias mapping for forward typedefs.
-                    // `typedef struct _Foo Foo` has no fields and a non-empty
-                    // tag base type; referencing `_Foo` should count as a
-                    // reference to `Foo` too.
+                    // Forward typedef aliases: `typedef struct _Foo Foo`.
+                    // typedef_to_tag: Foo → "struct _Foo" (full text, used in
+                    // the existing check against type_references).
+                    // tag_to_typedef: _Foo → Foo (clean tag name from the AST,
+                    // used when the struct definition is keyed as "_Foo").
                     if struct_fields.is_empty() && !target_type.base_type.is_empty() {
                         typedef_to_tag.insert(name.clone(), target_type.base_type.clone());
+                    }
+                    if let Some(tag) = tag_name {
+                        tag_to_typedef.insert(tag.clone(), name.clone());
                     }
                 }
                 _ => {}
@@ -348,7 +391,7 @@ fn collect_type_defs_from_items<'a>(
                 PreprocessorDirective::Conditional { body, .. }
                 | PreprocessorDirective::GObjectDeclsBlock { body, .. },
             ) => {
-                collect_type_defs_from_items(body, path, defs, typedef_to_tag);
+                collect_type_defs_from_items(body, path, defs, typedef_to_tag, tag_to_typedef);
             }
             _ => {}
         }
