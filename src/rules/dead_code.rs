@@ -89,8 +89,19 @@ impl Rule for DeadCode {
             Vec<(&std::path::Path, gobject_ast::SourceLocation)>,
         > = HashMap::new();
 
+        // For forward typedef aliases (`typedef struct _Foo Foo;`), map the
+        // typedef name to its underlying tag so we can consider the typedef
+        // referenced whenever the tag is referenced (code often uses the tag
+        // directly rather than the alias).
+        let mut typedef_to_tag: HashMap<String, String> = HashMap::new();
+
         for (path, file) in ast_context.iter_c_files() {
-            collect_type_defs_from_items(&file.top_level_items, path, &mut type_definitions);
+            collect_type_defs_from_items(
+                &file.top_level_items,
+                path,
+                &mut type_definitions,
+                &mut typedef_to_tag,
+            );
         }
 
         for (path, file) in ast_context.iter_header_files() {
@@ -98,7 +109,12 @@ impl Rule for DeadCode {
             if ast_context.is_public_header(path) == Some(true) {
                 continue;
             }
-            collect_type_defs_from_items(&file.top_level_items, path, &mut type_definitions);
+            collect_type_defs_from_items(
+                &file.top_level_items,
+                path,
+                &mut type_definitions,
+                &mut typedef_to_tag,
+            );
         }
 
         // ── Step 2: Collect all function and type references ───────────────────
@@ -184,35 +200,14 @@ impl Rule for DeadCode {
                 }
             }
 
-            // Preprocessor directives (autoptr cleanup, #define bodies)
-            for item in &file.top_level_items {
-                if let TopLevelItem::Preprocessor(directive) = item {
-                    match directive {
-                        PreprocessorDirective::AutoptrCleanupFunc {
-                            type_name,
-                            cleanup_function,
-                            ..
-                        } => {
-                            function_references.insert(cleanup_function.clone());
-                            type_references.insert(type_name.clone());
-                        }
-                        PreprocessorDirective::AutoCleanupClearFunc {
-                            type_name,
-                            cleanup_function,
-                            ..
-                        } => {
-                            function_references.insert(cleanup_function.clone());
-                            type_references.insert(type_name.clone());
-                        }
-                        PreprocessorDirective::Define {
-                            value: Some(value), ..
-                        } => {
-                            extract_function_calls_from_text(value, &mut function_references);
-                        }
-                        _ => {}
-                    }
-                }
-            }
+            // Preprocessor directives (autoptr cleanup, #define bodies).
+            // scan_preprocessor_items recurses into #ifdef/#if blocks so that
+            // #define macros inside conditional sections are also checked.
+            scan_preprocessor_items(
+                &file.top_level_items,
+                &mut function_references,
+                &mut type_references,
+            );
         }
 
         // ── Step 3: Report function violations ─────────────────────────────────
@@ -285,6 +280,14 @@ impl Rule for DeadCode {
             if type_references.contains(type_name) {
                 continue;
             }
+            // For forward typedef aliases (`typedef struct _Foo Foo`), also
+            // consider the typedef referenced if the underlying tag is used.
+            if typedef_to_tag
+                .get(type_name)
+                .is_some_and(|tag| type_references.contains(tag))
+            {
+                continue;
+            }
 
             for (def_path, location) in defs {
                 violations.push(self.violation(
@@ -305,6 +308,7 @@ fn collect_type_defs_from_items<'a>(
     items: &'a [TopLevelItem],
     path: &'a std::path::Path,
     defs: &mut HashMap<String, Vec<(&'a std::path::Path, gobject_ast::SourceLocation)>>,
+    typedef_to_tag: &mut HashMap<String, String>,
 ) {
     for item in items {
         match item {
@@ -319,10 +323,23 @@ fn collect_type_defs_from_items<'a>(
                         .or_default()
                         .push((path, *location));
                 }
-                TypeDefItem::Typedef { name, location, .. } => {
+                TypeDefItem::Typedef {
+                    name,
+                    target_type,
+                    struct_fields,
+                    location,
+                    ..
+                } => {
                     defs.entry(name.clone())
                         .or_default()
                         .push((path, *location));
+                    // Record the tag alias mapping for forward typedefs.
+                    // `typedef struct _Foo Foo` has no fields and a non-empty
+                    // tag base type; referencing `_Foo` should count as a
+                    // reference to `Foo` too.
+                    if struct_fields.is_empty() && !target_type.base_type.is_empty() {
+                        typedef_to_tag.insert(name.clone(), target_type.base_type.clone());
+                    }
                 }
                 _ => {}
             },
@@ -331,9 +348,51 @@ fn collect_type_defs_from_items<'a>(
                 PreprocessorDirective::Conditional { body, .. }
                 | PreprocessorDirective::GObjectDeclsBlock { body, .. },
             ) => {
-                collect_type_defs_from_items(body, path, defs);
+                collect_type_defs_from_items(body, path, defs, typedef_to_tag);
             }
             _ => {}
+        }
+    }
+}
+
+/// Recursively scan preprocessor directives for function/type references.
+/// Handles autoptr cleanup, #define bodies, and recurses into #ifdef blocks
+/// so that macros defined inside conditional sections are not missed.
+fn scan_preprocessor_items(
+    items: &[TopLevelItem],
+    function_refs: &mut HashSet<String>,
+    type_refs: &mut HashSet<String>,
+) {
+    for item in items {
+        if let TopLevelItem::Preprocessor(directive) = item {
+            match directive {
+                PreprocessorDirective::AutoptrCleanupFunc {
+                    type_name,
+                    cleanup_function,
+                    ..
+                } => {
+                    function_refs.insert(cleanup_function.clone());
+                    type_refs.insert(type_name.clone());
+                }
+                PreprocessorDirective::AutoCleanupClearFunc {
+                    type_name,
+                    cleanup_function,
+                    ..
+                } => {
+                    function_refs.insert(cleanup_function.clone());
+                    type_refs.insert(type_name.clone());
+                }
+                PreprocessorDirective::Define {
+                    value: Some(value), ..
+                } => {
+                    extract_function_calls_from_text(value, function_refs);
+                }
+                PreprocessorDirective::Conditional { body, .. }
+                | PreprocessorDirective::GObjectDeclsBlock { body, .. } => {
+                    scan_preprocessor_items(body, function_refs, type_refs);
+                }
+                _ => {}
+            }
         }
     }
 }
@@ -460,10 +519,12 @@ fn extract_function_calls_from_text(text: &str, refs: &mut HashSet<String>) {
             if !current_identifier.is_empty() {
                 if c == '(' {
                     refs.insert(current_identifier.clone());
-                } else if c.is_whitespace() {
+                } else if c.is_whitespace() || c == '\\' {
+                    // Skip whitespace and backslash line-continuations, then
+                    // check whether '(' follows (macro call on next line).
                     let mut temp_chars = chars.clone();
                     while let Some(&next_c) = temp_chars.peek() {
-                        if next_c.is_whitespace() {
+                        if next_c.is_whitespace() || next_c == '\\' {
                             temp_chars.next();
                         } else {
                             if next_c == '(' {
