@@ -887,8 +887,26 @@ impl Parser {
     ) -> Option<&'a str> {
         if let Some(inner) = declarator.child_by_field_name("declarator") {
             if inner.kind() == "identifier" {
-                let name = &source[inner.byte_range()];
-                return Some(std::str::from_utf8(name).ok()?);
+                let text = std::str::from_utf8(&source[inner.byte_range()]).ok()?;
+                // __attribute__ appearing between '*' and the real name means the
+                // function_declarator's "declarator" field points at the attribute
+                // keyword rather than the actual identifier.  Recover by searching
+                // sibling call_expression nodes for the real name.
+                if text == "__attribute__" {
+                    let mut cursor = declarator.walk();
+                    for child in declarator.children(&mut cursor) {
+                        if child.kind() == "call_expression" {
+                            if let Some(func_node) = child.child_by_field_name("function") {
+                                if func_node.kind() == "identifier" {
+                                    return std::str::from_utf8(&source[func_node.byte_range()])
+                                        .ok();
+                                }
+                            }
+                        }
+                    }
+                    return None;
+                }
+                return Some(text);
             }
             return self.extract_declarator_name(inner, source);
         }
