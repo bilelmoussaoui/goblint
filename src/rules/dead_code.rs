@@ -143,8 +143,9 @@ impl Rule for DeadCode {
             // Function declarations: return type and parameters reference types
             for func in file.iter_function_declarations() {
                 collect_type_ref(&func.return_type, &mut type_references);
-                // Note: FunctionDeclItem doesn't store parameters in the AST,
-                // so we only have the return type here.
+                for param in &func.parameters {
+                    collect_type_ref(&param.type_info, &mut type_references);
+                }
             }
 
             // Top-level declarations and preprocessor directives

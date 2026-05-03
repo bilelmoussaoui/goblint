@@ -138,6 +138,7 @@ pub struct FunctionDeclItem {
     pub name: String,
     pub return_type: super::TypeInfo,
     pub is_static: bool,
+    pub parameters: Vec<super::types::Parameter>,
     pub export_macros: Vec<String>,
     pub location: SourceLocation,
 }

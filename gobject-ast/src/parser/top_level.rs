@@ -332,10 +332,30 @@ impl Parser {
                         // Extract return type
                         let return_type = self.extract_return_type(node, source);
 
+                        // Extract parameters from the function_declarator node
+                        let parameters = {
+                            let mut params = Vec::new();
+                            let mut cursor = func_decl.walk();
+                            for child in func_decl.children_by_field_name("parameters", &mut cursor)
+                            {
+                                params = self.extract_parameters(child, source);
+                                break;
+                            }
+                            if params.is_empty() {
+                                if let Some(params_node) =
+                                    self.find_node_by_kind(func_decl, "parameter_list")
+                                {
+                                    params = self.extract_parameters(params_node, source);
+                                }
+                            }
+                            params
+                        };
+
                         return Some(TopLevelItem::FunctionDeclaration(FunctionDeclItem {
                             name: name.to_owned(),
                             return_type,
                             is_static,
+                            parameters,
                             export_macros: export_macros
                                 .into_iter()
                                 .map(|s| s.to_owned())
