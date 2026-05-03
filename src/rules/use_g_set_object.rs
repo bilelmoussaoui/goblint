@@ -125,15 +125,15 @@ impl UseGSetObject {
                 && unary.operator == UnaryOp::AddressOf
             {
                 // Case 1: g_clear_object(&var)
-                return Some((self.expr_to_string(&unary.operand), false));
+                return Some((unary.operand.to_text(), false));
             } else {
                 // Case 2: g_clear_object(ptr) where ptr is GObject**
-                return Some((self.expr_to_string(first_arg), true));
+                return Some((first_arg.to_text(), true));
             }
         } else if call.is_function("g_object_unref") {
             // g_object_unref(var) - assignment is var = ...
             let first_arg = call.get_arg(0)?;
-            return Some((self.expr_to_string(first_arg), false));
+            return Some((first_arg.to_text(), false));
         }
 
         None
@@ -158,7 +158,7 @@ impl UseGSetObject {
             && call.is_function("g_object_ref")
             && !call.arguments.is_empty()
         {
-            let new_val = self.arg_to_string(&call.arguments[0]);
+            let new_val = call.get_arg(0)?.to_text();
             let var_name = assign.lhs_as_text();
             if !var_name.is_empty() {
                 return Some((var_name, new_val));
@@ -166,35 +166,5 @@ impl UseGSetObject {
         }
 
         None
-    }
-
-    fn arg_to_string(&self, arg: &gobject_ast::Argument) -> String {
-        let gobject_ast::Argument::Expression(expr) = arg;
-        self.expr_to_string(expr)
-    }
-
-    fn expr_to_string(&self, expr: &Expression) -> String {
-        match expr {
-            Expression::Identifier(id) => id.name.clone(),
-            Expression::FieldAccess(f) => f.text(),
-            Expression::Unary(unary) => {
-                // Handle *ptr, &ptr, etc.
-                format!(
-                    "{}{}",
-                    unary.operator.as_str(),
-                    self.expr_to_string(&unary.operand)
-                )
-            }
-            Expression::Call(call) => {
-                // Reconstruct the call expression
-                let args: Vec<String> = call
-                    .arguments
-                    .iter()
-                    .map(|a| self.arg_to_string(a))
-                    .collect();
-                format!("{} ({})", call.function_name(), args.join(", "))
-            }
-            _ => String::new(),
-        }
     }
 }

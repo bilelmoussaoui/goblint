@@ -262,21 +262,10 @@ impl UseGClearSignalHandler {
             return None;
         }
 
-        let obj = self.extract_arg_text(&call.arguments[0])?;
-        let handler_id = self.extract_arg_text(&call.arguments[1])?;
+        let obj = call.get_arg(0)?.extract_variable_name()?;
+        let handler_id = call.get_arg(1)?.extract_variable_name()?;
 
         Some((obj, handler_id))
-    }
-
-    /// Extract text from an argument expression
-    fn extract_arg_text(&self, arg: &gobject_ast::Argument) -> Option<String> {
-        let gobject_ast::Argument::Expression(expr) = arg;
-
-        match expr.as_ref() {
-            Expression::Identifier(id) => Some(id.name.clone()),
-            Expression::FieldAccess(f) => Some(f.text()),
-            _ => None,
-        }
     }
 
     /// Check if stmt is `expected_id = 0;`

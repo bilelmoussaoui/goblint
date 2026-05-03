@@ -48,12 +48,12 @@ impl UseGSetStr {
         violations: &mut Vec<Violation>,
     ) -> bool {
         // First statement: g_free(var) or g_clear_pointer(&var, g_free)
-        let Some(var_name) = self.extract_gfree_var(s1) else {
+        let Some(var_name) = self.extract_gfree_var(s1, &file.source) else {
             return false;
         };
 
         // Second statement: var = g_strdup(...)
-        let Some((assign_var, new_val)) = self.extract_strdup_assignment(s2) else {
+        let Some((assign_var, new_val)) = self.extract_strdup_assignment(s2, &file.source) else {
             return false;
         };
 
@@ -86,7 +86,7 @@ impl UseGSetStr {
     }
 
     /// Extract variable from g_free(var) or g_clear_pointer(&var, g_free)
-    fn extract_gfree_var(&self, stmt: &Statement) -> Option<String> {
+    fn extract_gfree_var(&self, stmt: &Statement, source: &[u8]) -> Option<String> {
         let Statement::Expression(expr_stmt) = stmt else {
             return None;
         };
@@ -96,12 +96,7 @@ impl UseGSetStr {
         };
 
         if call.is_function("g_free") {
-            // g_free(var) - var can be identifier, field access, or *ptr
-            if call.arguments.is_empty() {
-                return None;
-            }
-            let var = self.arg_to_string(&call.arguments[0]);
-            return if var.is_empty() { None } else { Some(var) };
+            return call.get_arg(0)?.to_source_string(source);
         } else if call.is_function("g_clear_pointer") {
             // g_clear_pointer(&var, g_free)
             if call.arguments.len() != 2 {
@@ -124,7 +119,7 @@ impl UseGSetStr {
             if let Expression::Unary(unary) = first_arg
                 && unary.operator == UnaryOp::AddressOf
             {
-                return Some(self.expr_to_string(&unary.operand));
+                return unary.operand.to_source_string(source);
             }
         }
 
@@ -133,7 +128,11 @@ impl UseGSetStr {
 
     /// Extract (var, new_val) from var = g_strdup(new_val) or var = cond ?
     /// g_strdup(...) : NULL
-    fn extract_strdup_assignment(&self, stmt: &Statement) -> Option<(String, String)> {
+    fn extract_strdup_assignment(
+        &self,
+        stmt: &Statement,
+        source: &[u8],
+    ) -> Option<(String, String)> {
         let Statement::Expression(expr_stmt) = stmt else {
             return None;
         };
@@ -151,7 +150,7 @@ impl UseGSetStr {
             && call.is_function("g_strdup")
             && !call.arguments.is_empty()
         {
-            let new_val = self.arg_to_string(&call.arguments[0]);
+            let new_val = call.get_arg(0)?.to_source_string(source)?;
             let var_name = assign.lhs_as_text();
             if !var_name.is_empty() {
                 return Some((var_name, new_val));
@@ -163,7 +162,7 @@ impl UseGSetStr {
             && cond.then_expr.is_call_to_any(&["g_strdup", "g_strndup"])
         {
             // Use the condition variable as the value
-            let cond_text = self.expr_to_string(&cond.condition);
+            let cond_text = cond.condition.to_source_string(source)?;
             let var_name = assign.lhs_as_text();
             if !var_name.is_empty() {
                 return Some((var_name, cond_text));
@@ -171,36 +170,5 @@ impl UseGSetStr {
         }
 
         None
-    }
-
-    fn arg_to_string(&self, arg: &gobject_ast::Argument) -> String {
-        let gobject_ast::Argument::Expression(expr) = arg;
-        self.expr_to_string(expr)
-    }
-
-    fn expr_to_string(&self, expr: &Expression) -> String {
-        match expr {
-            Expression::Identifier(id) => id.name.clone(),
-            Expression::FieldAccess(f) => f.text(),
-            Expression::StringLiteral(s) => format!("\"{}\"", s.value),
-            Expression::Unary(unary) => {
-                // Handle *ptr, &ptr, etc.
-                format!(
-                    "{}{}",
-                    unary.operator.as_str(),
-                    self.expr_to_string(&unary.operand)
-                )
-            }
-            Expression::Call(call) => {
-                // Reconstruct the call expression
-                let args: Vec<String> = call
-                    .arguments
-                    .iter()
-                    .map(|a| self.arg_to_string(a))
-                    .collect();
-                format!("{} ({})", call.function_name(), args.join(", "))
-            }
-            _ => String::new(),
-        }
     }
 }

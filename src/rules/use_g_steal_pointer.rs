@@ -309,33 +309,18 @@ impl UseGStealPointer {
     /// Extract the tested pointer expression from an if-condition
     /// Handles bare `expr`, `expr != NULL`, and `NULL != expr`
     fn extract_condition_expr(&self, condition: &Expression) -> Option<String> {
-        match condition {
-            Expression::Identifier(id) => Some(id.name.clone()),
-            Expression::FieldAccess(f) => Some(f.text()),
-            Expression::Binary(bin) => {
-                if bin.operator == BinaryOp::NotEqual {
-                    // Check for expr != NULL or NULL != expr
-                    if matches!(&*bin.right, Expression::Null(_)) {
-                        // expr != NULL, return left side
-                        return self.extract_simple_expr(&bin.left);
-                    }
-                    if matches!(&*bin.left, Expression::Null(_)) {
-                        // NULL != expr, return right side
-                        return self.extract_simple_expr(&bin.right);
-                    }
-                }
-                None
+        if let Expression::Binary(bin) = condition
+            && bin.operator == BinaryOp::NotEqual
+        {
+            if matches!(&*bin.right, Expression::Null(_)) {
+                return bin.left.extract_variable_name();
             }
-            _ => None,
+            if matches!(&*bin.left, Expression::Null(_)) {
+                return bin.right.extract_variable_name();
+            }
+            return None;
         }
-    }
-
-    fn extract_simple_expr(&self, expr: &Expression) -> Option<String> {
-        match expr {
-            Expression::Identifier(id) => Some(id.name.clone()),
-            Expression::FieldAccess(f) => Some(f.text()),
-            _ => None,
-        }
+        condition.extract_variable_name()
     }
 
     /// Matches if-without-else with steal pattern in body
