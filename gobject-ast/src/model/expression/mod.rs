@@ -128,6 +128,7 @@ impl Expression {
         f(self);
         match self {
             Expression::Call(call) => {
+                call.function.walk(f);
                 for arg in &call.arguments {
                     let Argument::Expression(e) = arg;
                     e.walk(f);
@@ -140,6 +141,7 @@ impl Expression {
                 }
             }
             Expression::Assignment(assign) => {
+                assign.lhs.walk(f);
                 assign.rhs.walk(f);
             }
             Expression::Unary(unary) => {
@@ -164,7 +166,23 @@ impl Expression {
             Expression::Update(update) => {
                 update.operand.walk(f);
             }
-            _ => {}
+            Expression::FieldAccess(field) => {
+                field.base.walk(f);
+            }
+            Expression::InitializerList(init) => {
+                for item in &init.items {
+                    item.value.walk(f);
+                }
+            }
+            Expression::Identifier(_)
+            | Expression::StringLiteral(_)
+            | Expression::NumberLiteral(_)
+            | Expression::Null(_)
+            | Expression::Boolean(_)
+            | Expression::Sizeof(_)
+            | Expression::CharLiteral(_)
+            | Expression::Comment(_)
+            | Expression::Generic(_) => {}
         }
     }
 
