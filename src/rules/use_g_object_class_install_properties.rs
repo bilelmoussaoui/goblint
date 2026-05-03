@@ -29,18 +29,26 @@ impl Rule for UseGObjectClassInstallProperties {
         violations: &mut Vec<Violation>,
     ) {
         for (path, file) in ast_context.iter_all_files() {
-            // Find all class_init or class-related functions
             for func in file.iter_class_init_functions() {
-                // Find all g_object_class_install_property calls
                 let install_property_calls = func.find_calls(&["g_object_class_install_property"]);
 
                 if install_property_calls.is_empty() {
                     continue;
                 }
 
-                // Try to find property enum to generate fixes
-                let fixes =
-                    self.try_generate_fixes(file, func, &install_property_calls, &file.source);
+                let fixes = if let Some(enum_info) =
+                    self.find_property_enum(file, &install_property_calls, &file.source)
+                {
+                    self.generate_fixes(
+                        file,
+                        func,
+                        &install_property_calls,
+                        enum_info,
+                        &file.source,
+                    )
+                } else {
+                    Vec::new()
+                };
 
                 let first_call = install_property_calls[0];
                 let message = if fixes.is_empty() {
@@ -68,55 +76,33 @@ impl Rule for UseGObjectClassInstallProperties {
 }
 
 impl UseGObjectClassInstallProperties {
-    /// Find the property enum used by the install_property calls
     fn find_property_enum<'a>(
         &self,
         file: &'a gobject_ast::FileModel,
         install_calls: &[&gobject_ast::CallExpression],
         source: &[u8],
     ) -> Option<&'a gobject_ast::EnumInfo> {
-        // Extract property IDs from install_property calls
-        let mut prop_ids = Vec::new();
-        for call in install_calls {
-            if let Some(prop_id_arg) = call.get_arg(1)
-                && let Some(prop_id) = prop_id_arg.to_source_string(source)
-            {
-                prop_ids.push(prop_id);
-            }
-        }
+        let prop_ids: Vec<String> = install_calls
+            .iter()
+            .filter_map(|call| call.get_arg(1).and_then(|arg| arg.to_source_string(source)))
+            .collect();
 
-        // Find enum that contains these property IDs
-        for enum_info in file.iter_all_enums() {
-            let enum_value_names: Vec<_> =
-                enum_info.values.iter().map(|v| v.name.as_str()).collect();
-
-            // Check if at least some property IDs are in this enum
-            let matches = prop_ids
-                .iter()
-                .filter(|pid| enum_value_names.contains(&pid.as_str()))
-                .count();
-            if matches >= prop_ids.len() / 2 {
-                return Some(enum_info);
-            }
-        }
-
-        None
-    }
-
-    /// Try to generate fixes if we can find the property enum
-    fn try_generate_fixes(
-        &self,
-        file: &gobject_ast::FileModel,
-        class_init: &gobject_ast::top_level::FunctionDefItem,
-        install_calls: &[&gobject_ast::CallExpression],
-        source: &[u8],
-    ) -> Vec<Fix> {
-        // Try to find the property enum used by these calls
-        let Some(property_enum) = self.find_property_enum(file, install_calls, source) else {
-            return Vec::new(); // Can't generate fixes without enum
-        };
-
-        self.generate_fixes(file, class_init, install_calls, property_enum, source)
+        file.iter_property_enums()
+            .filter_map(|enum_info| {
+                let enum_value_names: Vec<_> =
+                    enum_info.values.iter().map(|v| v.name.as_str()).collect();
+                let matches = prop_ids
+                    .iter()
+                    .filter(|pid| enum_value_names.contains(&pid.as_str()))
+                    .count();
+                if matches > 0 {
+                    Some((matches, enum_info))
+                } else {
+                    None
+                }
+            })
+            .max_by_key(|(matches, _)| *matches)
+            .map(|(_, enum_info)| enum_info)
     }
 
     fn generate_fixes(

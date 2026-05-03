@@ -1,0 +1,1 @@
+signals_and_props_enum.c:20:3: use_g_object_class_install_properties: Use g_object_class_install_properties() instead of 1 g_object_class_install_property() calls
