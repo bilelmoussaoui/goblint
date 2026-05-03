@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use gobject_ast::{model::types::GObjectTypeKind, parser::Parser};
+use gobject_ast::{
+    model::types::{DeclareKind, DefineKind, GObjectTypeKind},
+    parser::Parser,
+};
 
 fn parse_fixture(fixture_name: &str) -> gobject_ast::model::Project {
     let fixture_path = Path::new("tests/fixtures/gobject").join(fixture_name);
@@ -25,18 +28,18 @@ fn test_g_declare_final_type() {
     assert_eq!(gobj.type_macro, "MY_TYPE_WIDGET");
 
     match &gobj.kind {
-        GObjectTypeKind::DeclareFinal {
-            function_prefix,
+        GObjectTypeKind::Declare {
+            kind,
             module_prefix,
             type_prefix,
-            parent_type,
         } => {
-            assert_eq!(function_prefix, "my_widget");
+            assert_eq!(*kind, DeclareKind::Final);
+            assert_eq!(gobj.function_prefix, "my_widget");
             assert_eq!(module_prefix, "MY");
             assert_eq!(type_prefix, "WIDGET");
-            assert_eq!(parent_type, "GtkWidget");
+            assert_eq!(gobj.parent_type.as_deref(), Some("GtkWidget"));
         }
-        _ => panic!("Expected DeclareFinal, got {:?}", gobj.kind),
+        _ => panic!("Expected Declare(Final), got {:?}", gobj.kind),
     }
 }
 
@@ -52,18 +55,18 @@ fn test_g_declare_derivable_type() {
     assert_eq!(gobj.type_macro, "MY_TYPE_OBJECT");
 
     match &gobj.kind {
-        GObjectTypeKind::DeclareDerivable {
-            function_prefix,
+        GObjectTypeKind::Declare {
+            kind,
             module_prefix,
             type_prefix,
-            parent_type,
         } => {
-            assert_eq!(function_prefix, "my_object");
+            assert_eq!(*kind, DeclareKind::Derivable);
+            assert_eq!(gobj.function_prefix, "my_object");
             assert_eq!(module_prefix, "MY");
             assert_eq!(type_prefix, "OBJECT");
-            assert_eq!(parent_type, "GObject");
+            assert_eq!(gobj.parent_type.as_deref(), Some("GObject"));
         }
-        _ => panic!("Expected DeclareDerivable, got {:?}", gobj.kind),
+        _ => panic!("Expected Declare(Derivable), got {:?}", gobj.kind),
     }
 }
 
@@ -79,18 +82,18 @@ fn test_g_declare_interface() {
     assert_eq!(gobj.type_macro, "MY_TYPE_INTERFACE");
 
     match &gobj.kind {
-        GObjectTypeKind::DeclareInterface {
-            function_prefix,
+        GObjectTypeKind::Declare {
+            kind,
             module_prefix,
             type_prefix,
-            prerequisite_type,
         } => {
-            assert_eq!(function_prefix, "my_interface");
+            assert_eq!(*kind, DeclareKind::Interface);
+            assert_eq!(gobj.function_prefix, "my_interface");
             assert_eq!(module_prefix, "MY");
             assert_eq!(type_prefix, "INTERFACE");
-            assert_eq!(prerequisite_type, "GObject");
+            assert_eq!(gobj.parent_type.as_deref(), Some("GObject"));
         }
-        _ => panic!("Expected DeclareInterface, got {:?}", gobj.kind),
+        _ => panic!("Expected Declare(Interface), got {:?}", gobj.kind),
     }
 }
 
@@ -106,14 +109,12 @@ fn test_g_define_type() {
     assert_eq!(gobj.type_macro, "TYPE_MYWIDGET");
 
     match &gobj.kind {
-        GObjectTypeKind::DefineType {
-            function_prefix,
-            parent_type,
-        } => {
-            assert_eq!(function_prefix, "my_widget");
-            assert_eq!(parent_type, "GTK_TYPE_WIDGET");
+        GObjectTypeKind::Define(kind) => {
+            assert_eq!(*kind, DefineKind::Type);
+            assert_eq!(gobj.function_prefix, "my_widget");
+            assert_eq!(gobj.parent_type.as_deref(), Some("GTK_TYPE_WIDGET"));
         }
-        _ => panic!("Expected DefineType, got {:?}", gobj.kind),
+        _ => panic!("Expected Define(Type), got {:?}", gobj.kind),
     }
 }
 
@@ -128,14 +129,12 @@ fn test_g_define_type_with_private() {
     assert_eq!(gobj.type_name, "MyObject");
 
     match &gobj.kind {
-        GObjectTypeKind::DefineTypeWithPrivate {
-            function_prefix,
-            parent_type,
-        } => {
-            assert_eq!(function_prefix, "my_object");
-            assert_eq!(parent_type, "G_TYPE_OBJECT");
+        GObjectTypeKind::Define(kind) => {
+            assert_eq!(*kind, DefineKind::TypeWithPrivate);
+            assert_eq!(gobj.function_prefix, "my_object");
+            assert_eq!(gobj.parent_type.as_deref(), Some("G_TYPE_OBJECT"));
         }
-        _ => panic!("Expected DefineTypeWithPrivate, got {:?}", gobj.kind),
+        _ => panic!("Expected Define(TypeWithPrivate), got {:?}", gobj.kind),
     }
 }
 
@@ -205,7 +204,7 @@ fn test_vfunc_parameters_and_return_types() {
         .expect("Missing do_something vfunc");
 
     // Check return type
-    assert_eq!(do_something.return_type, Some("void".to_string()));
+    assert_eq!(do_something.return_type.base_type, "void");
 
     // Check parameters
     assert_eq!(do_something.parameters.len(), 2);
@@ -222,7 +221,7 @@ fn test_vfunc_parameters_and_return_types() {
         .expect("Missing get_value vfunc");
 
     // Check return type
-    assert_eq!(get_value.return_type, Some("int".to_string()));
+    assert_eq!(get_value.return_type.base_type, "int");
 
     // Check parameters
     assert_eq!(get_value.parameters.len(), 1);
@@ -444,7 +443,7 @@ fn test_interface_impl_multiple() {
     // Check type kind
     assert!(matches!(
         gobj.kind,
-        gobject_ast::model::types::GObjectTypeKind::DefineTypeWithCode { .. }
+        GObjectTypeKind::Define(DefineKind::TypeWithCode)
     ));
 
     // Check that it has private data
