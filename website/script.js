@@ -108,9 +108,23 @@ ${rule.config_options.map((opt) => `${opt.name} = ${opt.example_value}`).join("\
     <div class="flex gap-2 mb-6 flex-wrap">
       ${badge(formatCategory(rule.category), "badge")}
       ${rule.fixable ? badge("Fixable", "badge-green") : ""}
+      ${rule.opt_in ? badge("Opt-in", "badge-yellow") : ""}
+      ${rule.requires_meson ? badge("Meson", "badge-meson") : ""}
       ${rule.requires_auto_cleanup ? badge("Not MSVC compatible", "badge-orange") : ""}
       ${rule.min_glib_version !== "2.0" ? badge(`GLib ${rule.min_glib_version}+`, "badge-purple") : ""}
     </div>
+
+    ${rule.opt_in ? `
+    <div class="opt-in-notice mb-6">
+      <strong>Disabled by default.</strong> This rule may produce false positives due to
+      fundamental limitations of static analysis without a preprocessor or full call graph.
+      Enable it explicitly in your config or with <code>--only ${rule.name}</code>.
+    </div>` : ""}
+    ${rule.requires_meson ? `
+    <div class="meson-notice mb-6">
+      <strong>Requires Meson introspection.</strong> This rule only runs when a Meson build
+      directory is available. Without it, results will be silently skipped.
+    </div>` : ""}
 
     <div class="border-t divider pt-6 space-y-6">
       <div>

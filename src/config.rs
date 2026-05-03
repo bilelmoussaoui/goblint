@@ -114,22 +114,15 @@ impl RuleLevel {
 }
 
 /// Per-rule configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct RuleConfig {
-    pub level: RuleLevel,
+    /// Explicitly configured level, or None if the user never set it.
+    /// None is resolved at runtime: opt-in rules default to Ignore, others to
+    /// Warn.
+    pub level: Option<RuleLevel>,
     pub ignore: Vec<String>,
     /// Rule-specific options (e.g., config_header for include_order)
     pub options: HashMap<String, toml::Value>,
-}
-
-impl Default for RuleConfig {
-    fn default() -> Self {
-        Self {
-            level: RuleLevel::Warn,
-            ignore: Vec::new(),
-            options: HashMap::new(),
-        }
-    }
 }
 
 impl<'de> Deserialize<'de> for RuleConfig {
@@ -156,11 +149,11 @@ impl<'de> Deserialize<'de> for RuleConfig {
                 E: de::Error,
             {
                 Ok(RuleConfig {
-                    level: if value {
+                    level: Some(if value {
                         RuleLevel::Error
                     } else {
                         RuleLevel::Ignore
-                    },
+                    }),
                     ignore: Vec::new(),
                     options: HashMap::new(),
                 })
@@ -182,7 +175,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
                     }
                 };
                 Ok(RuleConfig {
-                    level,
+                    level: Some(level),
                     ignore: Vec::new(),
                     options: HashMap::new(),
                 })
@@ -192,7 +185,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
             where
                 M: MapAccess<'de>,
             {
-                let mut level = None;
+                let mut level: Option<RuleLevel> = None;
                 let mut ignore = None;
                 let mut options = HashMap::new();
 
@@ -230,7 +223,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
                 }
 
                 Ok(RuleConfig {
-                    level: level.unwrap_or(RuleLevel::Error),
+                    level, // None when not set
                     ignore: ignore.unwrap_or_default(),
                     options,
                 })
@@ -242,7 +235,7 @@ impl<'de> Deserialize<'de> for RuleConfig {
 }
 
 macro_rules! impl_rules_config {
-    ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
+    ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal, $opt_in:literal)),* $(,)?) => {
         #[derive(Debug, Clone, Deserialize, Default)]
         pub struct RulesConfig {
             $(
@@ -308,7 +301,7 @@ impl Config {
     /// Get reference to a rule config by field name
     pub fn get_rule_config(&self, field_name: &str) -> Option<&RuleConfig> {
         macro_rules! impl_get_rule_config {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal, $opt_in:literal)),* $(,)?) => {
                 match field_name {
                     $(
                         stringify!($config_field) => Some(&self.rules.$config_field),
@@ -324,7 +317,7 @@ impl Config {
     /// Get mutable reference to a rule config by field name
     pub fn get_rule_config_mut(&mut self, field_name: &str) -> Option<&mut RuleConfig> {
         macro_rules! impl_get_rule_config_mut {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal, $opt_in:literal)),* $(,)?) => {
                 match field_name {
                     $(
                         stringify!($config_field) => Some(&mut self.rules.$config_field),
@@ -342,7 +335,7 @@ impl Config {
         // First, validate that all provided rule names exist
         let valid_rules: Vec<&str> = {
             macro_rules! collect_rule_names {
-                ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
+                ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal, $opt_in:literal)),* $(,)?) => {
                     vec![$(stringify!($config_field)),*]
                 };
             }
@@ -357,14 +350,14 @@ impl Config {
 
         // Now enable only the specified rules
         macro_rules! impl_enable_only_rules {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal, $opt_in:literal)),* $(,)?) => {
                 {
                     $(
-                        self.rules.$config_field.level = if rule_names.iter().any(|r| r == stringify!($config_field)) {
+                        self.rules.$config_field.level = Some(if rule_names.iter().any(|r| r == stringify!($config_field)) {
                             RuleLevel::Error
                         } else {
                             RuleLevel::Ignore
-                        };
+                        });
                     )*
                 }
             };
@@ -379,7 +372,7 @@ impl Config {
         // First, validate that all provided rule names exist
         let valid_rules: Vec<&str> = {
             macro_rules! collect_rule_names {
-                ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
+                ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal, $opt_in:literal)),* $(,)?) => {
                     vec![$(stringify!($config_field)),*]
                 };
             }
@@ -394,11 +387,11 @@ impl Config {
 
         // Now disable the specified rules
         macro_rules! impl_disable_rules {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal, $opt_in:literal)),* $(,)?) => {
                 {
                     $(
                         if rule_names.iter().any(|r| r == stringify!($config_field)) {
-                            self.rules.$config_field.level = RuleLevel::Ignore;
+                            self.rules.$config_field.level = Some(RuleLevel::Ignore);
                         }
                     )*
                 }
@@ -412,14 +405,14 @@ impl Config {
     /// Filter rules by category, disabling all others
     pub fn filter_by_category(&mut self, category: crate::rules::Category) -> Result<()> {
         macro_rules! impl_filter_by_category {
-            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal)),* $(,)?) => {
+            ($(($config_field:ident, $rule_type:ident, $major:literal, $minor:literal, $requires_auto_cleanup:literal, $opt_in:literal)),* $(,)?) => {
                 {
                     $(
-                        self.rules.$config_field.level = if $rule_type.category() == category {
+                        self.rules.$config_field.level = Some(if $rule_type.category() == category {
                             RuleLevel::Error
                         } else {
                             RuleLevel::Ignore
-                        };
+                        });
                     )*
                 }
             };
