@@ -108,6 +108,7 @@ impl Parser {
                 interfaces: Vec::new(),
                 has_private: false,
                 code_block_statements: Vec::new(),
+                export_macros: Vec::new(),
                 location: self.node_location(parent),
             });
         }
@@ -154,6 +155,7 @@ impl Parser {
                 interfaces,
                 has_private,
                 code_block_statements,
+                export_macros: Vec::new(),
                 location: self.node_location(parent),
             });
         }
@@ -235,6 +237,7 @@ impl Parser {
                 interfaces,
                 has_private,
                 code_block_statements,
+                export_macros: Vec::new(),
                 location: self.node_location(parent),
             });
         }

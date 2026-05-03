@@ -200,13 +200,27 @@ impl Parser {
         node: Node,
         source: &[u8],
     ) -> Option<crate::model::types::GObjectType> {
+        // Collect export macros from gobject_export_macro children
+        let export_macros: Vec<String> = {
+            let mut cursor = node.walk();
+            node.children(&mut cursor)
+                .filter(|c| c.kind() == "gobject_export_macro")
+                .filter_map(|c| std::str::from_utf8(&source[c.byte_range()]).ok())
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect()
+        };
+
         // Get macro name from the text (before parentheses)
         let full_text = std::str::from_utf8(&source[node.byte_range()]).ok()?;
         let macro_name = full_text.split('(').next()?.trim();
+        // Strip any leading export macro prefix to get the actual macro name
+        let macro_name = macro_name.split_whitespace().last()?;
 
-        // Call the existing extraction logic which will collect identifiers from the
-        // node
-        self.extract_gobject_from_identifier(node, node, source, macro_name)
+        let mut gobject_type =
+            self.extract_gobject_from_identifier(node, node, source, macro_name)?;
+        gobject_type.export_macros = export_macros;
+        Some(gobject_type)
     }
 
     fn visit_node(&self, node: Node, source: &[u8], file_model: &mut FileModel) {

@@ -12,6 +12,7 @@ pub struct GObjectType {
     pub interfaces: Vec<InterfaceImplementation>, // G_IMPLEMENT_INTERFACE
     pub has_private: bool,                 // G_ADD_PRIVATE in G_DEFINE_TYPE_WITH_CODE
     pub code_block_statements: Vec<super::super::Statement>, // Statements from *_WITH_CODE macros
+    pub export_macros: Vec<String>,        // e.g., ["CLUTTER_EXPORT"]
     pub location: SourceLocation,
 }
 

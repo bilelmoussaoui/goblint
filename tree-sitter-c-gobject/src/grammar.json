@@ -9716,7 +9716,7 @@
               "type": "REPEAT",
               "content": {
                 "type": "SYMBOL",
-                "name": "_gobject_export_macro"
+                "name": "gobject_export_macro"
               }
             },
             {
@@ -9736,7 +9736,7 @@
               "type": "REPEAT",
               "content": {
                 "type": "SYMBOL",
-                "name": "_gobject_export_macro"
+                "name": "gobject_export_macro"
               }
             },
             {
@@ -9935,6 +9935,10 @@
     [
       "expression",
       "gobject_code_block_item"
+    ],
+    [
+      "gobject_export_macro",
+      "macro_modifier"
     ]
   ],
   "precedences": [],
@@ -9961,7 +9965,7 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_gobject_export_macro"
+      "name": "gobject_export_macro"
     }
   ],
   "inline": [

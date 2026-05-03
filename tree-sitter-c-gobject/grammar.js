@@ -17,7 +17,7 @@ module.exports = grammar(C, {
     $._gobject_begin_decls,           // G_BEGIN_DECLS
     $._gobject_end_decls,             // G_END_DECLS
     $._macro_modifier_name,           // any other ALL_CAPS identifier (CLUTTER_EXPORT etc.)
-    $._gobject_export_macro,          // ALL_CAPS macro immediately preceding G_DECLARE_*/G_DEFINE_*
+    $.gobject_export_macro,           // ALL_CAPS macro immediately preceding G_DECLARE_*/G_DEFINE_*
   ],
 
   conflicts: ($, original) => [
@@ -30,6 +30,12 @@ module.exports = grammar(C, {
     // GLR resolves by looking at what follows the argument list — ',' means
     // regular arg, anything else means code block.
     [$.expression, $.gobject_code_block_item],
+    // An ALL_CAPS identifier at the start of a top-level item is ambiguous:
+    // it could be a gobject_export_macro (if followed by G_DECLARE_*/G_DEFINE_*)
+    // or a macro_modifier (part of a C declaration). Declaring the conflict
+    // keeps both GLR stacks alive so valid_symbols includes GOBJECT_EXPORT_MACRO,
+    // letting the scanner's look-ahead choose correctly.
+    [$.gobject_export_macro, $.macro_modifier],
   ],
 
   rules: {
@@ -77,17 +83,17 @@ module.exports = grammar(C, {
     gobject_type_macro: $ => choice(
       // Standard macros (G_DECLARE_*, G_DEFINE_TYPE, etc.): all args comma-separated.
       // Optional leading export/deprecation modifiers (META_EXPORT, CLUTTER_EXPORT, …).
-      // Uses _gobject_export_macro (not macro_modifier) so the scanner only produces
+      // Uses gobject_export_macro (not macro_modifier) so the scanner only produces
       // this token when peek-ahead confirms a G_DECLARE_*/G_DEFINE_* follows — no
       // risk of the token leaking into G_DEFINE_*_WITH_CODE code-block bodies.
-      seq(repeat($._gobject_export_macro), $._gobject_macro_name, $.argument_list),
+      seq(repeat($.gobject_export_macro), $._gobject_macro_name, $.argument_list),
 
       // *_WITH_CODE macros: N comma-terminated regular args followed by a
       // whitespace-separated code block (G_ADD_PRIVATE, G_IMPLEMENT_INTERFACE, …).
       // Using a dedicated external token lets the scanner disambiguate at lex time
       // so no GLR conflicts arise.
       seq(
-        repeat($._gobject_export_macro),
+        repeat($.gobject_export_macro),
         $._gobject_macro_name_with_code,
         '(',
         repeat1(seq($.expression, ',')),

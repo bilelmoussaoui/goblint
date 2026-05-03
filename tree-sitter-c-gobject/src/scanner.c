@@ -28,6 +28,16 @@ static void skip_whitespace(TSLexer *lexer) {
     }
 }
 
+/* Like skip_whitespace but uses advance(..., false) so it does NOT reset
+ * token_start_position.  Must be used for lookahead that happens after
+ * mark_end() has already pinned the token boundary. */
+static void lookahead_skip_whitespace(TSLexer *lexer) {
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
+           lexer->lookahead == '\n' || lexer->lookahead == '\r') {
+        lexer->advance(lexer, false);
+    }
+}
+
 /* Advance past a balanced argument list starting at '(' (already confirmed). */
 static void skip_argument_list(TSLexer *lexer) {
     int depth = 0;
@@ -43,10 +53,10 @@ static void skip_argument_list(TSLexer *lexer) {
  * (expression context: type-cast macro like G_OBJECT_CLASS(x)->method).
  * The scanner resets its position on false return, so reads here are safe. */
 static bool followed_by_arrow(TSLexer *lexer) {
-    skip_whitespace(lexer);
+    lookahead_skip_whitespace(lexer);
     if (lexer->lookahead == '(') {
         skip_argument_list(lexer);
-        skip_whitespace(lexer);
+        lookahead_skip_whitespace(lexer);
     }
     return lexer->lookahead == '-';
 }
@@ -57,7 +67,7 @@ static bool followed_by_arrow(TSLexer *lexer) {
  * Returns true if followed by a GObject macro, false otherwise.
  * Advances the lexer (caller relies on mark_end for the correct token end). */
 static bool followed_by_gobject_macro(TSLexer *lexer) {
-    skip_whitespace(lexer);
+    lookahead_skip_whitespace(lexer);
 
     char buf[256];
     int len = 0;

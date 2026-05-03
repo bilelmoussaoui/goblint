@@ -2346,6 +2346,10 @@
         {
           "type": "gobject_code_block",
           "named": true
+        },
+        {
+          "type": "gobject_export_macro",
+          "named": true
         }
       ]
     }
@@ -4757,6 +4761,10 @@
   {
     "type": "for",
     "named": false
+  },
+  {
+    "type": "gobject_export_macro",
+    "named": true
   },
   {
     "type": "goto",
