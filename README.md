@@ -160,4 +160,9 @@ language-servers = ["clangd", "goblint-lsp"]
 command = "goblint-lsp"
 ```
 
+## Projects using goblint
+
+- [fwupd](https://github.com/fwupd/fwupd) - A system daemon to allow session software to update firmware ([workflow](https://github.com/fwupd/fwupd/actions/workflows/goblint.yml))
+- [xdg-desktop-portal](https://github.com/flatpak/xdg-desktop-portal) - Desktop integration portal ([workflow](https://github.com/flatpak/xdg-desktop-portal/blob/main/.github/workflows/build-and-test.yml#L15))
+
 Co-Authored by Claude Code.
