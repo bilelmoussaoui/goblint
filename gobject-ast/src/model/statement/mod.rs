@@ -315,4 +315,70 @@ impl Statement {
             f(&statements[i], &statements[i + 1], &statements[i + 2]);
         }
     }
+
+    /// Recursively visit consecutive pairs of statements at every nesting level
+    /// (if bodies, else bodies, compound blocks, loops, switch cases, labeled
+    /// statements). Eliminates the manual recursion that rules otherwise need
+    /// alongside `for_each_pair`.
+    pub fn walk_pairs<F>(stmts: &[Statement], f: &mut F)
+    where
+        F: FnMut(&Statement, &Statement),
+    {
+        for i in 0..stmts.len().saturating_sub(1) {
+            f(&stmts[i], &stmts[i + 1]);
+        }
+        for stmt in stmts {
+            match stmt {
+                Statement::If(if_stmt) => {
+                    Self::walk_pairs(&if_stmt.then_body, f);
+                    if let Some(else_body) = &if_stmt.else_body {
+                        Self::walk_pairs(else_body, f);
+                    }
+                }
+                Statement::Compound(c) => Self::walk_pairs(&c.statements, f),
+                Statement::Labeled(l) => Self::walk_pairs(std::slice::from_ref(&l.statement), f),
+                Statement::For(for_stmt) => Self::walk_pairs(&for_stmt.body, f),
+                Statement::While(w) => Self::walk_pairs(&w.body, f),
+                Statement::DoWhile(d) => Self::walk_pairs(&d.body, f),
+                Statement::Switch(sw) => {
+                    for case in &sw.cases {
+                        Self::walk_pairs(&case.body, f);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Recursively visit consecutive triples of statements at every nesting
+    /// level. Mirrors `walk_pairs` for triple-statement patterns.
+    pub fn walk_triples<F>(stmts: &[Statement], f: &mut F)
+    where
+        F: FnMut(&Statement, &Statement, &Statement),
+    {
+        for i in 0..stmts.len().saturating_sub(2) {
+            f(&stmts[i], &stmts[i + 1], &stmts[i + 2]);
+        }
+        for stmt in stmts {
+            match stmt {
+                Statement::If(if_stmt) => {
+                    Self::walk_triples(&if_stmt.then_body, f);
+                    if let Some(else_body) = &if_stmt.else_body {
+                        Self::walk_triples(else_body, f);
+                    }
+                }
+                Statement::Compound(c) => Self::walk_triples(&c.statements, f),
+                Statement::Labeled(l) => Self::walk_triples(std::slice::from_ref(&l.statement), f),
+                Statement::For(for_stmt) => Self::walk_triples(&for_stmt.body, f),
+                Statement::While(w) => Self::walk_triples(&w.body, f),
+                Statement::DoWhile(d) => Self::walk_triples(&d.body, f),
+                Statement::Switch(sw) => {
+                    for case in &sw.cases {
+                        Self::walk_triples(&case.body, f);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
 }

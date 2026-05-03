@@ -33,42 +33,13 @@ impl Rule for UseGBytesUnrefToData {
         violations: &mut Vec<Violation>,
     ) {
         let file = ast_context.project.files.get(path).unwrap();
-        self.check_statement_list(path, &func.body_statements, file, violations);
+        Statement::walk_pairs(&func.body_statements, &mut |stmt1, stmt2| {
+            self.try_bytes_pattern(path, stmt1, stmt2, file, violations);
+        });
     }
 }
 
 impl UseGBytesUnrefToData {
-    /// Check a list of statements for consecutive g_bytes_get_data +
-    /// g_bytes_unref pattern
-    fn check_statement_list(
-        &self,
-        file_path: &std::path::Path,
-        statements: &[Statement],
-        file: &gobject_ast::FileModel,
-        violations: &mut Vec<Violation>,
-    ) {
-        // Check consecutive statements at this level
-        Statement::for_each_pair(statements, |stmt1, stmt2| {
-            self.try_bytes_pattern(file_path, stmt1, stmt2, file, violations);
-        });
-
-        // Recurse into nested statement blocks
-        for stmt in statements {
-            match stmt {
-                Statement::If(if_stmt) => {
-                    self.check_statement_list(file_path, &if_stmt.then_body, file, violations);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.check_statement_list(file_path, else_body, file, violations);
-                    }
-                }
-                Statement::Compound(compound) => {
-                    self.check_statement_list(file_path, &compound.statements, file, violations);
-                }
-                _ => {}
-            }
-        }
-    }
-
     /// Try to match: dest = g_bytes_get_data(bytes, ...); g_bytes_unref(bytes);
     fn try_bytes_pattern(
         &self,

@@ -31,60 +31,13 @@ impl Rule for UseGSetObject {
         violations: &mut Vec<Violation>,
     ) {
         let file = ast_context.project.files.get(path).unwrap();
-        self.check_statements(&func.body_statements, file, path, violations);
+        Statement::walk_pairs(&func.body_statements, &mut |s1, s2| {
+            self.try_clear_then_ref(s1, s2, file, path, violations);
+        });
     }
 }
 
 impl UseGSetObject {
-    fn check_statements(
-        &self,
-        statements: &[Statement],
-        file: &gobject_ast::FileModel,
-        file_path: &std::path::Path,
-        violations: &mut Vec<Violation>,
-    ) {
-        let mut i = 0;
-        while i < statements.len() {
-            // Check for g_clear_object(&var) followed by var = g_object_ref(...)
-            if i + 1 < statements.len()
-                && self.try_clear_then_ref(
-                    &statements[i],
-                    &statements[i + 1],
-                    file,
-                    file_path,
-                    violations,
-                )
-            {
-                i += 2;
-                continue;
-            }
-
-            // Recurse into nested statements
-            match &statements[i] {
-                Statement::If(if_stmt) => {
-                    self.check_statements(&if_stmt.then_body, file, file_path, violations);
-                    if let Some(else_body) = &if_stmt.else_body {
-                        self.check_statements(else_body, file, file_path, violations);
-                    }
-                }
-                Statement::Compound(compound) => {
-                    self.check_statements(&compound.statements, file, file_path, violations);
-                }
-                Statement::Labeled(labeled) => {
-                    self.check_statements(
-                        std::slice::from_ref(&labeled.statement),
-                        file,
-                        file_path,
-                        violations,
-                    );
-                }
-                _ => {}
-            }
-
-            i += 1;
-        }
-    }
-
     /// Check for g_clear_object(&var)/g_object_unref(var) followed by var =
     /// g_object_ref(...)
     fn try_clear_then_ref(

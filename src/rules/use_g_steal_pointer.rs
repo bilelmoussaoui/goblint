@@ -55,22 +55,14 @@ impl UseGStealPointer {
     ) {
         let mut i = 0;
         while i < statements.len() {
-            // Try if/else steal: if (expr) { dest = expr; expr = NULL; } else { dest =
-            // NULL; }
             if self.try_if_else_steal(&statements[i], file_path, &file.source, violations) {
                 i += 1;
                 continue;
             }
-
-            // Try if-without-else steal:
-            //   if (c) { dest = ptr; ptr = NULL; }
-            //   if (c) { T *tmp = ptr; ptr = NULL; return tmp; }
             if self.try_if_no_else_steal(&statements[i], file_path, &file.source, violations) {
                 i += 1;
                 continue;
             }
-
-            // Try 3-statement pattern: T *tmp = ptr; ptr = NULL; return tmp;
             if i + 2 < statements.len()
                 && self.try_declare_null_return(
                     &statements[i],
@@ -84,8 +76,6 @@ impl UseGStealPointer {
                 i += 3;
                 continue;
             }
-
-            // Try 2-statement pattern: other = ptr; ptr = NULL;
             if i + 1 < statements.len()
                 && self.try_assign_null(
                     &statements[i],
@@ -98,8 +88,6 @@ impl UseGStealPointer {
                 i += 2;
                 continue;
             }
-
-            // Recurse into nested blocks
             match &statements[i] {
                 Statement::Compound(compound) => {
                     self.check_statements(&compound.statements, file_path, file, violations);
@@ -120,7 +108,6 @@ impl UseGStealPointer {
                 }
                 _ => {}
             }
-
             i += 1;
         }
     }
