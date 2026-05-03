@@ -34,16 +34,16 @@ impl Rule for PropertySwitchExhaustiveness {
             super::ConfigOption {
                 name: "readable_flags",
                 option_type: "array<string>",
-                default_value: "[\"G_PARAM_READABLE\", \"G_PARAM_READWRITE\"]",
-                example_value: "[\"G_PARAM_READABLE\", \"MY_LIB_READABLE\"]",
-                description: "Custom flag names indicating readable properties",
+                default_value: "[]",
+                example_value: "[\"MY_LIB_READABLE\", \"MY_LIB_READWRITE\"]",
+                description: "Additional flag names indicating readable properties (G_PARAM_READABLE and G_PARAM_READWRITE are always included)",
             },
             super::ConfigOption {
                 name: "writable_flags",
                 option_type: "array<string>",
-                default_value: "[\"G_PARAM_WRITABLE\", \"G_PARAM_READWRITE\"]",
-                example_value: "[\"G_PARAM_WRITABLE\", \"MY_LIB_WRITABLE\"]",
-                description: "Custom flag names indicating writable properties",
+                default_value: "[]",
+                example_value: "[\"MY_LIB_WRITABLE\", \"MY_LIB_READWRITE\"]",
+                description: "Additional flag names indicating writable properties (G_PARAM_WRITABLE and G_PARAM_READWRITE are always included)",
             },
         ]
     }
@@ -133,29 +133,35 @@ impl Rule for PropertySwitchExhaustiveness {
 }
 
 impl PropertySwitchExhaustiveness {
-    /// Get flag patterns from config or return defaults
+    /// Get flag patterns from config, extending the defaults with any extra
+    /// flags the user specified
     fn get_flag_patterns(
         &self,
         rule_config: &crate::config::RuleConfig,
         option_name: &str,
     ) -> Vec<ParamFlag> {
-        rule_config
+        let mut flags = if option_name == "readable_flags" {
+            vec![ParamFlag::Readable, ParamFlag::ReadWrite]
+        } else {
+            vec![ParamFlag::Writable, ParamFlag::ReadWrite]
+        };
+
+        if let Some(extra) = rule_config
             .options
             .get(option_name)
             .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(ParamFlag::from_identifier))
-                    .collect()
-            })
-            .unwrap_or_else(|| {
-                // Default GLib flags
-                if option_name == "readable_flags" {
-                    vec![ParamFlag::Readable, ParamFlag::ReadWrite]
-                } else {
-                    vec![ParamFlag::Writable, ParamFlag::ReadWrite]
+        {
+            for flag in extra
+                .iter()
+                .filter_map(|v| v.as_str().map(ParamFlag::from_identifier))
+            {
+                if !flags.contains(&flag) {
+                    flags.push(flag);
                 }
-            })
+            }
+        }
+
+        flags
     }
 
     /// Build a map of property names to their access permissions (readable,
