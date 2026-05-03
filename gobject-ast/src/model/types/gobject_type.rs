@@ -94,7 +94,7 @@ pub struct ClassStruct {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VirtualFunction {
     pub name: String,
-    pub return_type: Option<String>,
+    pub return_type: crate::TypeInfo,
     pub parameters: Vec<Parameter>,
 }
 

@@ -311,10 +311,7 @@ impl Parser {
         let declarator = func_decl.child_by_field_name("declarator")?;
         let name = extract_pointer_declarator_name(declarator, source)?;
 
-        // Get return type from the field_declaration type
-        let return_type = field_node
-            .child_by_field_name("type")
-            .and_then(|t| std::str::from_utf8(&source[t.byte_range()]).ok());
+        let return_type = self.extract_return_type(field_node, source);
 
         // Extract parameters
         let mut parameters = Vec::new();
@@ -324,7 +321,7 @@ impl Parser {
 
         Some(VirtualFunction {
             name: name.to_owned(),
-            return_type: return_type.map(ToOwned::to_owned),
+            return_type,
             parameters,
         })
     }
